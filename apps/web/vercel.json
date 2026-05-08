@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "construction-app-theta.vercel.app"
+        }
+      ],
+      "destination": "https://www.opsslate.app/:path*",
+      "permanent": true
+    }
+  ]
+}

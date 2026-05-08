@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@source "../../../../packages/suite-ui/src";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: #070d16;
+  --color-foreground: #eef4ff;
+  --color-card: #101923;
+  --color-card-foreground: #eef4ff;
+  --color-popover: #101923;
+  --color-popover-foreground: #eef4ff;
+  --color-primary: #f97316;
+  --color-primary-foreground: #0b0f14;
+  --color-secondary: #17212d;
+  --color-secondary-foreground: #eef4ff;
+  --color-muted: #17212d;
+  --color-muted-foreground: #8fa0b6;
+  --color-accent: #fb923c;
+  --color-accent-foreground: #0b0f14;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #fff;
+  --color-border: #1f2b38;
+  --color-input: #263445;
+  --color-ring: #f97316;
+  --radius: 0.75rem;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slide-right {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+.animate-slide-right {
+  animation: slide-right 0.2s ease-out;
+}
+
+/* Mobile padding for hamburger */
+/* Make native date picker visible on dark theme */
+input[type="date"] {
+  color-scheme: dark;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+@media (max-width: 1023px) {
+  main {
+    padding-top: 3.5rem !important;
+  }
+}

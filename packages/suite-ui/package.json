@@ -11,6 +11,6 @@
     "react-dom": ">=19"
   },
   "dependencies": {
-    "@opsslate/suite-config": "workspace:*"
+    "@opsslate/suite-config": "file:../suite-config"
   }
 }

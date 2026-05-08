@@ -1,0 +1,80 @@
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+
+export const list = query({
+  args: { companyId: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("documents")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .collect();
+  },
+});
+
+export const create = mutation({
+  args: {
+    companyId: v.string(),
+    projectId: v.optional(v.string()),
+    name: v.string(),
+    description: v.optional(v.string()),
+    category: v.string(),
+    fileName: v.string(),
+    fileSize: v.optional(v.number()),
+    storageId: v.optional(v.id("_storage")),
+    uploadedBy: v.optional(v.string()),
+    version: v.optional(v.string()),
+    status: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    return ctx.db.insert("documents", {
+      ...args,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const update = mutation({
+  args: {
+    id: v.id("documents"),
+    projectId: v.optional(v.string()),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    category: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+    fileSize: v.optional(v.number()),
+    storageId: v.optional(v.id("_storage")),
+    uploadedBy: v.optional(v.string()),
+    version: v.optional(v.string()),
+    status: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...fields } = args;
+    const clean = Object.fromEntries(
+      Object.entries(fields).filter(([, value]) => value !== undefined),
+    );
+    await ctx.db.patch(id, { ...clean, updatedAt: Date.now() });
+  },
+});
+
+export const remove = mutation({
+  args: { id: v.id("documents") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+  },
+});
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const getFileUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
