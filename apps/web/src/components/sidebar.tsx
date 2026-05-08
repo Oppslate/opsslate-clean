@@ -11,15 +11,15 @@ import { useBilling } from "@/lib/use-billing";
 type NavItem = { href: string; label: string; icon: string; external?: boolean } | { section: string };
 
 const SUITE_TOOL_ACCESS: Record<string, string[]> = {
-  suite_pro: ["Project Management", "Estimating", "Scheduler"],
+  suite_pro: ["Project Management", "Estimating", "Scheduler", "Books"],
   ops_core: ["Project Management", "Scheduler"],
   precon_pack: ["Project Management", "Estimating", "Takeoff"],
-  suite_biz: ["Project Management", "Estimating", "Scheduler", "Takeoff"],
-  full_suite: ["Project Management", "Estimating", "Scheduler", "Takeoff"],
-  enterprise: ["Project Management", "Estimating", "Scheduler", "Takeoff"],
+  suite_biz: ["Project Management", "Estimating", "Scheduler", "Books", "Takeoff"],
+  full_suite: ["Project Management", "Estimating", "Scheduler", "Books", "Takeoff"],
+  enterprise: ["Project Management", "Estimating", "Scheduler", "Books", "Takeoff"],
 };
 
-const UNAVAILABLE_SUITE_TOOLS = new Set(["CRM", "CAD", "Books"]);
+const UNAVAILABLE_SUITE_TOOLS = new Set(["CRM", "CAD"]);
 const SUITE_TOOL_LABELS = new Set([
   "Project Management",
   "Estimating",
