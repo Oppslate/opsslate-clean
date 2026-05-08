@@ -16,12 +16,12 @@ function isActive(pathname: string, href: string, appHref: string) {
 }
 
 const BUNDLE_ACCESS: Record<string, SuiteAppKey[]> = {
-  suite_pro: ["projectManagement", "estimating", "scheduler"],
+  suite_pro: ["projectManagement", "estimating", "scheduler", "books"],
   ops_core: ["projectManagement", "scheduler"],
   precon_pack: ["projectManagement", "estimating", "takeoff"],
-  suite_biz: ["projectManagement", "estimating", "scheduler", "takeoff"],
-  full_suite: ["projectManagement", "estimating", "scheduler", "takeoff"],
-  enterprise: ["projectManagement", "estimating", "scheduler", "takeoff"],
+  suite_biz: ["projectManagement", "estimating", "scheduler", "books", "takeoff"],
+  full_suite: ["projectManagement", "estimating", "scheduler", "books", "takeoff"],
+  enterprise: ["projectManagement", "estimating", "scheduler", "books", "takeoff"],
 };
 
 function normalizeBundle(plan: string) {

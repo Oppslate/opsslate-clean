@@ -38,6 +38,22 @@ function clearSuiteLogoutMarker() {
   document.cookie = `${OPSLATE_LOGOUT_COOKIE}=; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=0; secure; samesite=lax`;
 }
 
+async function persistSuiteSession(tokens: { sharedToken?: string; convexToken?: string }) {
+  if (tokens.sharedToken) setSharedSessionCookie(tokens.sharedToken);
+  if (tokens.convexToken) setSuiteConvexCookie(tokens.convexToken);
+  clearSuiteLogoutMarker();
+
+  try {
+    await fetch("/api/auth/suite-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(tokens),
+    });
+  } catch {
+    // Browser cookies above are the fallback if the server bridge is unavailable.
+  }
+}
+
 interface User {
   _id: string;
   companyId: Id<"companies">;
@@ -75,8 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const t = localStorage.getItem("eq_token") || "";
     const sharedToken = localStorage.getItem("opsslate_token") || "";
-    if (sharedToken) setSharedSessionCookie(sharedToken);
-    if (t) setSuiteConvexCookie(t);
+    if (sharedToken || t) void persistSuiteSession({ sharedToken, convexToken: t });
     setToken(t);
     setLoading(false);
   }, []);
@@ -108,7 +123,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearSuiteLogoutMarker();
         localStorage.setItem("opsslate_token", authData.token);
         localStorage.setItem("opsslate_user", JSON.stringify(authData.user));
-        setSharedSessionCookie(authData.token);
 
         const res = await provisionMut({
           email: authData.user.email,
@@ -116,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           companyName: authData.user.companyName || "My Company",
         });
         localStorage.setItem("eq_token", res.token);
-        setSuiteConvexCookie(res.token);
+        await persistSuiteSession({ sharedToken: authData.token, convexToken: res.token });
         setToken(res.token);
         return;
       }
@@ -128,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await loginMut({ email, password });
     clearSuiteLogoutMarker();
     localStorage.setItem("eq_token", res.token);
-    setSuiteConvexCookie(res.token);
+    await persistSuiteSession({ convexToken: res.token });
     setToken(res.token);
   };
 
@@ -148,7 +162,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("opsslate_token", authData.token);
     localStorage.setItem("opsslate_user", JSON.stringify(authData.user));
     clearSuiteLogoutMarker();
-    setSharedSessionCookie(authData.token);
 
     // Provision local OpsSlate account
     const res = await provisionMut({
@@ -157,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       companyName,
     });
     localStorage.setItem("eq_token", res.token);
-    setSuiteConvexCookie(res.token);
+    await persistSuiteSession({ sharedToken: authData.token, convexToken: res.token });
     setToken(res.token);
   };
 
@@ -174,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("opsslate_user");
     clearSharedSessionCookie();
     markSuiteLoggedOut();
+    fetch("/api/auth/suite-session", { method: "DELETE" }).catch(() => {});
     setToken("");
     window.location.href = OPSLATE_LOGIN_URL;
   };

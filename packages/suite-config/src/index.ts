@@ -72,7 +72,7 @@ export const suiteApps: SuiteApp[] = [
     appHref: process.env.NEXT_PUBLIC_BOOKS_APP_URL || "https://books.opsslate.app",
     localHref: "/books",
     domain: "books.opsslate.app",
-    status: "next",
+    status: "ready",
     summary: "Construction accounting, progress billing, job costing, payroll, WIP reporting, payables, and bonding readiness.",
     capabilities: ["Progress billing", "Job costing", "Payroll", "WIP reports"],
     handoff: "Should receive approved budgets, cost codes, committed costs, billing milestones, and payroll data.",
