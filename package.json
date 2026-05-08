@@ -1,0 +1,16 @@
+{
+  "name": "opsslate-suite",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "dev:web": "npm run dev -w @opsslate/web",
+    "dev:scheduler": "npm run dev -w @opsslate/scheduler",
+    "dev:books": "npm run dev -w @opsslate/books",
+    "dev:takeoff": "npm run dev -w @opsslate/takeoff"
+  }
+}
