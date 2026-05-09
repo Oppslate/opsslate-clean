@@ -25,13 +25,14 @@ export function CheckoutButton({
   const onCheckout = async () => {
     try {
       setLoading(true);
+      const normalizedPriceId = priceId.replace(/\\n/g, "").trim();
       const fallbackEmail = email ?? window.prompt("Enter your email for checkout:") ?? undefined;
 
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          priceId,
+          priceId: normalizedPriceId,
           email: fallbackEmail,
           companyId,
         }),

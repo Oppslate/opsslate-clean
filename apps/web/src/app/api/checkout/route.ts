@@ -9,11 +9,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Stripe is not configured" }, { status: 500 });
     }
 
-    const { priceId, email, companyId } = (await req.json()) as {
+    const { priceId: rawPriceId, email, companyId } = (await req.json()) as {
       priceId?: string;
       email?: string;
       companyId?: string;
     };
+    const priceId = rawPriceId?.replace(/\\n/g, "").trim();
 
     if (!priceId) {
       return NextResponse.json({ error: "Missing priceId" }, { status: 400 });

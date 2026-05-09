@@ -1,5 +1,17 @@
 import Link from "next/link";
+import { CheckoutButton } from "@/components/checkout-button";
 import { SuiteNav } from "@/components/suite-nav";
+
+function cleanPriceId(value?: string) {
+  return value?.replace(/\\n/g, "").trim() || "";
+}
+
+const priceIds = {
+  pro: cleanPriceId(process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO) || "price_1T7RqFRv625dg7hWBkhX6abQ",
+  team: cleanPriceId(process.env.NEXT_PUBLIC_STRIPE_PRICE_TEAM) || "price_1T7RqFRv625dg7hWAsERJ7Nk",
+  suitePro: cleanPriceId(process.env.NEXT_PUBLIC_STRIPE_PRICE_SUITE_PRO) || "price_1T7RqGRv625dg7hWBcNmcUOP",
+  suiteBusiness: cleanPriceId(process.env.NEXT_PUBLIC_STRIPE_PRICE_SUITE_BUSINESS) || "price_1T7RqGRv625dg7hWYp5Fi2lC",
+};
 
 const appPlans = [
   {
@@ -17,7 +29,7 @@ const appPlans = [
     price: "$99",
     note: "$79/mo billed annually",
     cta: "Start Free Trial",
-    href: "/signup",
+    priceId: priceIds.pro,
     featured: true,
     features: ["Unlimited estimates", "10 users", "PDF and photo extraction", "Bid comparison", "RFQ management", "Bid-to-budget bridge"],
     unavailable: [],
@@ -27,7 +39,7 @@ const appPlans = [
     price: "$199",
     note: "$159/mo billed annually",
     cta: "Start Free Trial",
-    href: "/signup",
+    priceId: priceIds.team,
     featured: false,
     features: ["Everything in Professional", "Unlimited users", "API access", "Win/loss analytics", "Custom templates", "Priority support"],
     unavailable: [],
@@ -42,7 +54,7 @@ const bundlePlans = [
     accent: "border-lime-300/35 bg-lime-300/[0.055]",
     features: ["Unified command center", "Cross-app data sync", "Bid-to-project pipeline", "10 users across apps"],
     cta: "Start Free Trial",
-    href: "/signup",
+    priceId: priceIds.suitePro,
   },
   {
     name: "Suite Business",
@@ -51,7 +63,7 @@ const bundlePlans = [
     accent: "border-white/10 bg-white/[0.035]",
     features: ["Everything in Suite Pro", "Unlimited users", "API access for all apps", "Advanced cross-app analytics"],
     cta: "Start Free Trial",
-    href: "/signup",
+    priceId: priceIds.suiteBusiness,
   },
   {
     name: "Enterprise",
@@ -95,6 +107,10 @@ function StatusCell({ value }: { value: string }) {
 }
 
 export default function PricingPage() {
+  const appButtonClass = (featured: boolean) => `mt-auto inline-flex h-11 w-full items-center justify-center rounded-md text-sm font-black transition ${
+    featured ? "bg-orange-600 text-white hover:bg-orange-500" : "border border-white/12 text-white/86 hover:border-orange-300/35 hover:bg-white/[0.045]"
+  }`;
+
   return (
     <div className="min-h-screen overflow-hidden bg-[#050607] text-white">
       <SuiteNav />
@@ -144,11 +160,15 @@ export default function PricingPage() {
                     <p key={feature} className="flex items-center gap-2 text-white/32"><span>x</span>{feature}</p>
                   ))}
                 </div>
-                <Link href={plan.href} className={`mt-auto inline-flex h-11 items-center justify-center rounded-md text-sm font-black transition ${
-                  plan.featured ? "bg-orange-600 text-white hover:bg-orange-500" : "border border-white/12 text-white/86 hover:border-orange-300/35 hover:bg-white/[0.045]"
-                }`}>
-                  {plan.cta} <span className="ml-2">-&gt;</span>
-                </Link>
+                {plan.priceId ? (
+                  <CheckoutButton priceId={plan.priceId} className={appButtonClass(plan.featured)}>
+                    {plan.cta} <span className="ml-2">-&gt;</span>
+                  </CheckoutButton>
+                ) : (
+                  <Link href={plan.href ?? "/signup"} className={appButtonClass(plan.featured)}>
+                    {plan.cta} <span className="ml-2">-&gt;</span>
+                  </Link>
+                )}
               </div>
             ))}
           </div>
@@ -170,9 +190,15 @@ export default function PricingPage() {
                     <p key={feature} className="flex items-center gap-2"><span className="text-orange-200">OS</span>{feature}</p>
                   ))}
                 </div>
-                <Link href={plan.href} className="mt-auto inline-flex h-11 items-center justify-center rounded-md border border-white/12 text-sm font-black text-white/86 transition hover:border-orange-300/35 hover:bg-white/[0.045]">
-                  {plan.cta}
-                </Link>
+                {plan.priceId ? (
+                  <CheckoutButton priceId={plan.priceId} className="mt-auto inline-flex h-11 w-full items-center justify-center rounded-md border border-white/12 text-sm font-black text-white/86 transition hover:border-orange-300/35 hover:bg-white/[0.045]">
+                    {plan.cta}
+                  </CheckoutButton>
+                ) : (
+                  <Link href={plan.href ?? "/signup"} className="mt-auto inline-flex h-11 items-center justify-center rounded-md border border-white/12 text-sm font-black text-white/86 transition hover:border-orange-300/35 hover:bg-white/[0.045]">
+                    {plan.cta}
+                  </Link>
+                )}
               </div>
             ))}
           </div>
