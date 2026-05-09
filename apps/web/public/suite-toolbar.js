@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "2026-05-09.1";
+  const SCRIPT_VERSION = "2026-05-09.2";
   const SESSION_URL = "https://www.opsslate.app/api/auth/suite-session";
   const AUTH_LOGOUT_URL = "https://opsslate-auth.vercel.app/api/auth/logout";
   const LOGIN_URL = "https://www.opsslate.app/login";
@@ -289,7 +289,7 @@
 
   function hasSuiteCookie() {
     const cookie = document.cookie || "";
-    return cookie.includes("opsslate_token=") && !cookie.includes("opsslate_logged_out=1");
+    return (cookie.includes("opsslate_token=") || cookie.includes("opsslate_convex_token=")) && !cookie.includes("opsslate_logged_out=1");
   }
 
   function inferActive() {
