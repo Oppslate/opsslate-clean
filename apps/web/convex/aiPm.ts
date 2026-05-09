@@ -17,6 +17,13 @@ export const getByProject = query({
   },
 });
 
+export const getById = query({
+  args: { id: v.id("aiProjectManagers") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
 // List all PMs for a company
 export const list = query({
   args: { companyId: v.id("companies") },

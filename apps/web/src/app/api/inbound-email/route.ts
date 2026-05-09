@@ -8,6 +8,66 @@ const INBOUND_SECRET = process.env.INBOUND_EMAIL_SECRET || "opsslate-inbound-202
 // Buffmaz's company ID — forwarded emails go here by default
 const DEFAULT_COMPANY_ID = "kd7dcc6qqsm83v2hrgvhzbzbyd81qf1e";
 
+function extractEmailAddresses(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value.join(",") : String(value || "");
+  return Array.from(raw.matchAll(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi)).map((match) => match[0].toLowerCase());
+}
+
+function findRouteAddress(to: unknown, cc: unknown) {
+  const addresses = [...extractEmailAddresses(to), ...extractEmailAddresses(cc)];
+  for (const address of addresses) {
+    const [local] = address.split("@");
+    const plusMatch = local.match(/^(?:pm|aipm|project)\+(.+)$/i);
+    const dashMatch = local.match(/^(?:pm|aipm|project)-(.+)$/i);
+    const token = plusMatch?.[1] || dashMatch?.[1];
+    if (!token) continue;
+    if (local.startsWith("project")) return { type: "project" as const, id: token };
+    return { type: "pm" as const, id: token };
+  }
+  return null;
+}
+
+async function resolveInboundRoute(email: { to?: unknown; cc?: unknown; companyId?: string; projectId?: string }) {
+  const routed = findRouteAddress(email.to, email.cc);
+  if (!routed) {
+    return { companyId: email.companyId || DEFAULT_COMPANY_ID, projectId: email.projectId || undefined, pm: null as null | Record<string, unknown> };
+  }
+
+  if (routed.type === "pm") {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pm = await convex.query(api.aiPm.getById as any, { id: routed.id });
+      if (pm) {
+        return {
+          companyId: String((pm as any).companyId),
+          projectId: String((pm as any).projectId),
+          pm: pm as Record<string, unknown>,
+        };
+      }
+    } catch {
+      // Fall through to explicit/default routing.
+    }
+  }
+
+  if (routed.type === "project") {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const project = await convex.query(api.projects.getById as any, { id: routed.id });
+      if (project) {
+        return {
+          companyId: String((project as any).companyId),
+          projectId: String((project as any)._id),
+          pm: null as null | Record<string, unknown>,
+        };
+      }
+    } catch {
+      // Fall through to explicit/default routing.
+    }
+  }
+
+  return { companyId: email.companyId || DEFAULT_COMPANY_ID, projectId: email.projectId || undefined, pm: null as null | Record<string, unknown> };
+}
+
 function stripForwardHeaders(body: string): { cleanBody: string; originalFrom: string; originalDate: string; originalSubject: string } {
   let originalFrom = "";
   let originalDate = "";
@@ -113,11 +173,14 @@ export async function POST(req: Request) {
       const finalBody = isForwarded ? cleanBody : (email.body || "");
       const finalDate = originalDate || email.date || new Date().toISOString().slice(0, 10);
 
-      const companyId = email.companyId || DEFAULT_COMPANY_ID;
+      const route = await resolveInboundRoute(email);
+      const companyId = route.companyId;
+      const projectId = route.projectId;
+      const routedPm = route.pm;
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await convex.mutation(api.emails.create as any, {
+        const emailId = await convex.mutation(api.emails.create as any, {
           companyId,
           subject: subject.replace(/^(Fwd?|FW):\s*/i, ""),
           from: finalFrom,
@@ -131,11 +194,23 @@ export async function POST(req: Request) {
           importance: "normal",
           isRead: false,
           threadId: emails.length > 1 ? threadId : undefined,
-          projectId: email.projectId || undefined,
+          projectId,
           hasAttachments: false,
           attachmentNames: [],
           pipelineStatus: "inbox",
+          notes: routedPm ? `Routed to AI PM ${(routedPm as any).name}` : undefined,
         } as any);
+
+        if (routedPm && projectId) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await convex.mutation(api.aiPm.addMessage as any, {
+            pmId: (routedPm as any)._id,
+            projectId,
+            companyId,
+            role: "pm",
+            message: `📬 New email received from ${finalFrom}\nSubject: ${subject.replace(/^(Fwd?|FW):\s*/i, "")}\n\nI added it to project correspondence. Ask me to "scan email" when you want me to extract tasks, risks, and schedule dates.`,
+          });
+        }
         created++;
       } catch (e) {
         console.error("Failed to create inbound email:", e);
@@ -150,7 +225,7 @@ export async function POST(req: Request) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await convex.action(api.emailAutoAssign.autoAssign as any, {
             emailId: "latest",
-            companyId: email.companyId || DEFAULT_COMPANY_ID,
+            companyId: (await resolveInboundRoute(email)).companyId,
             subject: email.subject || "",
             from: email.from || "",
             body: (email.body || "").slice(0, 3000),
@@ -173,8 +248,8 @@ export async function GET() {
   return Response.json({
     status: "ok",
     endpoint: "inbound-email",
-    forwarding: "Forward emails to inbox@opsslate.app — they appear in Communications",
+    forwarding: "Forward emails to pm+AI_PM_ID@opsslate.app or project+PROJECT_ID@opsslate.app — they appear in project correspondence",
     manual: "POST JSON with ?key=SECRET: { from, subject, body, companyId? }",
-    supported: ["Resend inbound webhook", "Outlook forwarding rules", "Gmail forwarding", "Power Automate", "Zapier"],
+    supported: ["AI PM inbox routing", "Project inbox routing", "Resend inbound webhook", "Outlook forwarding rules", "Gmail forwarding", "Power Automate", "Zapier"],
   });
 }
