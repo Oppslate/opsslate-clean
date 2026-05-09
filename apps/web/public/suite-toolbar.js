@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "2026-05-08.3";
+  const SCRIPT_VERSION = "2026-05-09.1";
   const SESSION_URL = "https://www.opsslate.app/api/auth/suite-session";
   const AUTH_LOGOUT_URL = "https://opsslate-auth.vercel.app/api/auth/logout";
   const LOGIN_URL = "https://www.opsslate.app/login";
@@ -35,7 +35,7 @@
       key: "books",
       short: "Books",
       label: "Books",
-      appHref: "https://books.opsslate.app/",
+      appHref: "https://books.opsslate.app/api/auth/suite?next=%2Fback-office",
       salesHref: "https://www.opsslate.app/books",
       ready: true,
     },

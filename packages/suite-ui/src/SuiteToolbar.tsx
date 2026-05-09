@@ -27,7 +27,7 @@ export function SuiteToolbar({
   useEffect(() => {
     if (!document.querySelector('script[data-opsslate-suite-toolbar="true"]')) {
       const script = document.createElement("script");
-      script.src = "/suite-toolbar.js?v=2026-05-08.3";
+      script.src = "/suite-toolbar.js?v=2026-05-09.1";
       script.defer = true;
       script.dataset.opsslateSuiteToolbar = "true";
       document.head.appendChild(script);
