@@ -11,10 +11,11 @@ const OPSLATE_LOGIN_URL = "https://www.opsslate.app/login";
 const OPSLATE_LOGOUT_COOKIE = "opsslate_logged_out";
 
 function getCookie(name: string) {
-  return document.cookie
+  const value = document.cookie
     .split("; ")
     .find((row) => row.startsWith(`${name}=`))
     ?.split("=")[1];
+  return value ? decodeURIComponent(value) : "";
 }
 
 function setSharedSessionCookie(token: string) {
@@ -50,7 +51,7 @@ async function persistSuiteSession(tokens: { sharedToken?: string; convexToken?:
       body: JSON.stringify(tokens),
     });
   } catch {
-    // Browser cookies above are the fallback if the server bridge is unavailable.
+    // Client-side cookies above are the fallback if the server bridge is unavailable.
   }
 }
 
@@ -77,34 +78,79 @@ export const useAuth = () => useContext(AuthContext);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
+  const provisionMut = useMutation(api.auth.provisionFromSharedAuth);
+  const loginMut = useMutation(api.auth.login);
 
   useEffect(() => {
-    if (getCookie(OPSLATE_LOGOUT_COOKIE) === "1") {
+    let cancelled = false;
+
+    const clearLocalSession = () => {
       localStorage.removeItem("eq_token");
       localStorage.removeItem("opsslate_token");
       localStorage.removeItem("opsslate_user");
-      clearSharedSessionCookie();
-      setToken("");
-      setLoading(false);
-      return;
-    }
+    };
 
-    const t = localStorage.getItem("eq_token") || "";
-    const sharedToken = localStorage.getItem("opsslate_token") || "";
-    if (sharedToken || t) void persistSuiteSession({ sharedToken, convexToken: t });
-    setToken(t);
-    setLoading(false);
-  }, []);
+    const hydrateSession = async () => {
+      if (getCookie(OPSLATE_LOGOUT_COOKIE) === "1") {
+        clearLocalSession();
+        clearSharedSessionCookie();
+        if (!cancelled) setToken("");
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      const cookieConvexToken = getCookie("opsslate_convex_token");
+      const cookieSharedToken = getCookie("opsslate_token");
+      const localSharedToken = localStorage.getItem("opsslate_token") || "";
+      const sharedAccountChanged = Boolean(cookieSharedToken && localSharedToken && cookieSharedToken !== localSharedToken);
+      let nextConvexToken = sharedAccountChanged ? "" : cookieConvexToken || localStorage.getItem("eq_token") || "";
+      const nextSharedToken = cookieSharedToken || localSharedToken;
+
+      if (sharedAccountChanged) localStorage.removeItem("eq_token");
+      if (nextSharedToken) localStorage.setItem("opsslate_token", nextSharedToken);
+      if (nextConvexToken) localStorage.setItem("eq_token", nextConvexToken);
+      if (nextSharedToken || nextConvexToken) {
+        void persistSuiteSession({ sharedToken: nextSharedToken, convexToken: nextConvexToken });
+      }
+
+      if (!nextConvexToken && nextSharedToken && !sharedAccountChanged) {
+        try {
+          const authRes = await fetch(`${AUTH_URL}/api/auth/me`, {
+            headers: { Authorization: `Bearer ${nextSharedToken}` },
+          });
+          const authData = await authRes.json().catch(() => null);
+          const authUser = authData?.user || authData;
+          if (authRes.ok && authUser?.email) {
+            const res = await provisionMut({
+              email: authUser.email,
+              name: authUser.name || authUser.email,
+              companyName: authUser.companyName || "My Company",
+            });
+            nextConvexToken = res.token;
+            localStorage.setItem("eq_token", nextConvexToken);
+            await persistSuiteSession({ sharedToken: nextSharedToken, convexToken: nextConvexToken });
+          }
+        } catch {
+          // Shared auth verification is best-effort; without a valid app token this app stays signed out.
+        }
+      }
+
+      if (!cancelled) setToken(nextConvexToken);
+      if (!cancelled) setLoading(false);
+    };
+
+    void hydrateSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [provisionMut]);
 
   const user = useQuery(api.auth.me, token ? { token } : "skip") as User | null | undefined;
-  const provisionMut = useMutation(api.auth.provisionFromSharedAuth);
-
-  const loginMut = useMutation(api.auth.login);
 
   useEffect(() => {
     if (token && user === null) {
       localStorage.removeItem("eq_token");
-      clearSharedSessionCookie();
+      if (getCookie("opsslate_convex_token") === token) clearSharedSessionCookie();
       setToken("");
     }
   }, [token, user]);
