@@ -42,6 +42,12 @@ function OpsSlateFooter({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href="/help"
+            className="inline-flex h-9 items-center rounded-xl border border-sky-500/30 bg-sky-500/12 px-3 text-xs font-bold text-sky-100 transition-colors hover:border-sky-400/55 hover:bg-sky-500/20"
+          >
+            Help
+          </Link>
           <button
             type="button"
             onClick={openDirector}
