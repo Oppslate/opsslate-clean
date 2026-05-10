@@ -63,6 +63,15 @@ function DashboardContent() {
   const dirEndRef = useRef<HTMLDivElement>(null);
   const dirInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const openDirector = (event: Event) => {
+      event.preventDefault();
+      setDirOpen(true);
+    };
+    window.addEventListener("opsslate:open-director", openDirector);
+    return () => window.removeEventListener("opsslate:open-director", openDirector);
+  }, []);
+
   // Voice styles — rate, pitch combos
   const VOICE_STYLES: Record<string, { label: string; rate: number; pitch: number; desc: string }> = {
     executive: { label: "Executive", rate: 1.0, pitch: 0.9, desc: "Calm, authoritative" },
@@ -829,7 +838,7 @@ function DashboardContent() {
       {/* Floating Director Button */}
       {!dirOpen && (
         <button
-          className="fixed bottom-20 md:bottom-6 right-4 w-14 h-14 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 shadow-lg hover:shadow-purple-500/25 flex items-center justify-center text-2xl z-50 transition-transform hover:scale-110 active:scale-95"
+          className="hidden"
           onClick={() => setDirOpen(true)}
           title="Talk to AI Director"
         >

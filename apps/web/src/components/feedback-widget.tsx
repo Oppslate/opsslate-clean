@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -14,6 +14,12 @@ export function FeedbackWidget() {
   const [message, setMessage] = useState("");
   const [category, setCategory] = useState("general");
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    const openFeedback = () => setOpen(true);
+    window.addEventListener("opsslate:open-feedback", openFeedback);
+    return () => window.removeEventListener("opsslate:open-feedback", openFeedback);
+  }, []);
 
   if (!user) return null;
 
@@ -35,7 +41,7 @@ export function FeedbackWidget() {
       {/* Floating button */}
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-24 right-5 z-50 w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl shadow-lg hover:scale-105 transition-transform"
+        className="hidden"
         title="Send Feedback"
       >
         💬
@@ -43,7 +49,7 @@ export function FeedbackWidget() {
 
       {/* Feedback panel */}
       {open && (
-        <div className="fixed bottom-40 right-5 z-50 w-80 bg-card border border-border rounded-xl shadow-2xl p-4 space-y-3">
+        <div className="fixed bottom-20 right-5 z-50 w-80 bg-card border border-border rounded-xl shadow-2xl p-4 space-y-3">
           <h3 className="font-bold text-sm">Send Feedback</h3>
           <p className="text-xs text-muted-foreground">Your feedback goes directly to the dev team and gets reviewed automatically.</p>
 

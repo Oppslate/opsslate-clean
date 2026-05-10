@@ -11,6 +11,16 @@ import { useState } from "react";
 
 
 function OpsSlateFooter({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
+  const openDirector = () => {
+    const event = new Event("opsslate:open-director", { cancelable: true });
+    const handled = !window.dispatchEvent(event);
+    if (!handled) window.location.href = "/ai-pm";
+  };
+
+  const openFeedback = () => {
+    window.dispatchEvent(new Event("opsslate:open-feedback"));
+  };
+
   return (
     <footer className={`sticky bottom-0 z-[60] border-t border-white/8 bg-[#0d1218]/96 backdrop-blur-xl supports-[backdrop-filter]:bg-[#0d1218]/84 shadow-[0_-10px_30px_rgba(0,0,0,0.35)] transition-[margin] duration-200 ${sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-60"}`}>
       <div className="flex h-16 items-center justify-between px-4 lg:px-8">
@@ -31,8 +41,24 @@ function OpsSlateFooter({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
             <div className="text-[11px] text-white/38">Construction operations platform</div>
           </div>
         </div>
-        <div className="text-[11px] font-medium tracking-[0.01em] text-white/40 text-right">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openDirector}
+            className="inline-flex h-9 items-center rounded-xl border border-purple-500/30 bg-purple-500/12 px-3 text-xs font-bold text-purple-100 transition-colors hover:border-purple-400/55 hover:bg-purple-500/20"
+          >
+            Director
+          </button>
+          <button
+            type="button"
+            onClick={openFeedback}
+            className="inline-flex h-9 items-center rounded-xl border border-orange-500/35 bg-orange-500/14 px-3 text-xs font-bold text-orange-100 transition-colors hover:border-orange-400/60 hover:bg-orange-500/22"
+          >
+            Feedback
+          </button>
+          <div className="hidden text-[11px] font-medium tracking-[0.01em] text-white/40 text-right sm:block">
           © 2026 OpsSlate. All rights reserved.
+        </div>
         </div>
       </div>
     </footer>
