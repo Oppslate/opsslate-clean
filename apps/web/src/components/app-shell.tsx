@@ -12,7 +12,7 @@ import { useState } from "react";
 
 function OpsSlateFooter({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
   return (
-    <footer className={`fixed inset-x-0 bottom-0 z-[60] border-t border-white/8 bg-[#0d1218]/96 backdrop-blur-xl supports-[backdrop-filter]:bg-[#0d1218]/84 shadow-[0_-10px_30px_rgba(0,0,0,0.35)] transition-[left] duration-200 ${sidebarCollapsed ? "lg:left-[72px]" : "lg:left-60"}`}>
+    <footer className={`sticky bottom-0 z-[60] border-t border-white/8 bg-[#0d1218]/96 backdrop-blur-xl supports-[backdrop-filter]:bg-[#0d1218]/84 shadow-[0_-10px_30px_rgba(0,0,0,0.35)] transition-[margin] duration-200 ${sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-60"}`}>
       <div className="flex h-16 items-center justify-between px-4 lg:px-8">
         <div className="flex min-w-0 items-center gap-3.5">
           <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -78,11 +78,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     .join("") || "OS";
 
   return (
-    <div className="min-h-screen bg-background bg-[radial-gradient(circle_at_70%_0%,rgba(249,115,22,0.08),transparent_28%)]">
+    <div className="flex min-h-screen flex-col bg-background bg-[radial-gradient(circle_at_70%_0%,rgba(249,115,22,0.08),transparent_28%)]">
       <SuiteToolbar />
-      <div className="flex min-h-[calc(100vh-73px)]">
+      <div className="flex flex-1">
         <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={handleSidebarCollapsedChange} />
-        <main className="flex-1 min-w-0 overflow-auto p-4 pb-24 lg:p-6 lg:pb-24">
+        <main className="flex-1 min-w-0 overflow-auto p-4 pb-8 lg:p-6 lg:pb-8">
         {/* Top bar */}
         <div className="mb-5 flex items-center justify-end gap-3">
           <button onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))} className="hidden sm:flex min-w-[260px] items-center gap-2 rounded-xl border border-border bg-card/75 px-3 py-2 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-orange-500/40 hover:text-foreground">

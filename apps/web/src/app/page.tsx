@@ -838,7 +838,7 @@ function DashboardContent() {
       )}
 
       {/* Mobile Quick Actions Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur border-t border-border p-2 flex gap-2 justify-around md:hidden z-40">
+      <div className="fixed bottom-16 left-0 right-0 bg-card/95 backdrop-blur border-t border-border p-2 flex gap-2 justify-around md:hidden z-40">
         <Button variant="ghost" className="flex-1 flex flex-col gap-0.5 h-auto py-2 text-xs" onClick={() => setShowCreateProject(true)}>
           <span className="text-lg">➕</span>New
         </Button>
