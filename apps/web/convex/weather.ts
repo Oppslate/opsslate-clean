@@ -1,6 +1,7 @@
 "use node";
 import { action } from "./_generated/server";
 import { v } from "convex/values";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 // ── Weather fetcher (Open-Meteo, free, no key) ──
 export const fetchForecast = action({
@@ -302,7 +303,8 @@ export const sendCrewCallOff = action({
     for (const member of crewList) {
       try {
         await resend.emails.send({
-          from: "OpsSlate Weather <notifications@opsslate.app>",
+          from: emailFrom("OpsSlate Weather"),
+          replyTo: emailReplyTo(),
           to: member.email,
           subject: `⚠️ Weather Alert: ${args.reason} — ${projectName} (${args.date})`,
           html: `

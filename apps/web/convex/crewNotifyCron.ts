@@ -1,6 +1,7 @@
 "use node";
 import { internalAction } from "./_generated/server";
 import { api } from "./_generated/api";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const sendUpcomingNotifications = internalAction({
   args: {},
@@ -51,7 +52,8 @@ export const sendUpcomingNotifications = internalAction({
             Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
-            from: "Hybrid Briefing <notifications@opsslate.app>",
+            from: emailFrom("OpsSlate Crew"),
+            reply_to: emailReplyTo(),
             to: member.email,
             subject: `Upcoming Assignment: ${member.projectName} — Starting ${member.start}`,
             html,

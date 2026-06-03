@@ -22,9 +22,10 @@ export const signup = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
     const existing = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
     if (existing) throw new Error("Email already registered");
 
@@ -36,7 +37,7 @@ export const signup = mutation({
     const token = genToken();
     await ctx.db.insert("users", {
       companyId,
-      email: args.email,
+      email,
       name: args.name,
       role: "admin",
       passwordHash: simpleHash(args.password),
@@ -50,9 +51,10 @@ export const signup = mutation({
 export const login = mutation({
   args: { email: v.string(), password: v.string() },
   handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
     const user = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
     if (!user || user.passwordHash !== simpleHash(args.password)) {
       throw new Error("Invalid email or password");
@@ -98,10 +100,11 @@ export const provisionFromSharedAuth = mutation({
     companyName: v.string(),
   },
   handler: async (ctx, args) => {
+    const email = args.email.trim().toLowerCase();
     // Check if user already exists
     const existing = await ctx.db
       .query("users")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_email", (q) => q.eq("email", email))
       .first();
     
     if (existing) {
@@ -120,7 +123,7 @@ export const provisionFromSharedAuth = mutation({
     const token = genToken();
     await ctx.db.insert("users", {
       companyId,
-      email: args.email,
+      email,
       name: args.name,
       role: "admin",
       passwordHash: "shared_auth",

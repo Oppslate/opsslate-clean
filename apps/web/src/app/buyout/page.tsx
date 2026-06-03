@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -9,6 +9,12 @@ import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Id } from "../../../convex/_generated/dataModel";
 import Link from "next/link";
+import {
+  CorrespondenceSignatureProfile,
+  defaultSignatureProfile,
+  formatCorrespondenceSignature,
+  loadSignatureProfile,
+} from "@/lib/correspondence-signature";
 
 const CATEGORIES = [
   "Concrete", "Steel/Rebar", "Pipe & Fittings", "Aggregate/Stone", "Asphalt",
@@ -32,12 +38,26 @@ function BuyoutContent() {
   const { user } = useAuth();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const projects = useQuery(api.projects.list, user ? { companyId: user.companyId } : "skip") as any[];
+  const vendors = useQuery(api.vendors.list, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
+  const branding = useQuery(api.companyBranding.get, user ? { companyId: user.companyId as Id<"companies"> } : "skip") as any;
   const [selectedProject, setSelectedProject] = useState<string>("");
   const projectId = selectedProject || undefined;
 
   const items = useQuery(
     api.buyout.listItems,
     user && projectId ? { companyId: user.companyId, projectId: projectId as Id<"projects"> } : "skip"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any[] | undefined;
+
+  const projectEstimates = useQuery(
+    api.estimating.listProjectEstimates,
+    projectId ? { projectId: projectId as Id<"projects"> } : "skip"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any[] | undefined;
+  const estimateId = projectEstimates?.[0]?._id;
+  const estimateItems = useQuery(
+    api.estimating.listEstimateItems,
+    estimateId ? { estimateId: estimateId as Id<"estimates"> } : "skip"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) as any[] | undefined;
 
@@ -61,6 +81,16 @@ function BuyoutContent() {
   const [editItem, setEditItem] = useState<string | null>(null);
   const [quoteModal, setQuoteModal] = useState<string | null>(null);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
+  const [activeTab, setActiveTab] = useState<"buyout" | "rfq">("buyout");
+  const [rfqItemId, setRfqItemId] = useState("");
+  const [rfqManualItemDescription, setRfqManualItemDescription] = useState("");
+  const [rfqManualQuantity, setRfqManualQuantity] = useState("");
+  const [rfqManualUnit, setRfqManualUnit] = useState("LS");
+  const [rfqManualCategory, setRfqManualCategory] = useState("Other");
+  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
+  const [rfqDueDate, setRfqDueDate] = useState("");
+  const [rfqSpecNotes, setRfqSpecNotes] = useState("");
+  const [signatureProfile, setSignatureProfile] = useState<CorrespondenceSignatureProfile>(() => defaultSignatureProfile(user));
 
   // Form state
   const [formData, setFormData] = useState({
@@ -91,6 +121,78 @@ function BuyoutContent() {
   const getQuotesForItem = (itemId: string) => {
     return (allQuotes || []).filter((q: Record<string, unknown>) => q.buyoutItemId === itemId);
   };
+  const selectedProjectRecord = (projects || []).find((p: Record<string, unknown>) => p._id === projectId);
+  const requisitionOptions = [
+    ...(estimateItems || []).map((item: Record<string, unknown>) => ({ source: "estimate", value: `estimate:${String(item._id)}`, item })),
+    ...(items || []).map((item: Record<string, unknown>) => ({ source: "buyout", value: `buyout:${String(item._id)}`, item })),
+  ];
+  const selectedRequisition = requisitionOptions.find((option) => option.value === rfqItemId) || requisitionOptions[0];
+  const rfqItem = rfqItemId === "other"
+    ? {
+        _id: "other",
+        category: rfqManualCategory,
+        description: rfqManualItemDescription || "Manual material requisition",
+        quantity: Number(rfqManualQuantity || 0),
+        unit: rfqManualUnit || "LS",
+        budgetAmount: 0,
+        scope: "Manual RFQ item entered by the user.",
+      }
+    : selectedRequisition?.item || filtered[0];
+  const selectedVendors = (vendors || []).filter((vendor: Record<string, unknown>) => selectedVendorIds.includes(String(vendor._id)));
+  const rfqBuyoutItemId = selectedRequisition?.source === "buyout" ? String(selectedRequisition.item._id) : "";
+
+  useEffect(() => {
+    setSignatureProfile(loadSignatureProfile(user));
+  }, [user?._id, user?.email, user?.name]);
+
+  const missingQuoteDetails = (quote: Record<string, unknown>) => {
+    const missing: string[] = [];
+    if (!quote.amount) missing.push("price");
+    if (!quote.leadTime) missing.push("lead time");
+    if (!quote.email && !quote.phone) missing.push("contact");
+    if (!quote.expiresDate) missing.push("expiration");
+    return missing;
+  };
+
+  function buildRfqBody(item: Record<string, unknown> | undefined, vendor?: Record<string, unknown>) {
+    const quantityLine = `${item?.quantity || 0} ${item?.unit || "LS"}`;
+    return [
+      branding?.name || "OpsSlate",
+      [branding?.address, branding?.city, branding?.state, branding?.zip].filter(Boolean).join(", "),
+      [branding?.phone, branding?.email, branding?.website].filter(Boolean).join(" | "),
+      "",
+      `REQUEST FOR QUOTE: ${item?.description || "Material requisition"}`,
+      `Project: ${selectedProjectRecord?.name || "Selected project"}`,
+      vendor?.name ? `Vendor: ${vendor.name}` : "Vendor: Selected supplier",
+      rfqDueDate ? `Pricing due: ${rfqDueDate}` : "Pricing due: Please respond with pricing and availability.",
+      "",
+      "Material requisition",
+      `Category: ${item?.category || "Material"}`,
+      `Quantity from takeoff: ${quantityLine}`,
+      `Budget reference: ${fmt(Number(item?.budgetAmount || 0))}`,
+      "",
+      "Scope / inclusions",
+      String(item?.scope || item?.notes || "Provide material, freight, taxes, lead time, and any exclusions."),
+      "",
+      "Specs/Attachments",
+      rfqSpecNotes || "Attach applicable project specifications, drawings, addenda, and takeoff backup before sending.",
+      "",
+      "Please include unit price, total price, lead time, quote expiration, freight terms, taxes, exclusions, alternates, substitutions, and contact information.",
+      "",
+      formatCorrespondenceSignature(signatureProfile, branding?.name, user),
+    ].join("\n");
+  }
+
+  async function copyRfqPackage() {
+    if (!rfqItem) return;
+    await navigator.clipboard.writeText(buildRfqBody(rfqItem));
+    alert("RFQ package copied. Attach specs and drawings before sending.");
+  }
+
+  function rfqMailto(vendor: Record<string, unknown>) {
+    const subject = `RFQ - ${selectedProjectRecord?.name || "Project"} - ${rfqItem?.description || "Material pricing"}`;
+    return `mailto:${encodeURIComponent(String(vendor.email || ""))}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(buildRfqBody(rfqItem, vendor))}`;
+  }
 
   async function handleCreateItem() {
     if (!user || !projectId) return;
@@ -177,6 +279,135 @@ function BuyoutContent() {
 
       {projectId && (
         <>
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => setActiveTab("buyout")} className={`px-4 py-2 rounded text-sm font-semibold border ${activeTab === "buyout" ? "bg-blue-600 border-blue-500 text-white" : "border-gray-600 text-gray-300 hover:bg-gray-800"}`}>Buyout Items</button>
+            <button onClick={() => setActiveTab("rfq")} className={`px-4 py-2 rounded text-sm font-semibold border ${activeTab === "rfq" ? "bg-blue-600 border-blue-500 text-white" : "border-gray-600 text-gray-300 hover:bg-gray-800"}`}>RFQ Desk</button>
+          </div>
+
+          {activeTab === "rfq" && (
+            <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-4 mb-6">
+              <div className="rounded-2xl border border-blue-500/30 bg-gray-800 p-4">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">RFQ Desk</h2>
+                    <p className="text-sm text-gray-400 mt-1">Generate material requisitions, send multiple bid invitations, and standardize pricing requests with company letterhead.</p>
+                  </div>
+                  <Badge className="bg-blue-500/15 text-blue-300">Request for Quote</Badge>
+                </div>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold uppercase text-gray-400">Material requisition</label>
+                    <select value={rfqItemId || selectedRequisition?.value || ""} onChange={(e) => setRfqItemId(e.target.value)} className="mt-1 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm w-full">
+                      {(estimateItems || []).map((item: Record<string, unknown>) => (
+                        <option key={`estimate:${String(item._id)}`} value={`estimate:${String(item._id)}`}>
+                          Estimate: {String(item.description)} - {String(item.quantity || 0)} {String(item.unit || "LS")}
+                        </option>
+                      ))}
+                      {(items || []).map((item: Record<string, unknown>) => (
+                        <option key={`buyout:${String(item._id)}`} value={`buyout:${String(item._id)}`}>
+                          Buyout: {String(item.description)} - {String(item.quantity || 0)} {String(item.unit || "LS")}
+                        </option>
+                      ))}
+                      <option value="other">Other - enter item manually</option>
+                    </select>
+                    {!(estimateItems || []).length && (
+                      <p className="mt-1 text-xs text-gray-500">No linked estimate items found for this project yet.</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase text-gray-400">Pricing due date</label>
+                    <input type="date" value={rfqDueDate} onChange={(e) => setRfqDueDate(e.target.value)} className="mt-1 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm w-full" />
+                  </div>
+                  {rfqItemId === "other" && (
+                    <div className="md:col-span-2 grid md:grid-cols-[1fr_120px_120px_160px] gap-3 rounded-xl border border-gray-700 bg-gray-900/70 p-3">
+                      <div>
+                        <label className="text-xs font-bold uppercase text-gray-400">Other item</label>
+                        <input value={rfqManualItemDescription} onChange={(e) => setRfqManualItemDescription(e.target.value)} className="mt-1 bg-gray-950 border border-gray-600 rounded px-3 py-2 text-white text-sm w-full" placeholder="Enter material or scope item" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase text-gray-400">Qty</label>
+                        <input type="number" min="0" step="0.01" value={rfqManualQuantity} onChange={(e) => setRfqManualQuantity(e.target.value)} className="mt-1 bg-gray-950 border border-gray-600 rounded px-3 py-2 text-white text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase text-gray-400">Unit</label>
+                        <input value={rfqManualUnit} onChange={(e) => setRfqManualUnit(e.target.value)} className="mt-1 bg-gray-950 border border-gray-600 rounded px-3 py-2 text-white text-sm w-full" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold uppercase text-gray-400">Category</label>
+                        <select value={rfqManualCategory} onChange={(e) => setRfqManualCategory(e.target.value)} className="mt-1 bg-gray-950 border border-gray-600 rounded px-3 py-2 text-white text-sm w-full">
+                          {CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-bold uppercase text-gray-400">Specs/Attachments</label>
+                    <textarea value={rfqSpecNotes} onChange={(e) => setRfqSpecNotes(e.target.value)} rows={3} className="mt-1 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-white text-sm w-full" placeholder="List spec sections, drawings, addenda, alternates, and takeoff backup to attach." />
+                  </div>
+                </div>
+                <div className="mt-4 rounded-xl border border-gray-700 bg-gray-900 p-4">
+                  <div className="text-xs font-bold uppercase text-gray-400 mb-2">Select vendors for multiple bid invitations</div>
+                  <div className="grid md:grid-cols-2 gap-2 max-h-52 overflow-y-auto">
+                    {(vendors || []).map((vendor: Record<string, unknown>) => (
+                      <label key={String(vendor._id)} className="flex items-start gap-2 rounded-lg border border-gray-700 bg-gray-800/70 p-2 text-sm text-gray-200">
+                        <input type="checkbox" checked={selectedVendorIds.includes(String(vendor._id))} onChange={(e) => {
+                          const id = String(vendor._id);
+                          setSelectedVendorIds((current) => e.target.checked ? [...current, id] : current.filter((v) => v !== id));
+                        }} />
+                        <span>
+                          <span className="font-semibold text-white">{String(vendor.name || "Vendor")}</span>
+                          <span className="block text-xs text-gray-400">{String(vendor.email || vendor.phone || "No email on file")}</span>
+                        </span>
+                      </label>
+                    ))}
+                    {!(vendors || []).length && <div className="text-sm text-gray-400">No vendors yet. Add suppliers in the Vendors module first.</div>}
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button onClick={copyRfqPackage} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold">Copy RFQ Package</button>
+                  {selectedVendors.filter((vendor: Record<string, unknown>) => vendor.email).map((vendor: Record<string, unknown>) => (
+                    <a key={String(vendor._id)} href={rfqMailto(vendor)} className="border border-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm">Email {String(vendor.name || "Vendor")}</a>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-700 bg-gray-800 p-4">
+                <div className="rounded-xl border border-gray-600 bg-white text-slate-950 overflow-hidden">
+                  <div className="h-2" style={{ background: `linear-gradient(to right, ${branding?.primaryColor || "#f97316"}, ${branding?.accentColor || "#3b82f6"})` }} />
+                  <div className="p-4 border-b border-slate-200">
+                    <div className="text-lg font-black">{branding?.name || "Company Letterhead"}</div>
+                    <div className="text-xs text-slate-600">{[branding?.address, branding?.city, branding?.state, branding?.zip].filter(Boolean).join(", ")}</div>
+                    <div className="text-xs text-slate-600">{[branding?.phone, branding?.email, branding?.website].filter(Boolean).join(" | ")}</div>
+                  </div>
+                  <pre className="p-4 text-xs whitespace-pre-wrap max-h-[420px] overflow-y-auto">{buildRfqBody(rfqItem)}</pre>
+                </div>
+              </div>
+
+              <div className="lg:col-span-2 rounded-2xl border border-gray-700 bg-gray-800 p-4">
+                <div className="text-sm font-bold text-white mb-3">Quote comparison and missing detail flags</div>
+                <div className="grid md:grid-cols-3 gap-3">
+                  {getQuotesForItem(rfqBuyoutItemId).map((quote: Record<string, unknown>) => {
+                    const missing = missingQuoteDetails(quote);
+                    return (
+                      <div key={String(quote._id)} className="rounded-xl border border-gray-700 bg-gray-900 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-semibold text-white">{String(quote.vendorName || "Vendor")}</div>
+                          <div className="font-mono text-green-300">{fmt(Number(quote.amount || 0))}</div>
+                        </div>
+                        <div className="mt-2 text-xs text-gray-400">Lead time: {String(quote.leadTime || "missing")}</div>
+                        <div className="mt-2 text-xs">
+                          <span className="font-bold uppercase text-gray-500">Missing detail flags</span>
+                          <div className={missing.length ? "text-red-300" : "text-green-300"}>{missing.length ? missing.join(", ") : "Complete quote detail"}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!getQuotesForItem(rfqBuyoutItemId).length && <div className="text-sm text-gray-400">Responses are logged in the quote modal for buyout items. Add received vendor pricing there, then compare here.</div>}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
             <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 text-center">

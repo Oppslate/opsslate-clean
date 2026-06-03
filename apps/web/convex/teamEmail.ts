@@ -2,6 +2,7 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const sendInvite = action({
   args: {
@@ -53,7 +54,8 @@ export const sendInvite = action({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        from: "OpsSlate <notifications@opsslate.app>",
+        from: emailFrom(),
+        reply_to: emailReplyTo(),
         to: [args.email],
         subject: `Your OpsSlate Account — ${args.companyName}`,
         html: `

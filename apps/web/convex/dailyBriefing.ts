@@ -1,5 +1,6 @@
 "use node";
 import { internalAction } from "./_generated/server";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const sendDailyBriefings = internalAction({
   args: {},
@@ -31,7 +32,8 @@ export const sendDailyBriefings = internalAction({
               Authorization: `Bearer ${apiKey}`,
             },
             body: JSON.stringify({
-              from: "Hybrid Briefing <notifications@opsslate.app>",
+              from: emailFrom("OpsSlate Briefing"),
+              reply_to: emailReplyTo(),
               to: profile.email,
               subject: `Hybrid Daily Briefing — ${todayData.today}`,
               html,

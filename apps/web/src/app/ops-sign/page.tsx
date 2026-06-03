@@ -441,7 +441,7 @@ export default function OpsSignPage() {
                 <p style="margin:0 0 10px;font-size:13px;line-height:1.7;color:#64748b;">If the button above doesn't work, use this direct link:</p>
                 <p style="margin:0 0 24px;word-break:break-all;"><a href="${signerLink}" style="color:#2563eb;text-decoration:none;font-size:13px;line-height:1.7;">${signerLink}</a></p>
                 <div style="border-top:1px solid #e5e7eb;padding-top:18px;font-size:12px;line-height:1.7;color:#94a3b8;">
-                  Sent from <strong>OpsSlate &lt;notifications@opsslate.app&gt;</strong><br/>
+                  Sent from <strong>the configured OpsSlate sender</strong><br/>
                   Powered by OpsSlate Sign
                 </div>
               </div>
@@ -460,7 +460,7 @@ export default function OpsSignPage() {
       }
 
       setReviewStatus("sent");
-      setReviewFeedback(`Review emails sent to ${signerRecipients.length} signer${signerRecipients.length === 1 ? "" : "s"} from notifications@opsslate.app.`);
+      setReviewFeedback(`Review emails sent to ${signerRecipients.length} signer${signerRecipients.length === 1 ? "" : "s"} from the configured OpsSlate sender.`);
       toast(`Sent for review to ${signerRecipients.length} signer${signerRecipients.length === 1 ? "" : "s"}`, "success");
     } catch (error) {
       const message = `Failed to send review email: ${(error as Error).message}`;
@@ -1022,7 +1022,7 @@ export default function OpsSignPage() {
                     <div className="text-xs uppercase tracking-wide text-muted-foreground">Review Status</div>
                     <div className="text-sm text-muted-foreground">
                       {reviewStatus === "sent"
-                        ? `Review emails sent from notifications@opsslate.app. Latest signer preview: ${signerPreviewHref}`
+                        ? `Review emails sent from the configured OpsSlate sender. Latest signer preview: ${signerPreviewHref}`
                         : reviewStatus === "sending"
                           ? "Sending review emails now…"
                           : reviewStatus === "error"

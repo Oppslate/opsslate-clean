@@ -2,6 +2,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const sendNotification = action({
   args: { crewId: v.id("crew") },
@@ -50,7 +51,8 @@ export const sendNotification = action({
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        from: "Hybrid Briefing <notifications@opsslate.app>",
+        from: emailFrom("OpsSlate Crew"),
+        reply_to: emailReplyTo(),
         to: member.email,
         subject: `Crew Assignment: ${projectName}`,
         html,

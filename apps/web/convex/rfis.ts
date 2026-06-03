@@ -26,9 +26,38 @@ export const create = mutation({
   },
 });
 
+async function syncSpecIntelligenceResolution(ctx: any, record: any, args: { recordType: string; recordId: string; note: string; resolvedBy?: string; resolvedAnswer?: string }) {
+  if (!record?.sourceItemId || record.sourceType !== "spec_intelligence") return;
+  const sourceItem = await ctx.db.get(record.sourceItemId as any);
+  if (!sourceItem) return;
+  await ctx.db.patch(record.sourceItemId as any, {
+    status: "resolved",
+    resolutionStatus: "resolved",
+    resolvedByRfiId: args.recordType === "rfi" ? args.recordId : undefined,
+    resolvedAnswer: args.resolvedAnswer,
+    resolvedByRecordType: args.recordType,
+    resolvedByRecordId: args.recordId,
+    resolvedNote: args.note,
+    resolvedAt: Date.now(),
+    resolvedBy: args.resolvedBy,
+    closedLoopSyncedAt: Date.now(),
+  });
+}
+
 export const answer = mutation({
   args: { id: v.id("rfis"), answer: v.string(), answeredBy: v.optional(v.string()) },
-  handler: async (ctx, args) => { await ctx.db.patch(args.id, { answer: args.answer, status: "Answered", dateAnswered: new Date().toISOString().slice(0, 10) }); },
+  handler: async (ctx, args) => {
+    const rfi = await ctx.db.get(args.id);
+    const dateAnswered = new Date().toISOString().slice(0, 10);
+    await ctx.db.patch(args.id, { answer: args.answer, status: "Answered", dateAnswered });
+    await syncSpecIntelligenceResolution(ctx, rfi, {
+      recordType: "rfi",
+      recordId: String(args.id),
+      note: "RFI answered and synced to Spec Intelligence Matrix",
+      resolvedBy: args.answeredBy,
+      resolvedAnswer: args.answer,
+    });
+  },
 });
 
 export const update = mutation({

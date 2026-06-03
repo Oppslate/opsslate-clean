@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -9,6 +9,7 @@ const AUTH_URL = "https://opsslate-auth.vercel.app";
 const OPSLATE_COOKIE_DOMAIN = ".opsslate.app";
 const OPSLATE_LOGIN_URL = "https://www.opsslate.app/login";
 const OPSLATE_LOGOUT_COOKIE = "opsslate_logged_out";
+const SUITE_PASSWORD_MANAGED_PREFIX = "opsslate_suite_password_managed:";
 
 function getCookie(name: string) {
   const value = document.cookie
@@ -39,6 +40,14 @@ function clearSuiteLogoutMarker() {
   document.cookie = `${OPSLATE_LOGOUT_COOKIE}=; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=0; secure; samesite=lax`;
 }
 
+function suitePasswordManagedKey(email: string) {
+  return `${SUITE_PASSWORD_MANAGED_PREFIX}${email.trim().toLowerCase()}`;
+}
+
+function isSuitePasswordManaged(email: string) {
+  return localStorage.getItem(suitePasswordManagedKey(email)) === "1";
+}
+
 async function persistSuiteSession(tokens: { sharedToken?: string; convexToken?: string }) {
   if (tokens.sharedToken) setSharedSessionCookie(tokens.sharedToken);
   if (tokens.convexToken) setSuiteConvexCookie(tokens.convexToken);
@@ -61,6 +70,9 @@ interface User {
   email: string;
   name: string;
   role?: string;
+  teamMemberId?: Id<"teamMembers">;
+  assignedProjects?: string[];
+  teamStatus?: string;
 }
 
 interface AuthCtx {
@@ -80,6 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const provisionMut = useMutation(api.auth.provisionFromSharedAuth);
   const loginMut = useMutation(api.auth.login);
+  const resetPasswordMut = useMutation(api.auth.resetPassword as any);
+  const logActivityMut = useMutation(api.team.logActivity as any);
+  const lastActiveTouchRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,6 +163,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const user = useQuery(api.auth.me, token ? { token } : "skip") as User | null | undefined;
 
   useEffect(() => {
+    if (!user?.companyId || !user?._id) return;
+
+    const touch = () => {
+      const now = Date.now();
+      if (now - lastActiveTouchRef.current < 60 * 1000) return;
+      lastActiveTouchRef.current = now;
+      void logActivityMut({
+        companyId: user.companyId,
+        userId: user._id,
+        userName: user.name || user.email,
+        action: "last_active",
+        module: "team",
+        details: "Session activity heartbeat",
+      });
+    };
+
+    touch();
+    const interval = window.setInterval(touch, 5 * 60 * 1000);
+    window.addEventListener("focus", touch);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", touch);
+    };
+  }, [logActivityMut, user?.companyId, user?._id, user?.name, user?.email]);
+
+  useEffect(() => {
     if (token && user === null) {
       localStorage.removeItem("eq_token");
       if (getCookie("opsslate_convex_token") === token) clearSharedSessionCookie();
@@ -156,12 +197,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token, user]);
 
   const login = async (email: string, password: string) => {
+    const loginEmail = email.trim().toLowerCase();
+    const canTrySharedAuth = !isSuitePasswordManaged(email);
+
+    try {
+      const res = await loginMut({ email: loginEmail, password });
+      clearSuiteLogoutMarker();
+      localStorage.setItem("eq_token", res.token);
+      await persistSuiteSession({ convexToken: res.token });
+      setToken(res.token);
+      return;
+    } catch (directError) {
+      if (!canTrySharedAuth) throw directError;
+    }
+
+    // Shared auth is only used to create a Suite account from a shared OpsSlate login.
+    // It must not bypass a failed Suite password check after Team Management changes a password.
     // Try shared auth service first
     try {
       const authRes = await fetch(`${AUTH_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: loginEmail, password }),
       });
       const authData = await authRes.json();
 
@@ -184,12 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Shared auth unavailable — fall through to direct login
     }
 
-    // Fallback: direct Convex login
-    const res = await loginMut({ email, password });
-    clearSuiteLogoutMarker();
-    localStorage.setItem("eq_token", res.token);
-    await persistSuiteSession({ convexToken: res.token });
-    setToken(res.token);
+    throw new Error("Invalid email or password");
   };
 
   const signup = async (companyName: string, email: string, password: string, name: string) => {
@@ -215,6 +267,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name,
       companyName,
     });
+    await resetPasswordMut({ email, newPassword: password });
     localStorage.setItem("eq_token", res.token);
     await persistSuiteSession({ sharedToken: authData.token, convexToken: res.token });
     setToken(res.token);

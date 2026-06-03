@@ -33,6 +33,7 @@ export const update = mutation({
     county: v.optional(v.string()),
     fabricator: v.optional(v.string()),
     contractor: v.optional(v.string()),
+    projectRole: v.optional(v.string()),
     type: v.optional(v.string()),
     size: v.optional(v.string()),
     style: v.optional(v.string()),
@@ -64,6 +65,47 @@ export const archive = mutation({
   },
 });
 
+export const remove = mutation({
+  args: { id: v.id("projects") },
+  handler: async (ctx, args) => {
+    const directProjectTables = [
+      "rentals",
+      "deliveries",
+      "concretePours",
+      "risks",
+      "tasks",
+      "fieldNotes",
+      "contacts",
+      "crew",
+      "changeOrders",
+      "budget",
+      "voiceCommands",
+      "delayPredictions",
+      "bidDocuments",
+      "bidLineItems",
+      "budgetLineItems",
+      "rfis",
+      "submittals",
+      "timeEntries",
+      "documents",
+      "siteMedia",
+      "punchList",
+      "dailyLogs",
+      "clientPortalLinks",
+      "aiProjectManagers",
+      "aiPmMessages",
+      "aiPmTasks",
+    ];
+    for (const table of directProjectTables) {
+      const records = await (ctx.db.query as any)(table)
+        .withIndex("by_project", (q: any) => q.eq("projectId", args.id))
+        .collect();
+      for (const record of records) await ctx.db.delete(record._id);
+    }
+    await ctx.db.delete(args.id);
+  },
+});
+
 export const create = mutation({
   args: {
     companyId: v.id("companies"),
@@ -79,6 +121,7 @@ export const create = mutation({
     county: v.optional(v.string()),
     fabricator: v.optional(v.string()),
     contractor: v.optional(v.string()),
+    projectRole: v.optional(v.string()),
     type: v.optional(v.string()),
     size: v.optional(v.string()),
     style: v.optional(v.string()),

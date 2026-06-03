@@ -1,294 +1,608 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { SuiteNav } from "@/components/suite-nav";
+import { AppShell } from "@/components/app-shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
+import {
+  CorrespondenceSignatureProfile,
+  defaultSignatureProfile,
+  formatCorrespondenceSignature,
+  loadSignatureProfile,
+} from "@/lib/correspondence-signature";
 
-const FEATURES = [
-  { icon: "📸", title: "Photo-to-Estimate", desc: "Snap a photo of a bid sheet, blueprint, or handwritten estimate — AI extracts every line item, cost code, and quantity instantly." },
-  { icon: "🧠", title: "AI Bid Extraction", desc: "Upload PDF proposals, bid tabs, or scanned documents. AI reads them and structures line items with cost codes, quantities, and amounts." },
-  { icon: "📊", title: "Bid Comparison", desc: "Compare multiple bids side-by-side. See variances, missing scopes, and identify the best value — not just the lowest price." },
-  { icon: "💰", title: "Cost Database", desc: "Build your own cost database over time. Track historical pricing by trade, material, and region for more accurate future estimates." },
-  { icon: "📋", title: "RFQ Management", desc: "Send requests for quotes to subs, track responses, and compare pricing — all from one dashboard." },
-  { icon: "🔄", title: "Bid-to-Budget Bridge", desc: "Won the job? One click converts your winning bid into a project budget with cost codes already mapped." },
-  { icon: "📈", title: "Win/Loss Analytics", desc: "Track your bid history, win rate, and identify which project types and sizes you're most competitive in." },
-  { icon: "⚡", title: "10x Faster Than Spreadsheets", desc: "Stop manually entering numbers into Excel. Upload, extract, analyze — what took hours now takes minutes." },
+type RfqNotes = {
+  specNotes?: string;
+  packageText?: string;
+  itemIds?: string[];
+  itemSnapshots?: Array<Record<string, unknown>>;
+  vendor?: Record<string, unknown>;
+  lineResponses?: Record<string, RfqLineResponse>;
+};
+
+type RfqLineResponse = {
+  unitPrice?: number;
+  totalPrice?: number;
+  leadTime?: string;
+  expiration?: string;
+  exclusions?: string;
+  alternates?: string;
+  selected?: boolean;
+};
+
+const VENDOR_CATEGORIES = [
+  "Concrete",
+  "Electrical",
+  "Pipe & Fittings",
+  "Steel/Rebar",
+  "Equipment",
+  "Subcontractor",
+  "Material Supplier",
+  "Other",
 ];
 
-const COMPETITORS = [
-  { name: "B2W Estimate", price: "$15,000+/yr", weakness: "Complex, expensive, enterprise-only" },
-  { name: "ProEst", price: "$5,000+/yr", weakness: "No AI extraction, manual data entry" },
-  { name: "STACK", price: "$4,000+/yr", weakness: "Takeoff focused, weak on bid management" },
-  { name: "Spreadsheets", price: "Free", weakness: "Error-prone, no collaboration, no intelligence" },
-];
+function money(value: unknown) {
+  const amount = Number(value || 0);
+  return "$" + amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
 
-function ActionChip({ icon, label }: { icon: string; label: string }) {
-  return <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white/80 flex items-center gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"><span>{icon}</span><span>{label}</span></div>;
+function safeRfqNotes(value: unknown): RfqNotes {
+  if (!value || typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return { specNotes: String(value) };
+  }
+}
+
+function missingResponseDetails(response?: RfqLineResponse) {
+  const missing: string[] = [];
+  if (!response?.unitPrice && !response?.totalPrice) missing.push("price");
+  if (!response?.leadTime) missing.push("lead time");
+  if (!response?.expiration) missing.push("expiration");
+  if (!response?.exclusions) missing.push("exclusions");
+  return missing;
+}
+
+function itemLabel(item: Record<string, unknown>) {
+  return [item.section, item.description].filter(Boolean).join(" - ") || "Estimate item";
 }
 
 export default function EstimatingPage() {
-  const { user } = useAuth();
-
   return (
-    <div className="min-h-screen bg-[#0b0f14] text-white">
-      <SuiteNav />
-
-      {/* Standard Header Shell */}
-      <section className="max-w-6xl mx-auto px-6 pt-16 pb-10">
-        <div className="rounded-3xl border border-white/10 bg-gradient-to-r from-white/5 via-emerald-500/5 to-cyan-500/5 p-8 md:p-10 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-8">
-            <div className="max-w-3xl">
-              <Badge text="AI-POWERED ESTIMATING" />
-              <h1 className="text-5xl md:text-6xl font-black mt-4 mb-4 leading-tight">
-                Stop Guessing.<br />
-                <span className="bg-gradient-to-r from-green-400 to-emerald-600 bg-clip-text text-transparent">Start Winning Bids.</span>
-              </h1>
-              <p className="text-lg text-white/60 max-w-2xl">
-                Your estimating command center for AI extraction, bid comparison, cost history, RFQs, and bid-to-budget handoff.
-              </p>
-              <div className="flex flex-wrap gap-2 mt-4 text-sm text-white/70">
-                <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1">📸 Photo-to-estimate</span>
-                <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1">📄 PDF extraction</span>
-                <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1">📊 Bid comparison</span>
-                <span className="rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1">🔄 Bid-to-budget bridge</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-[280px] lg:w-[360px]">
-              {user ? (
-                <Button size="lg" className="bg-gradient-to-r from-green-500 to-emerald-600 text-base px-6 py-6 sm:col-span-2" onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>View Estimating Plans {">"}</Button>
-              ) : (
-                <Button size="lg" className="bg-gradient-to-r from-green-500 to-emerald-600 text-base px-6 py-6 sm:col-span-2" onClick={() => window.location.href = "/signup"}>Start Free →</Button>
-              )}
-              <Button size="lg" variant="outline" className="text-base px-6 py-6" onClick={() => document.getElementById("features")?.scrollIntoView({ behavior: "smooth" })}>See Features</Button>
-              <Button size="lg" variant="outline" className="text-base px-6 py-6" onClick={() => document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" })}>Pricing</Button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Standard Action Panels */}
-      <section className="max-w-6xl mx-auto px-6 pb-12">
-        <div className="grid md:grid-cols-3 gap-4">
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[0_12px_40px_rgba(0,0,0,0.25)]">
-            <div className="text-sm font-bold text-white mb-3">Capture & Extract</div>
-            <div className="grid grid-cols-2 gap-2">
-              <ActionChip icon="📸" label="Photo to Estimate" />
-              <ActionChip icon="📄" label="PDF Extraction" />
-              <ActionChip icon="🧠" label="AI Bid Read" />
-              <ActionChip icon="⚡" label="Fast Entry" />
-            </div>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-            <div className="text-sm font-bold text-white mb-3">Analyze & Compare</div>
-            <div className="grid grid-cols-2 gap-2">
-              <ActionChip icon="📊" label="Bid Compare" />
-              <ActionChip icon="💰" label="Cost History" />
-              <ActionChip icon="📋" label="RFQ Tracking" />
-              <ActionChip icon="📈" label="Win/Loss" />
-            </div>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-            <div className="text-sm font-bold text-white mb-3">Operational Workflow</div>
-            <div className="grid grid-cols-2 gap-2">
-              <ActionChip icon="🔄" label="Bid to Budget" />
-              <ActionChip icon="🏗️" label="Project Handoff" />
-              <ActionChip icon="👥" label="Team Access" />
-              <ActionChip icon="🖨️" label="Proposal Output" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats */}
-      <section className="max-w-4xl mx-auto px-6 pb-16">
-        <div className="grid grid-cols-3 gap-6">
-          <StatCard value="10x" label="Faster than manual takeoffs" />
-          <StatCard value="$0" label="No per-seat fees" />
-          <StatCard value="AI" label="Extracts from photos & PDFs" />
-        </div>
-      </section>
-
-      {/* Features */}
-      <section id="features" className="max-w-6xl mx-auto px-6 pb-20">
-        <h2 className="text-3xl font-bold text-center mb-12">Everything You Need to Win More Work</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="bg-white/5 border border-white/10 rounded-xl p-5 hover:border-green-500/30 transition-all shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
-              <div className="text-3xl mb-3">{f.icon}</div>
-              <h3 className="font-bold mb-2">{f.title}</h3>
-              <p className="text-sm text-white/50">{f.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Comparison */}
-      <section className="max-w-4xl mx-auto px-6 pb-20">
-        <h2 className="text-3xl font-bold text-center mb-8">Why OpsSlate Estimating?</h2>
-        <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden shadow-[0_16px_50px_rgba(0,0,0,0.25)]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-white/10">
-                <th className="text-left p-4">Tool</th>
-                <th className="text-left p-4">Price</th>
-                <th className="text-left p-4">Limitation</th>
-              </tr>
-            </thead>
-            <tbody>
-              {COMPETITORS.map((c) => (
-                <tr key={c.name} className="border-b border-white/5">
-                  <td className="p-4 font-medium">{c.name}</td>
-                  <td className="p-4 text-red-400">{c.price}</td>
-                  <td className="p-4 text-white/50">{c.weakness}</td>
-                </tr>
-              ))}
-              <tr className="bg-green-500/10">
-                <td className="p-4 font-bold text-green-400">OpsSlate Estimating</td>
-                <td className="p-4 text-green-400 font-bold">$99/mo</td>
-                <td className="p-4 text-green-400">AI-powered, photo extraction, full bid management</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" className="max-w-5xl mx-auto px-6 pb-20">
-        <h2 className="text-3xl font-bold text-center mb-3">Estimating Pricing</h2>
-        <p className="text-center text-white/50 mb-4">No per-seat fees. Ever. Save 20% with annual billing.</p>
-        <p className="text-center text-sm text-green-400 font-medium mb-10">💡 Get all 3 apps with a Suite plan starting at $249/mo</p>
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h3 className="font-bold text-lg mb-1">Free</h3>
-            <div className="text-3xl font-black mb-1">$0<span className="text-sm font-normal text-white/40">/mo</span></div>
-            <p className="text-xs text-white/40 mb-4">Try it out, no credit card</p>
-            <ul className="space-y-2 text-sm text-white/50 mb-6">
-              <li>✓ 3 estimates</li>
-              <li>✓ 2 users</li>
-              <li>✓ Manual entry</li>
-              <li>✓ Basic cost database</li>
-              <li className="text-white/30">✕ AI extraction</li>
-              <li className="text-white/30">✕ Photo-to-estimate</li>
-            </ul>
-            <Button variant="outline" className="w-full" onClick={() => window.location.href = "/signup"}>Get Started</Button>
-          </div>
-          <div className="bg-green-500/5 border-2 border-green-500 rounded-2xl p-6 relative shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs font-bold px-3 py-1 rounded-full">MOST POPULAR</div>
-            <h3 className="font-bold text-lg mb-1">Professional</h3>
-            <div className="text-3xl font-black mb-1">$99<span className="text-sm font-normal text-white/40">/mo</span></div>
-            <p className="text-xs text-green-400 mb-4">$79/mo billed annually — save $240/yr</p>
-            <ul className="space-y-2 text-sm text-white/50 mb-6">
-              <li className="text-white">✓ Unlimited estimates</li>
-              <li className="text-white">✓ 10 users</li>
-              <li>✓ AI bid extraction (PDF & photos)</li>
-              <li>✓ Photo-to-estimate</li>
-              <li>✓ Bid comparison & analytics</li>
-              <li>✓ RFQ management</li>
-              <li>✓ Cost database</li>
-              <li>✓ Bid-to-budget bridge</li>
-            </ul>
-            <Button className="w-full bg-green-500 hover:bg-green-600" onClick={() => window.location.href = "/signup"}>Start Free Trial →</Button>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h3 className="font-bold text-lg mb-1">Business</h3>
-            <div className="text-3xl font-black mb-1">$199<span className="text-sm font-normal text-white/40">/mo</span></div>
-            <p className="text-xs text-white/40 mb-4">$159/mo billed annually — save $480/yr</p>
-            <ul className="space-y-2 text-sm text-white/50 mb-6">
-              <li className="text-white">✓ Everything in Professional</li>
-              <li className="text-white">✓ Unlimited users</li>
-              <li>✓ API access</li>
-              <li>✓ Win/loss analytics</li>
-              <li>✓ Custom templates</li>
-              <li>✓ Priority support</li>
-              <li>✓ Dedicated account manager</li>
-            </ul>
-            <Button variant="outline" className="w-full" onClick={() => window.location.href = "/signup"}>Start Free Trial →</Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Suite Pricing */}
-      <section className="max-w-5xl mx-auto px-6 pb-20">
-        <h3 className="text-center text-white/40 text-xs font-bold uppercase tracking-widest mb-6">OpsSlate Suite — All 3 Apps</h3>
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-orange-500/10 via-green-500/10 to-blue-500/10 border-2 border-green-500/50 rounded-2xl p-6 relative">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-orange-500 to-blue-500 text-white text-xs font-bold px-3 py-1 rounded-full">BEST VALUE</div>
-            <h3 className="font-bold text-lg mb-1">Suite Pro</h3>
-            <div className="text-3xl font-black mb-1">$249<span className="text-sm font-normal text-white/40">/mo</span></div>
-            <p className="text-xs text-green-400 mb-4">Save $48/mo vs buying separately • $199/mo annual</p>
-            <ul className="space-y-2 text-sm text-white/50 mb-6">
-              <li className="text-white">✓ 🏗️ Project Management Pro</li>
-              <li className="text-white">✓ 📋 Estimating Pro</li>
-              <li className="text-white">✓ 📅 Scheduler Pro</li>
-              <li>✓ Unified dashboard</li>
-              <li>✓ Cross-app data sync</li>
-              <li>✓ Bid-to-project pipeline</li>
-              <li>✓ 10 users across all apps</li>
-            </ul>
-            <Button className="w-full bg-gradient-to-r from-orange-500 to-blue-500 hover:from-orange-600 hover:to-blue-600" onClick={() => window.location.href = "/signup"}>Start Free Trial →</Button>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h3 className="font-bold text-lg mb-1">Suite Business</h3>
-            <div className="text-3xl font-black mb-1">$449<span className="text-sm font-normal text-white/40">/mo</span></div>
-            <p className="text-xs text-green-400 mb-4">Save $148/mo vs buying separately • $359/mo annual</p>
-            <ul className="space-y-2 text-sm text-white/50 mb-6">
-              <li className="text-white">✓ Everything in Suite Pro</li>
-              <li className="text-white">✓ Unlimited users</li>
-              <li>✓ API access for all apps</li>
-              <li>✓ Custom branding</li>
-              <li>✓ Priority support</li>
-              <li>✓ Advanced cross-app analytics</li>
-              <li>✓ Dedicated account manager</li>
-            </ul>
-            <Button variant="outline" className="w-full" onClick={() => window.location.href = "/signup"}>Start Free Trial →</Button>
-          </div>
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h3 className="font-bold text-lg mb-1">Enterprise</h3>
-            <div className="text-3xl font-black mb-1">Custom</div>
-            <p className="text-xs text-white/40 mb-4">For large contractors & GCs</p>
-            <ul className="space-y-2 text-sm text-white/50 mb-6">
-              <li className="text-white">✓ Everything in Suite Business</li>
-              <li>✓ 50+ users</li>
-              <li>✓ SSO / SAML</li>
-              <li>✓ SLA guarantee</li>
-              <li>✓ On-prem deployment option</li>
-              <li>✓ Custom integrations</li>
-              <li>✓ Quarterly business reviews</li>
-            </ul>
-            <Button variant="outline" className="w-full" onClick={() => window.location.href = "/signup"}>Contact Sales</Button>
-          </div>
-        </div>
-        <p className="text-center text-sm text-white/40 mt-8">That&apos;s <strong className="text-white">$249/mo vs $4,000+/mo</strong> for Procore — for <strong className="text-white">3 apps</strong> with more AI features than all competitors combined.</p>
-      </section>
-
-      {/* CTA */}
-      <section className="max-w-4xl mx-auto px-6 pb-20 text-center">
-        <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-2xl p-12">
-          <h2 className="text-3xl font-bold mb-4">Ready to Win More Bids?</h2>
-          <p className="text-white/60 mb-8">Join contractors who estimate smarter, bid faster, and win more work.</p>
-          <Button size="lg" className="bg-gradient-to-r from-green-500 to-emerald-600 text-lg px-8 py-6" onClick={() => window.location.href = user ? "#pricing" : "/signup"}>
-            {user ? "View Estimating Plans ?" : "Start Free →"}
-          </Button>
-        </div>
-      </section>
-
-      <footer className="text-center py-8 text-white/30 text-sm border-t border-white/5">
-        <p>OpsSlate Suite — AI-Powered Construction Management</p>
-        <p className="mt-1">www.opsslate.app</p>
-      </footer>
-    </div>
+    <AppShell>
+      <EstimatingRfqWorkspace />
+    </AppShell>
   );
 }
 
-function Badge({ text }: { text: string }) {
-  return <span className="inline-block bg-green-500/10 text-green-400 text-xs font-bold px-4 py-1.5 rounded-full border border-green-500/20 uppercase tracking-wider">{text}</span>;
-}
+function EstimatingRfqWorkspace() {
+  const { user } = useAuth();
+  const estimates = useQuery(api.estimating.listEstimates, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
+  const vendors = useQuery(api.vendors.list, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
+  const branding = useQuery(api.companyBranding.get, user ? { companyId: user.companyId as Id<"companies"> } : "skip") as any;
 
-function StatCard({ value, label }: { value: string; label: string }) {
+  const [selectedEstimateId, setSelectedEstimateId] = useState("");
+  const selectedEstimate = (estimates || []).find((estimate) => String(estimate._id) === selectedEstimateId) || estimates?.[0];
+  const estimateId = selectedEstimate?._id ? String(selectedEstimate._id) : "";
+
+  const estimateItems = useQuery(
+    api.estimating.listEstimateItems,
+    estimateId ? { estimateId: estimateId as Id<"estimates"> } : "skip"
+  ) as any[] | undefined;
+  const rfqs = useQuery(
+    api.estimating.listRfqs,
+    user && estimateId ? { companyId: user.companyId, estimateId: estimateId as Id<"estimates"> } : "skip"
+  ) as any[] | undefined;
+
+  const createRfq = useMutation(api.estimating.createRfq);
+  const updateRfq = useMutation(api.estimating.updateRfq);
+  const updateEstimateItem = useMutation(api.estimating.updateEstimateItem);
+  const createVendor = useMutation(api.vendors.create);
+
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [inlineRfqItemId, setInlineRfqItemId] = useState("");
+  const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
+  const [pricingDueDate, setPricingDueDate] = useState("");
+  const [specNotes, setSpecNotes] = useState("");
+  const [signatureProfile, setSignatureProfile] = useState<CorrespondenceSignatureProfile>(() => defaultSignatureProfile(user));
+  const [creatingDrafts, setCreatingDrafts] = useState(false);
+  const [newVendor, setNewVendor] = useState({ name: "", contactName: "", email: "", phone: "", category: "Material Supplier" });
+  const [responseDraft, setResponseDraft] = useState({
+    rfqId: "",
+    itemId: "",
+    unitPrice: "",
+    totalPrice: "",
+    leadTime: "",
+    expiration: "",
+    exclusions: "",
+    alternates: "",
+  });
+
+  const selectedItems = useMemo(() => {
+    return (estimateItems || []).filter((item) => selectedItemIds.includes(String(item._id)));
+  }, [estimateItems, selectedItemIds]);
+
+  const rfqsWithNotes = useMemo(() => {
+    return (rfqs || []).map((rfq) => ({ ...rfq, parsedNotes: safeRfqNotes(rfq.notes) }));
+  }, [rfqs]);
+
+  const selectedVendors = (vendors || []).filter((vendor) => selectedVendorIds.includes(String(vendor._id)));
+  const inlineRfqItem = (estimateItems || []).find((item) => String(item._id) === inlineRfqItemId);
+  const rfqStatusByItemId = useMemo(() => {
+    const map = new Map<string, string>();
+    rfqsWithNotes.forEach((rfq) => {
+      const itemIds = rfq.parsedNotes?.itemIds || [];
+      itemIds.forEach((itemId: string) => {
+        const current = map.get(itemId);
+        const next = String(rfq.status || "draft");
+        if (!current || current === "draft" || next === "received" || next === "accepted") map.set(itemId, next);
+      });
+    });
+    return map;
+  }, [rfqsWithNotes]);
+
+  useEffect(() => {
+    setSignatureProfile(loadSignatureProfile(user));
+  }, [user?._id, user?.email, user?.name]);
+
+  function toggleItem(id: string, checked: boolean) {
+    setSelectedItemIds((current) => checked ? [...new Set([...current, id])] : current.filter((itemId) => itemId !== id));
+  }
+
+  function toggleVendor(id: string, checked: boolean) {
+    setSelectedVendorIds((current) => checked ? [...new Set([...current, id])] : current.filter((vendorId) => vendorId !== id));
+  }
+
+  function requestQuoteForItem(item: Record<string, unknown>) {
+    const itemId = String(item._id);
+    setInlineRfqItemId(itemId);
+    setSelectedItemIds([itemId]);
+  }
+
+  function rfqStatusForItem(item: Record<string, unknown>) {
+    return rfqStatusByItemId.get(String(item._id)) || "No RFQ";
+  }
+
+  function buildPackageText(vendor: Record<string, unknown>, items: Array<Record<string, unknown>>) {
+    const companyHeader = [
+      branding?.name || "OpsSlate",
+      [branding?.address, branding?.city, branding?.state, branding?.zip].filter(Boolean).join(", "),
+      [branding?.phone, branding?.email, branding?.website].filter(Boolean).join(" | "),
+    ].filter(Boolean);
+    const itemLines = items.map((item, index) => {
+      const qty = `${item.quantity || 0} ${item.unit || "LS"}`;
+      return `${index + 1}. ${item.description || "Estimate item"} | Qty: ${qty} | Section: ${item.section || "Unassigned"} | Current unit cost: ${money(item.unitCost)}`;
+    });
+    return [
+      ...companyHeader,
+      "",
+      `REQUEST FOR QUOTE - ${selectedEstimate?.name || "Estimate"}`,
+      `Vendor: ${vendor.name || "Selected vendor"}`,
+      pricingDueDate ? `Pricing due date: ${pricingDueDate}` : "Pricing due date: Please confirm as soon as possible.",
+      "",
+      "Material requisition",
+      ...itemLines,
+      "",
+      "Specs / attachments / plan notes",
+      specNotes || "Provide pricing based on the project plans, specifications, addenda, and takeoff backup provided by the estimator.",
+      "",
+      "Please include unit price, total price, lead time, quote expiration, freight, taxes, exclusions, alternates, substitutions, and contact information.",
+      "",
+      formatCorrespondenceSignature(signatureProfile, branding?.name, user),
+    ].join("\n");
+  }
+
+  async function addVendorInline() {
+    if (!user || !newVendor.name.trim()) return;
+    const id = await createVendor({
+      companyId: user.companyId,
+      name: newVendor.name.trim(),
+      contactName: newVendor.contactName.trim() || undefined,
+      email: newVendor.email.trim() || undefined,
+      phone: newVendor.phone.trim() || undefined,
+      category: newVendor.category,
+      notes: "Added from Estimating RFQ Workspace",
+    });
+    setSelectedVendorIds((current) => [...new Set([...current, String(id)])]);
+    setNewVendor({ name: "", contactName: "", email: "", phone: "", category: "Material Supplier" });
+  }
+
+  async function createDraftRfqs(itemsForRfq = selectedItems) {
+    if (!user || !estimateId || !itemsForRfq.length || !selectedVendors.length) return;
+    setCreatingDrafts(true);
+    try {
+      for (const vendor of selectedVendors) {
+        const notes: RfqNotes = {
+          specNotes,
+          vendor: {
+            id: String(vendor._id),
+            name: vendor.name,
+            contactName: vendor.contactName,
+            email: vendor.email,
+            phone: vendor.phone,
+          },
+          itemIds: itemsForRfq.map((item) => String(item._id)),
+          itemSnapshots: itemsForRfq.map((item) => ({
+            id: String(item._id),
+            description: item.description,
+            quantity: item.quantity,
+            unit: item.unit,
+            unitCost: item.unitCost,
+            section: item.section,
+            notes: item.notes,
+          })),
+          lineResponses: {},
+          packageText: buildPackageText(vendor, itemsForRfq),
+        };
+        await createRfq({
+          companyId: user.companyId,
+          estimateId: estimateId as Id<"estimates">,
+          vendorName: String(vendor.name || "Vendor"),
+          status: "draft",
+          dueDate: pricingDueDate || undefined,
+          notes: JSON.stringify(notes),
+        });
+      }
+      setSelectedItemIds([]);
+      setSelectedVendorIds([]);
+      setInlineRfqItemId("");
+      setSpecNotes("");
+    } finally {
+      setCreatingDrafts(false);
+    }
+  }
+
+  async function copyPackage(rfq: any) {
+    await navigator.clipboard.writeText(rfq.parsedNotes?.packageText || "");
+    alert("RFQ package copied.");
+  }
+
+  function mailtoForRfq(rfq: any) {
+    const vendor = rfq.parsedNotes?.vendor || {};
+    const subject = `RFQ - ${selectedEstimate?.name || "Estimate"} - ${rfq.vendorName}`;
+    const body = rfq.parsedNotes?.packageText || "";
+    return `mailto:${encodeURIComponent(String(vendor.email || ""))}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  async function markSent(rfq: any) {
+    await updateRfq({ id: rfq._id, status: "sent" });
+  }
+
+  async function saveLineResponse() {
+    const rfq = rfqsWithNotes.find((item) => String(item._id) === responseDraft.rfqId);
+    if (!rfq || !responseDraft.itemId) return;
+    const notes = safeRfqNotes(rfq.notes);
+    const totalPrice = Number(responseDraft.totalPrice || 0);
+    const lineResponses = {
+      ...(notes.lineResponses || {}),
+      [responseDraft.itemId]: {
+        unitPrice: Number(responseDraft.unitPrice || 0),
+        totalPrice,
+        leadTime: responseDraft.leadTime,
+        expiration: responseDraft.expiration,
+        exclusions: responseDraft.exclusions,
+        alternates: responseDraft.alternates,
+      },
+    };
+    const totalAmount = Object.values(lineResponses).reduce((sum, line) => sum + Number(line.totalPrice || 0), 0);
+    await updateRfq({
+      id: rfq._id,
+      amount: totalAmount,
+      status: "received",
+      notes: JSON.stringify({ ...notes, lineResponses }),
+    });
+    setResponseDraft({ rfqId: "", itemId: "", unitPrice: "", totalPrice: "", leadTime: "", expiration: "", exclusions: "", alternates: "" });
+  }
+
+  async function applySelectedQuote(rfq: any, itemId: string) {
+    const notes = safeRfqNotes(rfq.notes);
+    const response = notes.lineResponses?.[itemId];
+    const item = (estimateItems || []).find((entry) => String(entry._id) === itemId);
+    if (!response || !item) return;
+
+    const quantity = Number(item.quantity || 0);
+    const unitPrice = Number(response.unitPrice || (quantity ? Number(response.totalPrice || 0) / quantity : 0));
+    const selectedNote = [
+      item.notes || "",
+      `Selected RFQ: ${rfq.vendorName}`,
+      `Buy Out ($): ${money(response.totalPrice)}`,
+      response.leadTime ? `Lead time: ${response.leadTime}` : "",
+      response.exclusions ? `Exclusions: ${response.exclusions}` : "",
+    ].filter(Boolean).join("\n");
+    await updateEstimateItem({
+      id: item._id,
+      unitCost: unitPrice,
+      notes: selectedNote,
+    });
+    const nextResponses = {
+      ...(notes.lineResponses || {}),
+      [itemId]: { ...response, selected: true },
+    };
+    await updateRfq({
+      id: rfq._id,
+      status: "accepted",
+      notes: JSON.stringify({ ...notes, lineResponses: nextResponses }),
+    });
+  }
+
+  if (!user) return null;
+
   return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center">
-      <div className="text-3xl font-black text-green-400 mb-1">{value}</div>
-      <div className="text-sm text-white/50">{label}</div>
+    <div className="mx-auto max-w-[1500px] space-y-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Badge className="mb-2 bg-blue-500/15 text-blue-300">Estimating RFQ Workspace</Badge>
+          <h1 className="text-3xl font-bold text-white">Request quotes while building the bid</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+            Select estimate items, create vendor-specific draft RFQs, log responses, and push selected pricing back into the estimate.
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <div className="text-muted-foreground">Draft RFQs</div>
+          <div className="text-2xl font-bold text-white">{(rfqs || []).filter((rfq) => rfq.status === "draft").length}</div>
+        </div>
+      </div>
+
+      <section className="rounded-lg border border-border bg-card p-4">
+        <div className="grid gap-3 lg:grid-cols-[1fr_220px_180px]">
+          <div>
+            <label className="text-xs font-bold uppercase text-muted-foreground">Estimate</label>
+            <select
+              value={estimateId}
+              onChange={(event) => {
+                setSelectedEstimateId(event.target.value);
+                setSelectedItemIds([]);
+              }}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+            >
+              {(estimates || []).map((estimate) => (
+                <option key={String(estimate._id)} value={String(estimate._id)}>{estimate.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase text-muted-foreground">Pricing due date</label>
+            <input
+              type="date"
+              value={pricingDueDate}
+              onChange={(event) => setPricingDueDate(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button className="w-full" disabled={!selectedItems.length || !selectedVendors.length || creatingDrafts} onClick={() => void createDraftRfqs()}>
+              {creatingDrafts ? "Creating..." : "Create draft RFQs"}
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="rounded-lg border border-border bg-card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-white">Material requisition from estimate items</h2>
+              <p className="text-xs text-muted-foreground">Select one or many estimate items for a multi-item RFQ package.</p>
+            </div>
+            <Badge variant="outline">{selectedItems.length} selected</Badge>
+          </div>
+          {inlineRfqItem && (
+            <div className="mb-4 rounded-lg border border-blue-500/35 bg-blue-500/10 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="text-xs font-bold uppercase text-blue-200">Inline RFQ Builder</div>
+                  <h3 className="mt-1 font-bold text-white">{inlineRfqItem.description}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Qty {inlineRfqItem.quantity || 0} {inlineRfqItem.unit || "LS"} | Section {inlineRfqItem.section || "Unassigned"} | Unit Cost {money(inlineRfqItem.unitCost)}
+                  </p>
+                  <p className="mt-2 text-xs text-blue-100">
+                    Select vendors, set the pricing due date, add spec notes, then create draft RFQs without leaving this estimate item.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={!selectedVendors.length || creatingDrafts}
+                    onClick={() => void createDraftRfqs([inlineRfqItem])}
+                  >
+                    {creatingDrafts ? "Creating..." : "Create RFQ for this item"}
+                  </Button>
+                  <Button variant="outline" onClick={() => setInlineRfqItemId("")}>Close</Button>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="max-h-[520px] overflow-auto rounded-md border border-border">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-background text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="w-10 p-2 text-left">Pick</th>
+                  <th className="p-2 text-left">Description</th>
+                  <th className="p-2 text-left">Qty</th>
+                  <th className="p-2 text-left">Unit</th>
+                  <th className="p-2 text-left">Unit Cost</th>
+                  <th className="p-2 text-left">Section</th>
+                  <th className="p-2 text-left">RFQ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(estimateItems || []).map((item) => (
+                  <tr key={String(item._id)} className="border-t border-border">
+                    <td className="p-2">
+                      <input type="checkbox" checked={selectedItemIds.includes(String(item._id))} onChange={(event) => toggleItem(String(item._id), event.target.checked)} />
+                    </td>
+                    <td className="p-2">
+                      <div className="font-medium text-white">{item.description}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-semibold uppercase tracking-wide text-muted-foreground">RFQ Status:</span>
+                        {rfqStatusForItem(item) === "No RFQ" ? (
+                          <Badge variant="outline">No RFQ</Badge>
+                        ) : (
+                          <Badge className="bg-blue-500/15 text-blue-200">RFQ Requested: {rfqStatusForItem(item)}</Badge>
+                        )}
+                        <button type="button" className="text-blue-300 hover:underline" onClick={() => requestQuoteForItem(item)}>
+                          Request Quote
+                        </button>
+                      </div>
+                    </td>
+                    <td className="p-2 text-muted-foreground">{item.quantity || 0}</td>
+                    <td className="p-2 text-muted-foreground">{item.unit || "LS"}</td>
+                    <td className="p-2 text-muted-foreground">{money(item.unitCost)}</td>
+                    <td className="p-2 text-muted-foreground">{item.section || "Unassigned"}</td>
+                    <td className="p-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {rfqStatusForItem(item) !== "No RFQ" ? (
+                          <Badge className="bg-blue-500/15 text-blue-200">RFQ Requested: {rfqStatusForItem(item)}</Badge>
+                        ) : (
+                          <Badge variant="outline">No RFQ</Badge>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => requestQuoteForItem(item)}>
+                          Request Quote
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!(estimateItems || []).length && (
+                  <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No estimate items found for this estimate.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3">
+            <label className="text-xs font-bold uppercase text-muted-foreground">Specs / attachments / plan notes</label>
+            <textarea
+              value={specNotes}
+              onChange={(event) => setSpecNotes(event.target.value)}
+              rows={4}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              placeholder="List spec sections, drawing numbers, plan pages, addenda, alternates, and takeoff backup to include in the RFQ package."
+            />
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-card p-4">
+          <h2 className="font-bold text-white">Vendors</h2>
+          <p className="mb-3 text-xs text-muted-foreground">Choose from the vendor directory or add a missing supplier inline.</p>
+          <div className="max-h-64 overflow-auto rounded-md border border-border">
+            {(vendors || []).map((vendor) => (
+              <label key={String(vendor._id)} className="flex items-start gap-2 border-b border-border p-3 text-sm last:border-b-0">
+                <input type="checkbox" checked={selectedVendorIds.includes(String(vendor._id))} onChange={(event) => toggleVendor(String(vendor._id), event.target.checked)} />
+                <span>
+                  <span className="block font-semibold text-white">{vendor.name}</span>
+                  <span className="block text-xs text-muted-foreground">{vendor.email || vendor.phone || vendor.category || "No contact on file"}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="mt-4 rounded-md border border-border bg-background/50 p-3">
+            <div className="mb-2 text-xs font-bold uppercase text-muted-foreground">Add missing vendor</div>
+            <div className="grid gap-2">
+              <input value={newVendor.name} onChange={(event) => setNewVendor((v) => ({ ...v, name: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Vendor company" />
+              <input value={newVendor.contactName} onChange={(event) => setNewVendor((v) => ({ ...v, contactName: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Contact name" />
+              <div className="grid grid-cols-2 gap-2">
+                <input value={newVendor.email} onChange={(event) => setNewVendor((v) => ({ ...v, email: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Email" />
+                <input value={newVendor.phone} onChange={(event) => setNewVendor((v) => ({ ...v, phone: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Phone" />
+              </div>
+              <select value={newVendor.category} onChange={(event) => setNewVendor((v) => ({ ...v, category: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white">
+                {VENDOR_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+              <Button variant="outline" disabled={!newVendor.name.trim()} onClick={() => void addVendorInline()}>Add vendor to directory</Button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-lg border border-border bg-card p-4">
+        <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="font-bold text-white">Vendor-first comparison</h2>
+            <p className="text-xs text-muted-foreground">Each draft record is one vendor package. Log responses by item and award item-level pricing.</p>
+          </div>
+          <Badge variant="outline">{rfqsWithNotes.length} RFQ records</Badge>
+        </div>
+        <div className="grid gap-3 xl:grid-cols-2">
+          {rfqsWithNotes.map((rfq) => {
+            const notes = rfq.parsedNotes as RfqNotes;
+            const itemSnapshots = notes.itemSnapshots || [];
+            return (
+              <article key={String(rfq._id)} className="rounded-lg border border-border bg-background/50 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-bold text-white">{rfq.vendorName}</div>
+                    <div className="text-xs text-muted-foreground">Due {rfq.dueDate || "not set"} | {rfq.status || "draft"} | Total {money(rfq.amount)}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => void copyPackage(rfq)}>Copy Package</Button>
+                    <a href={mailtoForRfq(rfq)} className="inline-flex h-9 items-center rounded-md border border-border px-3 text-xs font-semibold text-white hover:bg-secondary">Open Email Draft</a>
+                    <Button size="sm" disabled={rfq.status === "sent"} onClick={() => void markSent(rfq)}>Mark Sent</Button>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {itemSnapshots.map((snapshot) => {
+                    const itemId = String(snapshot.id);
+                    const response = notes.lineResponses?.[itemId];
+                    const missing = missingResponseDetails(response);
+                    return (
+                      <div key={itemId} className="rounded-md border border-border p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="font-semibold text-white">{itemLabel(snapshot)}</div>
+                            <div className="text-xs text-muted-foreground">Qty {String(snapshot.quantity || 0)} {String(snapshot.unit || "LS")}</div>
+                          </div>
+                          <div className="text-right text-sm">
+                            <div className="text-white">{response?.totalPrice ? money(response.totalPrice) : "No price"}</div>
+                            <div className={missing.length ? "text-xs text-red-300" : "text-xs text-green-300"}>
+                              {missing.length ? `Missing: ${missing.join(", ")}` : "Complete"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setResponseDraft((draft) => ({ ...draft, rfqId: String(rfq._id), itemId }))}>Log Response</Button>
+                          <Button size="sm" disabled={!response} onClick={() => void applySelectedQuote(rfq, itemId)}>Apply Selected Quote</Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </article>
+            );
+          })}
+          {!rfqsWithNotes.length && (
+            <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+              No RFQ records yet. Select estimate items and vendors, then create draft RFQs.
+            </div>
+          )}
+        </div>
+      </section>
+
+      {responseDraft.rfqId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-2xl rounded-lg border border-border bg-card p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">Log vendor response</h3>
+              <button className="text-sm text-muted-foreground hover:text-white" onClick={() => setResponseDraft({ rfqId: "", itemId: "", unitPrice: "", totalPrice: "", leadTime: "", expiration: "", exclusions: "", alternates: "" })}>Close</button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <input type="number" min="0" step="0.01" value={responseDraft.unitPrice} onChange={(event) => setResponseDraft((draft) => ({ ...draft, unitPrice: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit price" />
+              <input type="number" min="0" step="0.01" value={responseDraft.totalPrice} onChange={(event) => setResponseDraft((draft) => ({ ...draft, totalPrice: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Total price / Buy Out" />
+              <input value={responseDraft.leadTime} onChange={(event) => setResponseDraft((draft) => ({ ...draft, leadTime: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Lead time" />
+              <input type="date" value={responseDraft.expiration} onChange={(event) => setResponseDraft((draft) => ({ ...draft, expiration: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" />
+              <textarea value={responseDraft.exclusions} onChange={(event) => setResponseDraft((draft) => ({ ...draft, exclusions: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white md:col-span-2" placeholder="Exclusions, taxes, freight, assumptions" />
+              <textarea value={responseDraft.alternates} onChange={(event) => setResponseDraft((draft) => ({ ...draft, alternates: event.target.value }))} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white md:col-span-2" placeholder="Alternates or substitutions" />
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setResponseDraft({ rfqId: "", itemId: "", unitPrice: "", totalPrice: "", leadTime: "", expiration: "", exclusions: "", alternates: "" })}>Cancel</Button>
+              <Button onClick={() => void saveLineResponse()}>Save Response</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -550,7 +550,7 @@ function AIPMContent() {
                 className="bg-green-600 hover:bg-green-700"
                 onClick={async () => {
                   if (!activePm || !emailDraft.to || emailDraft.to === "NEED_EMAIL") return;
-                  const confirmed = window.confirm(`⚠️ ADMINISTRATOR APPROVAL\n\nYou are approving this email to be sent:\n\nTo: ${emailDraft.to}\nSubject: ${emailDraft.subject}\n\nThis email will be sent from notifications@opsslate.app on behalf of ${activePm.name}.\n\nSend this email?`);
+                  const confirmed = window.confirm(`⚠️ ADMINISTRATOR APPROVAL\n\nYou are approving this email to be sent:\n\nTo: ${emailDraft.to}\nSubject: ${emailDraft.subject}\n\nThis email will be sent from the configured OpsSlate sender on behalf of ${activePm.name}.\n\nSend this email?`);
                   if (!confirmed) return;
                   setEmailSending(true);
                   try {

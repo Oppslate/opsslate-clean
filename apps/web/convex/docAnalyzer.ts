@@ -3,6 +3,56 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 
+function openaiTextFromResponse(result: any) {
+  if (typeof result.output_text === "string") return result.output_text;
+  const text: string[] = [];
+  for (const item of result.output || []) {
+    for (const content of item.content || []) {
+      if (content.type === "output_text" && typeof content.text === "string") text.push(content.text);
+      if (content.type === "text" && typeof content.text === "string") text.push(content.text);
+    }
+  }
+  return text.join("\n");
+}
+
+async function callOpenAITextFallback(apiKey: string, prompt: string) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: process.env.OPENAI_DOCUMENT_READ_MODEL || "gpt-4.1",
+      input: prompt,
+      max_output_tokens: 8192,
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenAI API error: ${await response.text()}`);
+  return openaiTextFromResponse(await response.json()) || "No analysis generated";
+}
+
+async function callOpenRouterTextFallback(apiKey: string, prompt: string) {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://opsslate.app",
+      "X-OpenRouter-Title": "OpsSlate Document Analyze",
+    },
+    body: JSON.stringify({
+      model: process.env.OPENROUTER_DOCUMENT_READ_MODEL || "openai/gpt-4.1",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 8192,
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenRouter API error: ${await response.text()}`);
+  const result = await response.json();
+  return result.choices?.[0]?.message?.content || "No analysis generated";
+}
+
+function readableTextFromBuffer(buffer: ArrayBuffer) {
+  return new TextDecoder("utf-8", { fatal: false }).decode(buffer).replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/\s{3,}/g, " ").trim();
+}
+
 export const analyzeDocument = action({
   args: { documentId: v.id("documents") },
   handler: async (ctx, args) => {
@@ -15,7 +65,9 @@ export const analyzeDocument = action({
 
     try {
       const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+      const openAiKey = process.env.OPENAI_API_KEY;
+      const openRouterKey = process.env.OPENROUTER_API_KEY;
+      if (!apiKey && !openAiKey && !openRouterKey) throw new Error("ANTHROPIC_API_KEY, OPENAI_API_KEY, or OPENROUTER_API_KEY not set");
 
       // Get file from storage
       let buf: ArrayBuffer;
@@ -174,14 +226,22 @@ Be thorough, specific, and practical. This analysis will be used by a constructi
         content = [{ type: "text", text: ANALYSIS_PROMPT + "\n\n--- DOCUMENT TEXT ---\n\n" + text.slice(0, 80000) }];
       }
 
-      let response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8192, messages: [{ role: "user", content }] }),
-      });
+      const fallbackText = readableTextFromBuffer(buf);
+      const fallbackPrompt = fallbackText.length > 500
+        ? `${ANALYSIS_PROMPT}\n\n--- DOCUMENT TEXT ---\n\n${fallbackText.slice(0, 100000)}`
+        : `${ANALYSIS_PROMPT}\n\nDocument "${doc.name}" did not yield enough readable text through binary extraction. Provide a cautious intake note and recommend manual review or OCR.`;
+
+      let response: Response | null = null;
+      if (apiKey) {
+        response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8192, messages: [{ role: "user", content }] }),
+        });
+      }
 
       // If PDF page limit error, retry with text extraction
-      if (!response.ok && isPdf) {
+      if (response && !response.ok && isPdf) {
         const errText = await response.text();
         if (errText.includes("page") || errText.includes("too many") || errText.includes("limit") || response.status === 400) {
           const rawText = new TextDecoder("utf-8", { fatal: false }).decode(buf);
@@ -190,15 +250,28 @@ Be thorough, specific, and practical. This analysis will be used by a constructi
           content = [{ type: "text", text: ANALYSIS_PROMPT + "\n\n--- DOCUMENT TEXT (extracted from PDF) ---\n\n" + cleaned.slice(0, 100000) }];
           response = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
-            headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+            headers: { "Content-Type": "application/json", "x-api-key": apiKey!, "anthropic-version": "2023-06-01" },
             body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8192, messages: [{ role: "user", content }] }),
           });
         }
       }
 
-      if (!response.ok) throw new Error(`Claude API error: ${await response.text()}`);
-      const result = await response.json();
-      const analysis = result.content[0]?.text ?? "No analysis generated";
+      let analysis = "";
+      if (response?.ok) {
+        const result = await response.json();
+        analysis = result.content[0]?.text ?? "No analysis generated";
+      } else if (openAiKey) {
+        try {
+          analysis = await callOpenAITextFallback(openAiKey, fallbackPrompt);
+        } catch (openAiError: any) {
+          if (!openRouterKey) throw openAiError;
+          analysis = await callOpenRouterTextFallback(openRouterKey, fallbackPrompt);
+        }
+      } else if (openRouterKey) {
+        analysis = await callOpenRouterTextFallback(openRouterKey, fallbackPrompt);
+      } else {
+        throw new Error(`Claude API error: ${response ? await response.text() : "ANTHROPIC_API_KEY not set"}`);
+      }
 
       await ctx.runMutation(a.docManager.updateAiExtract, { id: args.documentId, aiExtract: analysis, aiStatus: "done" });
       return { success: true };

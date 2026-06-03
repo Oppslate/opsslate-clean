@@ -15,11 +15,14 @@ import { TableToolbar, exportCSV } from "@/components/table-toolbar";
 import { useToast } from "@/components/toast";
 import { Id } from "../../../convex/_generated/dataModel";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 function RFIContent() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const initialProjectId = searchParams.get("projectId") || "";
   const projects = useQuery(api.projects.list, user ? { companyId: user.companyId } : "skip");
-  const [filterProject, setFilterProject] = useState("");
+  const [filterProject, setFilterProject] = useState(initialProjectId);
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
   const rfis = useQuery(api.rfis.list, user ? { companyId: user.companyId, projectId: filterProject || undefined, status: filterStatus || undefined } : "skip") as any[] | undefined;
@@ -111,15 +114,27 @@ function RFIContent() {
               {isExp && (
                 <div className="px-4 pb-4 border-t border-border pt-4 space-y-3">
                   <div><h4 className="text-xs font-bold text-primary mb-1">QUESTION</h4><p className="text-sm whitespace-pre-wrap">{rfi.question}</p></div>
+                  {(rfi.sourceSpecSection || rfi.sourcePage || rfi.sourceQuote || rfi.sourceType === "spec_intelligence") && (
+                    <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
+                      <h4 className="text-xs font-bold text-cyan-300 mb-2">SOURCE EVIDENCE</h4>
+                      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                        {rfi.sourceSpecSection && <span>Spec: {rfi.sourceSpecSection}</span>}
+                        {rfi.sourcePage && <span>Page: {rfi.sourcePage}</span>}
+                        {typeof rfi.sourceConfidence === "number" && <span>Confidence: {Math.round(rfi.sourceConfidence * 100)}%</span>}
+                        {rfi.sourceItemId && <span>Matrix item: {String(rfi.sourceItemId).slice(-8)}</span>}
+                      </div>
+                      {rfi.sourceQuote && <p className="mt-2 text-xs leading-5 text-muted-foreground whitespace-pre-wrap">"{rfi.sourceQuote}"</p>}
+                    </div>
+                  )}
                   <div className="grid grid-cols-3 gap-3 text-sm">
                     <div><span className="text-muted-foreground">Assigned:</span> {rfi.assignedTo || "—"}</div>
                     <div><span className="text-muted-foreground">Requested by:</span> {rfi.requestedBy || "—"}</div>
                     <div><span className="text-muted-foreground">Date Required:</span> <span className={isOverdue ? "text-red-400 font-bold" : ""}>{rfi.dateRequired || "—"}</span></div>
                   </div>
-                  {rfi.answer && <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3"><h4 className="text-xs font-bold text-green-400 mb-1">ANSWER</h4><p className="text-sm whitespace-pre-wrap">{rfi.answer}</p><div className="text-xs text-muted-foreground mt-1">Answered: {rfi.dateAnswered}</div></div>}
+                  {rfi.answer && <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3"><h4 className="text-xs font-bold text-green-400 mb-1">ANSWER</h4><p className="text-sm whitespace-pre-wrap">{rfi.answer}</p><div className="text-xs text-muted-foreground mt-1">Answered: {rfi.dateAnswered}</div>{rfi.sourceType === "spec_intelligence" && <div className="mt-2 text-xs font-medium text-green-300">Answer synced to Spec Intelligence Matrix</div>}</div>}
                   {rfi.status === "Open" && (
                     <div className="flex gap-2"><Textarea rows={2} value={answerText} onChange={(e) => setAnswerText(e.target.value)} placeholder="Type answer..." className="flex-1" />
-                      <Button onClick={() => { answerRFI({ id: rfi._id, answer: answerText }).then(() => { toast("Answered", "success"); setAnswerText(""); }); }}>Answer</Button></div>
+                      <Button onClick={() => { answerRFI({ id: rfi._id, answer: answerText, answeredBy: user?.name }).then(() => { toast(rfi.sourceType === "spec_intelligence" ? "Answered and synced to Spec Intelligence Matrix" : "Answered", "success"); setAnswerText(""); }); }}>Answer</Button></div>
                   )}
                   <Button size="sm" variant="destructive" onClick={() => removeRFI({ id: rfi._id }).then(() => toast("Deleted", "success"))}>Delete</Button>
                 </div>

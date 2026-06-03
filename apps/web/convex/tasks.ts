@@ -24,6 +24,15 @@ export const create = mutation({
     assignedTo: v.optional(v.string()),
     trade: v.optional(v.string()),
     phase: v.optional(v.string()),
+    projectRole: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
+    sourceItemId: v.optional(v.string()),
+    sourceDocumentId: v.optional(v.string()),
+    sourceSpecSection: v.optional(v.string()),
+    sourcePage: v.optional(v.string()),
+    sourceQuote: v.optional(v.string()),
+    sourceConfidence: v.optional(v.number()),
+    sourceCategory: v.optional(v.string()),
     blocker: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -37,6 +46,23 @@ export const create = mutation({
     });
   },
 });
+
+async function syncSpecIntelligenceResolution(ctx: any, record: any, args: { recordType: string; recordId: string; note: string; resolvedBy?: string; resolvedAnswer?: string }) {
+  if (!record?.sourceItemId || record.sourceType !== "spec_intelligence") return;
+  const sourceItem = await ctx.db.get(record.sourceItemId as any);
+  if (!sourceItem) return;
+  await ctx.db.patch(record.sourceItemId as any, {
+    status: "resolved",
+    resolutionStatus: "resolved",
+    resolvedAnswer: args.resolvedAnswer,
+    resolvedByRecordType: args.recordType,
+    resolvedByRecordId: args.recordId,
+    resolvedNote: args.note,
+    resolvedAt: Date.now(),
+    resolvedBy: args.resolvedBy,
+    closedLoopSyncedAt: Date.now(),
+  });
+}
 
 export const update = mutation({
   args: {
@@ -54,6 +80,7 @@ export const update = mutation({
     assignedTo: v.optional(v.string()),
     trade: v.optional(v.string()),
     phase: v.optional(v.string()),
+    projectRole: v.optional(v.string()),
     blocker: v.optional(v.string()),
     dependsOn: v.optional(v.array(v.string())),
   },
@@ -72,6 +99,15 @@ export const update = mutation({
     }
     
     await ctx.db.patch(id, clean);
+    if (existing.sourceType === "spec_intelligence" && (clean.status === "Complete" || clean.progress === 100)) {
+      await syncSpecIntelligenceResolution(ctx, existing, {
+        recordType: "task",
+        recordId: String(id),
+        note: "Task completed and synced to Spec Intelligence Matrix",
+        resolvedBy: clean.assignedTo || existing.assignedTo ? String(clean.assignedTo || existing.assignedTo) : undefined,
+        resolvedAnswer: clean.impact || existing.impact ? String(clean.impact || existing.impact) : "Task completed",
+      });
+    }
   },
 });
 
@@ -138,6 +174,15 @@ export const addNote = mutation({
     }
     
     await ctx.db.patch(args.id, updates);
+    if (task.sourceType === "spec_intelligence" && (updates.status === "Complete" || updates.progress === 100)) {
+      await syncSpecIntelligenceResolution(ctx, task, {
+        recordType: "task",
+        recordId: String(args.id),
+        note: "Task activity completed and synced to Spec Intelligence Matrix",
+        resolvedBy: args.author,
+        resolvedAnswer: args.note || "Task completed",
+      });
+    }
   },
 });
 

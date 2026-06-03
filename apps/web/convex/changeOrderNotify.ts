@@ -2,6 +2,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { Resend } from "resend";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const notifyCrew = action({
   args: { changeOrderId: v.id("changeOrders") },
@@ -36,7 +37,8 @@ export const notifyCrew = action({
         const statusColor = statusColors[co.status] ?? "#888";
 
         await resend.emails.send({
-          from: "OpsSlate <notifications@opsslate.app>",
+          from: emailFrom(),
+          replyTo: emailReplyTo(),
           to: crew.email,
           subject: `🔄 Change Order #${co.number}: ${co.title} — ${co.projectName}`,
           html: `

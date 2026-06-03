@@ -257,19 +257,21 @@ function DashboardContent() {
 
   const fmt = (n: number) => n >= 1000000 ? `$${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : `$${n.toLocaleString()}`;
 
-  const completedProjects = data.projects.filter((p: any) => p.status === "Complete");
+  const visibleProjects = data.projects.filter((p: any) => p.status !== "Archived");
+  const completedProjects = visibleProjects.filter((p: any) => p.status === "Complete");
+  const lostBidProjects = visibleProjects.filter((p: any) => p.status === "Lost Bid");
   const allOverdue = data?.overdueTasks || [];
   const allThisWeek = data?.thisWeekTasks || [];
-  const activeProjects = data.projects.filter((p: any) => p.status !== "Complete");
+  const activeProjects = visibleProjects.filter((p: any) => p.status !== "Complete" && p.status !== "Archived");
   const onTrackCount = activeProjects.filter((p: any) => p.healthStatus === "green").length;
   const atRiskCount = activeProjects.filter((p: any) => p.healthStatus === "yellow").length;
   const offTrackCount = activeProjects.filter((p: any) => p.healthStatus === "red").length;
   const healthPct = activeProjects.length ? Math.round((onTrackCount / activeProjects.length) * 100) : 100;
 
-  const projects = data.projects.filter((p: any) => {
+  const projects = visibleProjects.filter((p: any) => {
     const late = p.overdueTasks || 0;
     if (filter === "completed") return p.status === "Complete";
-    if (p.status === "Complete") return false;
+    if (p.status === "Archived" || p.status === "Complete") return false;
     if (filter === "active") return p.status === "Active" || !p.status;
     if (filter === "bid") return p.status === "Bid";
     if (filter === "atRisk") return p.healthStatus === "yellow";
@@ -287,7 +289,7 @@ function DashboardContent() {
   });
 
   const projectManagers = Array.from(new Set(
-    data.projects.map((p: any) => p.aiPmName || p.projectManager).filter(Boolean)
+    visibleProjects.map((p: any) => p.aiPmName || p.projectManager).filter(Boolean)
   )) as string[];
 
   const exportPortfolioCsv = () => {
@@ -328,7 +330,7 @@ function DashboardContent() {
   ];
 
   const quickInsights = [
-    { label: "Completed Jobs", value: completedProjects.length, hint: "+2 this month", icon: "✓", tone: "green" },
+    { label: "Completed Jobs", value: completedProjects.length, hint: `${lostBidProjects.length} lost bid${lostBidProjects.length === 1 ? "" : "s"}`, icon: "✓", tone: "green" },
     { label: "Budget Spent", value: fmt(data.totalContractValue || 0), hint: "Portfolio value", icon: "$", tone: "green" },
     { label: "Change Order Impact", value: fmt(data.pendingChangeOrdersValue || 0), hint: "Pending exposure", icon: "▣", tone: "orange" },
     { label: "Open Punch Items", value: data.openPunchItems || 0, hint: `${allOverdue.length} late tasks`, icon: "↗", tone: "amber" },
@@ -898,3 +900,4 @@ export default function Home() {
 
   return <AppShell><DashboardContent /></AppShell>;
 }
+

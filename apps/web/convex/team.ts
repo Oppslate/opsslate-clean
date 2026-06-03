@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { Id } from "./_generated/dataModel";
 
 // ── List all team members ──
 export const list = query({
@@ -209,9 +210,21 @@ export const logActivity = mutation({
     details: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const timestamp = Date.now();
+
+    if (args.action === "last_active" && args.userId) {
+      const member = await ctx.db.query("teamMembers")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId as Id<"users">))
+        .first();
+
+      if (member?.companyId === args.companyId) {
+        await ctx.db.patch(member._id, { lastActiveAt: timestamp });
+      }
+    }
+
     return ctx.db.insert("activityLog", {
       ...args,
-      timestamp: Date.now(),
+      timestamp,
     });
   },
 });

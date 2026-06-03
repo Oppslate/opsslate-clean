@@ -1,6 +1,7 @@
 "use node";
 import { action } from "./_generated/server";
 import { v } from "convex/values";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const sendToProfile = action({
   args: { profileId: v.id("notificationProfiles") },
@@ -25,7 +26,8 @@ export const sendToProfile = action({
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        from: "Hybrid Briefing <notifications@opsslate.app>",
+        from: emailFrom("OpsSlate Briefing"),
+        reply_to: emailReplyTo(),
         to: profile.email,
         subject: `Hybrid Briefing — ${todayData.today}`,
         html,

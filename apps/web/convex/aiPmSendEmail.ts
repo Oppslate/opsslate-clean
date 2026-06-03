@@ -2,6 +2,7 @@
 
 import { action } from "./_generated/server";
 import { v } from "convex/values";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const send = action({
   args: {
@@ -23,11 +24,11 @@ export const send = action({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
       body: JSON.stringify({
-        from: `${args.pmName} via OpsSlate <notifications@opsslate.app>`,
+        from: emailFrom(`${args.pmName} via OpsSlate`),
         to: [args.to],
         subject: args.subject,
         text: args.body,
-        reply_to: "mike@hybridbuildingsolutions.com",
+        reply_to: emailReplyTo(),
       }),
     });
 
@@ -42,7 +43,7 @@ export const send = action({
         companyId: args.companyId as string,
         projectId: args.projectId as string,
         subject: args.subject,
-        from: `${args.pmName} (AI PM) <notifications@opsslate.app>`,
+        from: emailFrom(`${args.pmName} (AI PM)`),
         to: args.to,
         cc: "",
         date: new Date().toISOString().slice(0, 10),

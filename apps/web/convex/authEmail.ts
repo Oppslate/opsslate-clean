@@ -2,6 +2,7 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const sendResetEmail = action({
   args: { email: v.string(), name: v.string(), resetToken: v.string() },
@@ -15,7 +16,8 @@ export const sendResetEmail = action({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        from: "OpsSlate <notifications@opsslate.app>",
+        from: emailFrom(),
+        reply_to: emailReplyTo(),
         to: [args.email],
         subject: "Reset Your OpsSlate Password",
         html: `
@@ -65,7 +67,8 @@ export const sendLoginReminder = action({
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        from: "OpsSlate <notifications@opsslate.app>",
+        from: emailFrom(),
+        reply_to: emailReplyTo(),
         to: [args.email],
         subject: "Your OpsSlate Login Info",
         html: `

@@ -576,13 +576,13 @@ const geocodeAndSave = useAction(api.weather.geocodeAndSave as any);
                   variant="secondary"
                   className={`cursor-pointer transition-colors ${
                     p.status === "Active" ? "bg-green-500/20 text-green-400 hover:bg-green-500/30" :
-                    p.status === "Inactive" ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" :
+                    p.status === "Inactive" || p.status === "Lost Bid" ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" :
                     p.status === "Bid" ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30" :
                     p.status === "On Hold" ? "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30" :
                     "bg-secondary text-muted-foreground"
                   }`}
                   onClick={async () => {
-                    const cycle = ["Active", "Inactive", "Bid", "On Hold", "Complete"];
+                    const cycle = ["Active", "Inactive", "Bid", "Lost Bid", "On Hold", "Complete"];
                     const idx = cycle.indexOf(p.status ?? "Active");
                     const next = cycle[(idx + 1) % cycle.length];
                     await updateProject({ id: p._id as Id<"projects">, status: next });

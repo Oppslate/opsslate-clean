@@ -60,6 +60,10 @@ function VendorsContent() {
     { key: "contactName", label: "Contact Name" },
     { key: "phone", label: "Phone" },
     { key: "email", label: "Email" },
+    { key: "address", label: "Address" },
+    { key: "city", label: "City" },
+    { key: "state", label: "State" },
+    { key: "zipCode", label: "Zip Code" },
     { key: "emergency", label: "Emergency Contact" },
     { key: "rating", label: "Rating (1-5)", type: "select", options: [
       { label: "⭐ 1", value: "1" }, { label: "⭐⭐ 2", value: "2" }, { label: "⭐⭐⭐ 3", value: "3" },
@@ -88,6 +92,10 @@ function VendorsContent() {
         contactName: values.contactName as string,
         phone: values.phone as string,
         email: values.email as string,
+        address: values.address as string,
+        city: values.city as string,
+        state: values.state as string,
+        zipCode: values.zipCode as string,
         emergency: values.emergency as string,
         notes: values.notes as string,
       });
@@ -104,8 +112,8 @@ function VendorsContent() {
   };
 
   const handleExport = () => {
-    const headers = ["Name", "Category", "Contact", "Phone", "Email", "Emergency", "Notes"];
-    const rows = filtered.map((r) => [(r.name as string) ?? "", (r.category as string) ?? "", (r.contactName as string) ?? "", (r.phone as string) ?? "", (r.email as string) ?? "", (r.emergency as string) ?? "", (r.notes as string) ?? ""]);
+    const headers = ["Name", "Category", "Contact", "Phone", "Email", "Address", "City", "State", "Zip Code", "Emergency", "Notes"];
+    const rows = filtered.map((r) => [(r.name as string) ?? "", (r.category as string) ?? "", (r.contactName as string) ?? "", (r.phone as string) ?? "", (r.email as string) ?? "", (r.address as string) ?? "", (r.city as string) ?? "", (r.state as string) ?? "", (r.zipCode as string) ?? "", (r.emergency as string) ?? "", (r.notes as string) ?? ""]);
     exportCSV(headers, rows, "vendors.csv");
   };
 
@@ -134,6 +142,7 @@ function VendorsContent() {
             <TableHead>Contact</TableHead>
             <TableHead>Phone</TableHead>
             <TableHead>Email</TableHead>
+            <TableHead>Address</TableHead>
             <TableHead>Emergency</TableHead>
             <TableHead>Rating</TableHead>
           </TableRow>
@@ -146,11 +155,14 @@ function VendorsContent() {
               <TableCell>{(r.contactName as string) ?? ""}</TableCell>
               <TableCell>{r.phone ? <a href={`tel:${r.phone}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{r.phone as string}</a> : ""}</TableCell>
               <TableCell>{r.email ? <a href={`mailto:${r.email}`} className="text-primary hover:underline" onClick={(e) => e.stopPropagation()}>{r.email as string}</a> : ""}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">
+                {[(r.address as string) ?? "", [(r.city as string) ?? "", (r.state as string) ?? "", (r.zipCode as string) ?? ""].filter(Boolean).join(", ")].filter(Boolean).join(" ")}
+              </TableCell>
               <TableCell>{r.emergency ? <a href={`tel:${r.emergency}`} className="text-destructive hover:underline" onClick={(e) => e.stopPropagation()}>📞 {r.emergency as string}</a> : ""}</TableCell>
               <TableCell>{r.rating ? "⭐".repeat(Math.min(5, r.rating as number)) : <span className="text-muted-foreground text-xs">—</span>}</TableCell>
             </TableRow>
           ))}
-          {filtered.length === 0 && (<tr><td colSpan={6}><EmptyState icon="🏢" title="No vendors yet" description="Build your vendor and supplier contact directory." actionLabel="+ Add First Vendor" onAction={() => setModal({ mode: "create" })} /></td></tr>)}
+          {filtered.length === 0 && (<tr><td colSpan={8}><EmptyState icon="🏢" title="No vendors yet" description="Build your vendor and supplier contact directory." actionLabel="+ Add First Vendor" onAction={() => setModal({ mode: "create" })} /></td></tr>)}
         </TableBody>
       </Table>
 

@@ -2,6 +2,7 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 export const send = action({
   args: {
@@ -46,7 +47,8 @@ export const send = action({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: `${senderLabel} <notifications@opsslate.app>`,
+        from: emailFrom(senderLabel),
+        reply_to: emailReplyTo(),
         to: toAddresses,
         cc: ccAddresses.length > 0 ? ccAddresses : undefined,
         subject: args.subject,

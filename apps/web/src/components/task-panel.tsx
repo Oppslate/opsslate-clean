@@ -108,6 +108,20 @@ export function TaskPanel({ tasks, projectId, userName }: { tasks: any[]; projec
           </div>
         )}
 
+        {(t.sourceSpecSection || t.sourcePage || t.sourceQuote || t.sourceType === "spec_intelligence") && (
+          <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-3">
+            <h3 className="mb-2 text-xs font-bold text-cyan-300">SOURCE EVIDENCE</h3>
+            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+              {t.sourceSpecSection && <span>Spec: {t.sourceSpecSection}</span>}
+              {t.sourcePage && <span>Page: {t.sourcePage}</span>}
+              {typeof t.sourceConfidence === "number" && <span>Confidence: {Math.round(t.sourceConfidence * 100)}%</span>}
+              {t.projectRole && <span>Role: {t.projectRole}</span>}
+              {t.sourceItemId && <span>Matrix item: {String(t.sourceItemId).slice(-8)}</span>}
+            </div>
+            {t.sourceQuote && <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">"{t.sourceQuote}"</p>}
+          </div>
+        )}
+
         {/* Quick update */}
         <div className="bg-secondary/20 rounded-lg p-3 space-y-2">
           <div className="flex gap-2 flex-wrap">

@@ -1,6 +1,7 @@
 "use node";
 
 import { internalAction } from "./_generated/server";
+import { emailFrom, emailReplyTo } from "./emailConfig";
 
 // Automated morning briefings from all AI PMs + Director
 export const sendMorningBriefings = internalAction({
@@ -99,7 +100,8 @@ export const sendMorningBriefings = internalAction({
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
         body: JSON.stringify({
-          from: "AI PM Team <notifications@opsslate.app>",
+          from: emailFrom("AI PM Team"),
+          reply_to: emailReplyTo(),
           to: ["mike@hybridbuildingsolutions.com"],
           subject: `🤖 AI PM Morning Briefing — ${date}`,
           html,

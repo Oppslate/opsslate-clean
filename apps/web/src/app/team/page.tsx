@@ -43,18 +43,39 @@ const MODULE_PERMISSIONS: { key: string; label: string; ownerDefault: string; ad
   { key: "reports", label: "📈 Reports", ownerDefault: "full", adminDefault: "full", pmDefault: "read", fieldDefault: "none" },
 ];
 
+function formatLastActive(value: number | string | undefined, now: number) {
+  if (!value) return "Never";
+  const timestamp = typeof value === "number" ? value : new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "Never";
+
+  const diff = Math.max(0, now - timestamp);
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) return "Just now";
+  if (diff < hour) return `${Math.floor(diff / minute)} min ago`;
+  if (diff < day) return `${Math.floor(diff / hour)} hr ago`;
+
+  const days = Math.floor(diff / day);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+
+  return new Date(timestamp).toLocaleDateString();
+}
+
 function Content() {
   const router = useRouter();
   const { user } = useAuth();
   const members = useAuthenticatedQuery(api.team.list, user ? { companyId: user.companyId as Id<"companies"> } : "skip") as any[] | undefined;
   const projects = useAuthenticatedQuery(api.projects.list, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
-  const activityLog = useAuthenticatedQuery(api.team.getActivityLog, user ? { companyId: user.companyId as Id<"companies">, limit: 20 } : "skip") as any[] | undefined;
+  const activityLog = useAuthenticatedQuery(api.team.getActivityLog, user ? { companyId: user.companyId as Id<"companies">, limit: 500 } : "skip") as any[] | undefined;
 
   const inviteMember = useMutation(api.team.invite as any);
   const updateMember = useMutation(api.team.update as any);
   const removeMember = useMutation(api.team.remove as any);
   const ensureOwner = useMutation(api.team.ensureOwner as any);
   const generateResetToken = useMutation(api.auth.generateResetToken as any);
+  const resetPassword = useMutation(api.auth.resetPassword as any);
   const sendInviteEmail = useAction(api.teamEmail.sendInvite as any);
 
   const [showInvite, setShowInvite] = useState(false);
@@ -63,8 +84,21 @@ function Content() {
   const [inviteRole, setInviteRole] = useState("pm");
   const [inviteProjects, setInviteProjects] = useState<string[]>([]);
   const [editMember, setEditMember] = useState<any>(null);
+  const [passwordMember, setPasswordMember] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showTeamPassword, setShowTeamPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
   const [tab, setTab] = useState<"members" | "activity" | "permissions">("members");
   const [resendingEmail, setResendingEmail] = useState("");
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto-ensure current user is an owner
   const [hasEnsured, setHasEnsured] = useState(false);
@@ -80,6 +114,36 @@ function Content() {
 
   const myMembership = useMemo(() => members?.find((m: any) => m.email === user?.email), [members, user]);
   const canManage = !myMembership || myMembership.role === "owner" || myMembership.role === "admin";
+  const lastActiveByUserId = useMemo(() => {
+    const map = new Map<string, number>();
+    (activityLog || [])
+      .filter((entry: any) => entry.action === "last_active" && entry.userId)
+      .forEach((entry: any) => {
+        map.set(entry.userId, Math.max(map.get(entry.userId) || 0, entry.timestamp || 0));
+      });
+    return map;
+  }, [activityLog]);
+  const lastActiveByName = useMemo(() => {
+    const map = new Map<string, number>();
+    (activityLog || [])
+      .filter((entry: any) => entry.action === "last_active" && entry.userName)
+      .forEach((entry: any) => {
+        const key = String(entry.userName).trim().toLowerCase();
+        map.set(key, Math.max(map.get(key) || 0, entry.timestamp || 0));
+      });
+    return map;
+  }, [activityLog]);
+
+  const memberLastActive = (member: any) => {
+    const candidates = [
+      member.lastActiveAt || 0,
+      member.userId ? lastActiveByUserId.get(member.userId) || 0 : 0,
+      member.name ? lastActiveByName.get(String(member.name).trim().toLowerCase()) || 0 : 0,
+      member.email ? lastActiveByName.get(String(member.email).trim().toLowerCase()) || 0 : 0,
+    ];
+    const latest = Math.max(...candidates);
+    return latest || undefined;
+  };
 
   const handleInvite = async () => {
     if (!user || !inviteEmail.trim() || !inviteName.trim()) return;
@@ -132,6 +196,68 @@ function Content() {
       alert(e.message || "Could not resend invite email.");
     } finally {
       setResendingEmail("");
+    }
+  };
+
+  const openPasswordDialog = (member: any) => {
+    setPasswordMember(member);
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowTeamPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordError("");
+  };
+
+  const closePasswordDialog = (force = false) => {
+    if (passwordSaving && !force) return;
+    setPasswordMember(null);
+    setNewPassword("");
+    setConfirmPassword("");
+    setShowTeamPassword(false);
+    setShowConfirmPassword(false);
+    setPasswordError("");
+  };
+
+  const markSuitePasswordManaged = (email: string) => {
+    localStorage.setItem(`opsslate_suite_password_managed:${email.trim().toLowerCase()}`, "1");
+  };
+
+  const refreshLocalConvexSession = async (token: string) => {
+    localStorage.setItem("eq_token", token);
+    document.cookie = `opsslate_convex_token=${encodeURIComponent(token)}; path=/; domain=.opsslate.app; max-age=${60 * 60 * 24 * 30}; secure; samesite=lax`;
+    await fetch("/api/auth/suite-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ convexToken: token }),
+    }).catch(() => {});
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordMember?.email) return;
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordError("");
+    try {
+      const result = await resetPassword({ email: passwordMember.email, newPassword });
+      markSuitePasswordManaged(passwordMember.email);
+      const isSelf = passwordMember.email === user?.email;
+      if (isSelf && result?.token) {
+        await refreshLocalConvexSession(result.token);
+      }
+      closePasswordDialog(true);
+      alert(`Password updated for ${passwordMember.name || passwordMember.email}.`);
+      if (isSelf && result?.token) window.location.reload();
+    } catch (e: any) {
+      setPasswordError(e.message || "Password could not be updated.");
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -210,6 +336,7 @@ function Content() {
               <TableBody>
                 {(members ?? []).map((m: any) => {
                   const ri = roleInfo(m.role);
+                  const lastActive = memberLastActive(m);
                   return (
                     <TableRow key={m._id}>
                       <TableCell>
@@ -232,31 +359,43 @@ function Content() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <span className="text-xs text-muted-foreground">
-                          {m.lastActiveAt ? new Date(m.lastActiveAt).toLocaleDateString() : "Never"}
+                        <span
+                          className="text-xs text-muted-foreground"
+                          title={lastActive ? new Date(lastActive).toLocaleString() : "Never"}
+                        >
+                          {formatLastActive(lastActive, now)}
                         </span>
                       </TableCell>
                       <TableCell>
-                        {canManage && m.email !== user?.email && (
+                        {canManage && (
                           <div className="flex gap-1">
-                            <button className="text-xs text-blue-400 hover:underline" onClick={() => setEditMember(m)}>Edit</button>
-                            <button
-                              className="text-xs text-cyan-400 hover:underline disabled:cursor-wait disabled:opacity-50"
-                              disabled={resendingEmail === m.email}
-                              onClick={() => handleResendInvite(m)}
-                            >
-                              {resendingEmail === m.email ? "Sending..." : "Resend Invite"}
-                            </button>
-                            {m.status === "active" && (
+                            {m.email !== user?.email && (
+                              <>
+                                <button className="text-xs text-blue-400 hover:underline" onClick={() => setEditMember(m)}>Edit</button>
+                                <button
+                                  className="text-xs text-cyan-400 hover:underline disabled:cursor-wait disabled:opacity-50"
+                                  disabled={resendingEmail === m.email}
+                                  onClick={() => handleResendInvite(m)}
+                                >
+                                  {resendingEmail === m.email ? "Sending..." : "Resend Invite"}
+                                </button>
+                              </>
+                            )}
+                            <button className="text-xs text-purple-300 hover:underline" onClick={() => openPasswordDialog(m)}>Change Password</button>
+                            {m.email !== user?.email && m.status === "active" && (
                               <button className="text-xs text-yellow-400 hover:underline" onClick={() => updateMember({ id: m._id, status: "disabled" })}>Disable</button>
                             )}
-                            {m.status === "disabled" && (
+                            {m.email !== user?.email && m.status === "disabled" && (
                               <button className="text-xs text-green-400 hover:underline" onClick={() => updateMember({ id: m._id, status: "active" })}>Enable</button>
                             )}
-                            <button className="text-xs text-red-400 hover:underline" onClick={() => { if (confirm(`Remove ${m.name}?`)) removeMember({ id: m._id }); }}>Remove</button>
+                            {m.email !== user?.email && (
+                              <button className="text-xs text-red-400 hover:underline" onClick={() => { if (confirm(`Remove ${m.name}?`)) removeMember({ id: m._id }); }}>Remove</button>
+                            )}
                           </div>
                         )}
-                        {m.email === user?.email && <span className="text-xs text-muted-foreground">You</span>}
+                        {!canManage && m.email === user?.email && (
+                          <button className="text-xs text-purple-300 hover:underline" onClick={() => openPasswordDialog(m)}>Change Password</button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -377,6 +516,56 @@ function Content() {
                 <Button variant="outline" onClick={() => setShowInvite(false)}>Cancel</Button>
                 <Button disabled={!inviteEmail.trim() || !inviteName.trim()} onClick={handleInvite}>
                   📨 Send Invite
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {passwordMember && (
+        <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => closePasswordDialog()}>
+          <div className="bg-card border border-border rounded-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-bold">Change Password</h3>
+                <p className="text-xs text-muted-foreground mt-1">{passwordMember.name || passwordMember.email}</p>
+              </div>
+              <button disabled={passwordSaving} onClick={() => closePasswordDialog()}>×</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">New password</label>
+                <div className="relative">
+                  <Input type={showTeamPassword ? "text" : "password"} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" className="pr-16" />
+                  <button
+                    type="button"
+                    onClick={() => setShowTeamPassword((current) => !current)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  >
+                    {showTeamPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">Confirm password</label>
+                <div className="relative">
+                  <Input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" className="pr-16" />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  >
+                    {showConfirmPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
+              {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" disabled={passwordSaving} onClick={() => closePasswordDialog()}>Cancel</Button>
+                <Button disabled={passwordSaving} onClick={handleChangePassword}>
+                  {passwordSaving ? "Saving..." : "Save Password"}
                 </Button>
               </div>
             </div>

@@ -1,15 +1,30 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { Mail, Pencil, Phone, Plus, Trash2 } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
+import { BillingOpsBooksPanel } from "@/components/billing-ops-books-panel";
+import { EstimateRequirementsPanel } from "@/components/estimate-requirements-panel";
+import { ScheduleIntelligencePanel } from "@/components/schedule-intelligence-panel";
+import { SpecIntelligenceCommandCenter } from "@/components/spec-intelligence-command-center";
+import { SpecDNAPanel } from "@/components/spec-dna-panel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import Link from "next/link";
 
 function healthColor(score: number) {
@@ -26,6 +41,112 @@ type TeamMemberSummary = {
   role: string;
   status: string;
 };
+
+type ProjectDetailsFormState = {
+  name: string;
+  code: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  projectManager: string;
+  contractor: string;
+  projectRole: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  bidDateTime: string;
+  status: string;
+  contractValue: string;
+};
+
+type ProjectTeamMemberFormState = {
+  firstName: string;
+  lastName: string;
+  company: string;
+  phone: string;
+  email: string;
+};
+
+const emptyProjectDetailsForm: ProjectDetailsFormState = {
+  name: "",
+  code: "",
+  address: "",
+  city: "",
+  state: "",
+  zip: "",
+  projectManager: "",
+  contractor: "",
+  projectRole: "",
+  type: "",
+  startDate: "",
+  endDate: "",
+  bidDateTime: "",
+  status: "",
+  contractValue: "",
+};
+
+const emptyProjectTeamMemberForm: ProjectTeamMemberFormState = {
+  firstName: "",
+  lastName: "",
+  company: "",
+  phone: "",
+  email: "",
+};
+
+function getProjectDetailsForm(project: Partial<Doc<"projects">> | null | undefined): ProjectDetailsFormState {
+  return {
+    name: project?.name || "",
+    code: project?.code || "",
+    address: project?.address || "",
+    city: project?.city || "",
+    state: project?.state || "",
+    zip: project?.zip || "",
+    projectManager: project?.projectManager || "",
+    contractor: project?.contractor || "",
+    projectRole: project?.projectRole || "",
+    type: project?.type || "",
+    startDate: project?.startDate || "",
+    endDate: project?.endDate || "",
+    bidDateTime: project?.contractDate || "",
+    status: project?.status || "",
+    contractValue: typeof project?.contractValue === "number" ? String(project.contractValue) : "",
+  };
+}
+
+function optionalNumber(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+async function clientGeocodeProjectAddress(address: string) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+  const response = await fetch(url, { headers: { "Accept-Language": "en-US,en;q=0.9" } });
+  if (!response.ok) throw new Error("Address geocoding failed.");
+  const data = await response.json();
+  const match = Array.isArray(data) ? data[0] : null;
+  const latitude = match ? Number(match.lat) : NaN;
+  const longitude = match ? Number(match.lon) : NaN;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error("Project address could not be geocoded.");
+  }
+  return { latitude, longitude };
+}
 
 function formatRole(role: string) {
   return role
@@ -65,6 +186,7 @@ function ModuleCard({ icon, title, href, stats, alert }: { icon: string; title: 
 
 function ProjectDashboardContent() {
   const params = useParams();
+  const router = useRouter();
   const { user } = useAuth();
   const data = useQuery(
     api.projectDashboard.getProjectOverview,
@@ -74,13 +196,35 @@ function ProjectDashboardContent() {
   const projectPmMessages = useQuery(api.aiPm.getMessages, projectPm?.id ? { pmId: projectPm.id as Id<"aiProjectManagers"> } : "skip") as any[] | undefined;
   const projectPmTasks = useQuery(api.aiPm.getTasks, projectPm?.id ? { pmId: projectPm.id as Id<"aiProjectManagers"> } : "skip") as any[] | undefined;
   const teamMembers = useQuery(api.team.list, user?.companyId ? { companyId: user.companyId as Id<"companies"> } : "skip") as any[] | undefined;
+  const projectTeamMembers = useQuery(
+    api.contacts.list,
+    params.id && user ? { projectId: params.id as Id<"projects"> } : "skip",
+  ) as Doc<"contacts">[] | undefined;
   const chatWithPm = useAction(api.aiPmEngine.chat as any);
   const generatePmReport = useAction(api.aiPmEngine.dailyReport as any);
   const sendEmail = useAction(api.sendEmail.send as any);
   const analyzeWeatherMultiSource = useAction(api.weather.analyzeWeatherMultiSource as any);
+  const geocodeProjectAddress = useAction(api.weather.geocodeAndSave as any);
+  const updateProject = useMutation(api.projects.update);
+  const archiveProject = useMutation(api.projects.archive);
+  const removeProject = useMutation((api as any).projects.remove);
+  const createProjectTeamMember = useMutation(api.contacts.create);
+  const updateProjectTeamMember = useMutation(api.contacts.update);
+  const removeProjectTeamMember = useMutation(api.contacts.remove);
   const [aiPmStatusPrompt, setAiPmStatusPrompt] = useState("");
   const [aiPmProblemReport, setAiPmProblemReport] = useState("");
   const [aiPmCardWorking, setAiPmCardWorking] = useState(false);
+  const [projectDetailsOpen, setProjectDetailsOpen] = useState(false);
+  const [projectDetailsForm, setProjectDetailsForm] = useState<ProjectDetailsFormState>(emptyProjectDetailsForm);
+  const [projectDetailsSaving, setProjectDetailsSaving] = useState(false);
+  const [projectDetailsError, setProjectDetailsError] = useState<string | null>(null);
+  const [projectTeamOpen, setProjectTeamOpen] = useState(false);
+  const [editingProjectTeamMember, setEditingProjectTeamMember] = useState<Doc<"contacts"> | null>(null);
+  const [projectTeamForm, setProjectTeamForm] = useState<ProjectTeamMemberFormState>(emptyProjectTeamMemberForm);
+  const [projectTeamSaving, setProjectTeamSaving] = useState(false);
+  const [projectTeamError, setProjectTeamError] = useState<string | null>(null);
+  const [bidInvitationSendingId, setBidInvitationSendingId] = useState<string | null>(null);
+  const [bidInvitationStatus, setBidInvitationStatus] = useState<Record<string, "sent" | "failed">>({});
   const [adminEscalationState, setAdminEscalationState] = useState<"idle" | "director" | "sending" | "sent" | "queued" | "failed">("idle");
   const [weatherMonitor, setWeatherMonitor] = useState<any>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -88,23 +232,25 @@ function ProjectDashboardContent() {
   const [selectedWeatherRecipientIds, setSelectedWeatherRecipientIds] = useState<string[]>([]);
   const [weatherAlertState, setWeatherAlertState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
 
-  useEffect(() => {
-    const project = data?.project;
-    if (!project || typeof project.latitude !== "number" || typeof project.longitude !== "number") {
-      setWeatherMonitor(null);
-      return;
-    }
-    let cancelled = false;
-    setWeatherLoading(true);
-    setWeatherError(null);
-    analyzeWeatherMultiSource({ latitude: project.latitude, longitude: project.longitude })
-      .then((result: any) => { if (!cancelled) setWeatherMonitor(result); })
-      .catch((err: Error) => { if (!cancelled) setWeatherError(err.message || "Weather check failed"); })
-      .finally(() => { if (!cancelled) setWeatherLoading(false); });
-    return () => { cancelled = true; };
-  }, [analyzeWeatherMultiSource, data?.project?._id, data?.project?.latitude, data?.project?.longitude]);
-
   const project = data?.project || {};
+  const projectDetailsSeed = useMemo(() => getProjectDetailsForm(project), [
+    project?._id,
+    project?.name,
+    project?.code,
+    project?.address,
+    project?.city,
+    project?.state,
+    project?.zip,
+    project?.projectManager,
+    project?.contractor,
+    project?.projectRole,
+    project?.type,
+    project?.startDate,
+    project?.endDate,
+    project?.contractDate,
+    project?.status,
+    project?.contractValue,
+  ]);
   const weatherPrimary = weatherMonitor?.primary;
   const weatherConsensus = weatherMonitor?.consensus;
   const activeWeatherAlerts = weatherMonitor?.activeAlerts || [];
@@ -130,6 +276,14 @@ function ProjectDashboardContent() {
     ].join("\n");
   }, [activeWeatherAlerts, project.name, weatherConsensus, weatherPrimary, weatherStatus]);
 
+  useEffect(() => {
+    if (!project?._id || projectDetailsOpen) return;
+    setProjectDetailsForm(projectDetailsSeed);
+  }, [project?._id, projectDetailsOpen, projectDetailsSeed]);
+
+  const locationText = [project.address, project.city || project.location, project.state, project.zip].filter(Boolean).join(", ");
+  const addressForWeather = [project.address || project.location, project.city, project.state, project.zip].filter(Boolean).join(", ");
+
   const projectWeatherRecipients = useMemo(() => {
     const currentProjectId = String(project?._id || params.id || "");
     return (teamMembers || [])
@@ -144,6 +298,68 @@ function ProjectDashboardContent() {
     if (selectedWeatherRecipientIds.length > 0 || projectWeatherRecipients.length === 0) return;
     setSelectedWeatherRecipientIds(projectWeatherRecipients.slice(0, 3).map((member: any) => String(member._id)));
   }, [projectWeatherRecipients, selectedWeatherRecipientIds.length]);
+
+  useEffect(() => {
+    const currentProject = project;
+    if (!currentProject?._id) {
+      setWeatherMonitor(null);
+      return;
+    }
+
+    let cancelled = false;
+    async function loadProjectWeather() {
+      let latitude = typeof currentProject.latitude === "number" ? currentProject.latitude : null;
+      let longitude = typeof currentProject.longitude === "number" ? currentProject.longitude : null;
+
+      if ((latitude === null || longitude === null) && addressForWeather) {
+        const geocoded = await geocodeProjectAddress({
+          projectId: currentProject._id as Id<"projects">,
+          address: addressForWeather,
+        }).catch(() => null);
+        if (geocoded?.success && typeof geocoded.latitude === "number" && typeof geocoded.longitude === "number") {
+          latitude = geocoded.latitude;
+          longitude = geocoded.longitude;
+        } else {
+          const browserGeocoded = await clientGeocodeProjectAddress(addressForWeather);
+          latitude = browserGeocoded.latitude;
+          longitude = browserGeocoded.longitude;
+          await updateProject({
+            id: currentProject._id as Id<"projects">,
+            latitude,
+            longitude,
+          });
+        }
+      }
+
+      if (latitude === null || longitude === null) {
+        if (!cancelled) setWeatherMonitor(null);
+        return;
+      }
+
+      const result = await analyzeWeatherMultiSource({ latitude, longitude });
+      if (!cancelled) setWeatherMonitor(result);
+    }
+
+    setWeatherLoading(true);
+    setWeatherError(null);
+    loadProjectWeather()
+      .catch((err: Error) => {
+        if (!cancelled) {
+          setWeatherMonitor(null);
+          setWeatherError(err.message || "Weather check failed");
+        }
+      })
+      .finally(() => { if (!cancelled) setWeatherLoading(false); });
+    return () => { cancelled = true; };
+  }, [
+    addressForWeather,
+    analyzeWeatherMultiSource,
+    project?._id,
+    project?.latitude,
+    project?.longitude,
+    geocodeProjectAddress,
+    updateProject,
+  ]);
 
   if (!user) return null;
   if (data === undefined) return <div className="flex items-center justify-center h-96"><div className="text-muted-foreground">Loading project data...</div></div>;
@@ -162,9 +378,11 @@ function ProjectDashboardContent() {
     })
     .sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0))
     .slice(0, 4);
-  const locationText = [project.address, project.city || project.location, project.state, project.zip].filter(Boolean).join(", ");
   const directionsUrl = locationText ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(locationText)}` : "";
   const mapUrl = locationText ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationText)}` : "";
+  const projectLocationMessage = locationText
+    ? `${project.name || "Project"} location: ${locationText}${directionsUrl ? ` ${directionsUrl}` : ""}`
+    : `${project.name || "Project"} location has not been set yet.`;
   const shareLocation = async () => {
     if (!locationText) return;
     const text = `${project.name}\n${locationText}`;
@@ -176,6 +394,189 @@ function ProjectDashboardContent() {
     }
     await navigator.clipboard.writeText(`${text}\n${directionsUrl}`);
     alert("Project location copied to clipboard.");
+  };
+
+  const openProjectDetailsEditor = () => {
+    setProjectDetailsForm(getProjectDetailsForm(project));
+    setProjectDetailsError(null);
+    setProjectDetailsOpen(true);
+  };
+
+  const updateProjectDetailsField = (field: keyof ProjectDetailsFormState, value: string) => {
+    setProjectDetailsForm((current) => ({ ...current, [field]: value }));
+    if (projectDetailsError) setProjectDetailsError(null);
+  };
+
+  const updateProjectTeamField = (field: keyof ProjectTeamMemberFormState, value: string) => {
+    setProjectTeamForm((current) => ({ ...current, [field]: value }));
+    if (projectTeamError) setProjectTeamError(null);
+  };
+
+  const openProjectTeamMemberEditor = (member?: Doc<"contacts">) => {
+    setEditingProjectTeamMember(member || null);
+    setProjectTeamForm(member ? {
+      firstName: member.firstName || "",
+      lastName: member.lastName || "",
+      company: member.company || "",
+      phone: member.phone || "",
+      email: member.email || "",
+    } : emptyProjectTeamMemberForm);
+    setProjectTeamError(null);
+    setProjectTeamOpen(true);
+  };
+
+  const handleSaveProjectDetails = async () => {
+    if (!project?._id) return;
+    const name = projectDetailsForm.name.trim();
+    if (!name) {
+      setProjectDetailsError("Project name is required.");
+      return;
+    }
+    if (projectDetailsForm.status === "Bid" && !projectDetailsForm.bidDateTime) {
+      setProjectDetailsError("Bid date and time is required when status is Bid.");
+      return;
+    }
+    setProjectDetailsSaving(true);
+    setProjectDetailsError(null);
+    try {
+      await updateProject({
+        id: project._id as Id<"projects">,
+        name,
+        code: projectDetailsForm.code.trim() || undefined,
+        address: projectDetailsForm.address.trim() || undefined,
+        city: projectDetailsForm.city.trim() || undefined,
+        state: projectDetailsForm.state.trim() || undefined,
+        zip: projectDetailsForm.zip.trim() || undefined,
+        projectManager: projectDetailsForm.projectManager.trim() || undefined,
+        contractor: projectDetailsForm.contractor.trim() || undefined,
+        projectRole: projectDetailsForm.projectRole.trim() || undefined,
+        type: projectDetailsForm.type.trim() || undefined,
+        startDate: projectDetailsForm.startDate || undefined,
+        endDate: projectDetailsForm.endDate || undefined,
+        contractDate: projectDetailsForm.status === "Bid" ? projectDetailsForm.bidDateTime : "",
+        status: projectDetailsForm.status.trim() || undefined,
+        contractValue: optionalNumber(projectDetailsForm.contractValue),
+      });
+      setProjectDetailsOpen(false);
+    } catch (error) {
+      setProjectDetailsError(error instanceof Error ? error.message : "Project details could not be saved.");
+    } finally {
+      setProjectDetailsSaving(false);
+    }
+  };
+
+  const handleArchiveProject = async () => {
+    if (!project?._id) return;
+    const confirmed = window.confirm("Archive this project? It will be removed from normal project lists, but the project data will be saved for later use.");
+    if (!confirmed) return;
+    await archiveProject({ id: project._id as Id<"projects"> });
+    router.replace("/");
+  };
+
+  const handleDeleteProject = async () => {
+    if (!project?._id) return;
+    const confirmed = window.confirm("Delete this project permanently? This removes the project from OpsSlate. Use Archive if you want to save it for later.");
+    if (!confirmed) return;
+    await removeProject({ id: project._id as Id<"projects"> });
+    router.replace("/");
+  };
+
+  const handleSaveProjectTeamMember = async () => {
+    const firstName = projectTeamForm.firstName.trim();
+    if (!firstName) {
+      setProjectTeamError("First name is required.");
+      return;
+    }
+    setProjectTeamSaving(true);
+    setProjectTeamError(null);
+    try {
+      const values = {
+        firstName,
+        lastName: projectTeamForm.lastName.trim() || undefined,
+        company: projectTeamForm.company.trim() || undefined,
+        phone: projectTeamForm.phone.trim() || undefined,
+        email: projectTeamForm.email.trim() || undefined,
+      };
+      if (editingProjectTeamMember) {
+        await updateProjectTeamMember({
+          id: editingProjectTeamMember._id,
+          ...values,
+        });
+      } else {
+        await createProjectTeamMember({
+          projectId: params.id as Id<"projects">,
+          ...values,
+          role: "Project Team",
+          status: "Active",
+        });
+      }
+      setProjectTeamForm(emptyProjectTeamMemberForm);
+      setEditingProjectTeamMember(null);
+      setProjectTeamOpen(false);
+    } catch (error) {
+      setProjectTeamError(error instanceof Error ? error.message : "Project team member could not be saved.");
+    } finally {
+      setProjectTeamSaving(false);
+    }
+  };
+
+  const getSmsHref = (phone: string) => {
+    const smsPhone = phone.replace(/[^\d+]/g, "");
+    return smsPhone ? `sms:${smsPhone}?body=${encodeURIComponent(projectLocationMessage)}` : "";
+  };
+
+  const handleTextProjectLocation = async (phone?: string) => {
+    if (!phone) return;
+    const smsHref = getSmsHref(phone);
+    if (!smsHref) return;
+    try {
+      await navigator.clipboard.writeText(projectLocationMessage);
+    } catch {
+      // Clipboard can be blocked by browser permissions; still try the SMS app.
+    }
+    window.location.href = smsHref;
+  };
+
+  const handleInviteToBid = async (member: Doc<"contacts">) => {
+    if (!user?.companyId || !member.email || bidInvitationSendingId) return;
+    const memberName = [member.firstName, member.lastName].filter(Boolean).join(" ") || member.company || "there";
+    const projectName = project.name || "this project";
+    const body = [
+      `Hi ${memberName},`,
+      "",
+      `You are invited to bid ${projectName}.`,
+      locationText ? `Project location: ${locationText}` : "",
+      directionsUrl ? `Directions: ${directionsUrl}` : "",
+      project.contractDate && project.status === "Bid" ? `Bid date/time: ${formatDateTime(project.contractDate)}` : "",
+      project.projectManager ? `Project manager: ${project.projectManager}` : "",
+      "",
+      "Please review the project information and reply with your bid questions, availability, and proposal.",
+      "",
+      "Thank you.",
+    ].filter(Boolean).join("\n");
+
+    const memberId = String(member._id);
+    setBidInvitationSendingId(memberId);
+    setBidInvitationStatus((current) => {
+      const next = { ...current };
+      delete next[memberId];
+      return next;
+    });
+    try {
+      await sendEmail({
+        companyId: String(user.companyId),
+        to: member.email,
+        subject: `Invitation to Bid: ${projectName}`,
+        body,
+        projectId: String(project._id || params.id || ""),
+        senderName: user.name || "OpsSlate",
+      });
+      setBidInvitationStatus((current) => ({ ...current, [memberId]: "sent" }));
+    } catch {
+      setBidInvitationStatus((current) => ({ ...current, [memberId]: "failed" }));
+    } finally {
+      setBidInvitationSendingId(null);
+    }
   };
 
   const handleAiPmStatusUpdate = async () => {
@@ -311,6 +712,341 @@ function ProjectDashboardContent() {
         </div>
       </div>
 
+      {/* Project details */}
+      <Card className="bg-card border-border mb-6">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+          <div>
+            <h3 className="font-bold text-sm">Project Details</h3>
+            <p className="text-xs text-muted-foreground mt-1">Location and baseline job info</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" type="button" onClick={openProjectDetailsEditor} className="h-8 px-3">
+            <Pencil className="size-3.5" />
+            Edit
+            </Button>
+            {project.status && <Badge variant="outline" className="text-[10px]">{project.status}</Badge>}
+          </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 text-sm">
+          {[
+            ["Address", locationText],
+            ["Code", project.code],
+            ["Manager", project.projectManager],
+            ["Contractor", project.contractor],
+            ["Project Role", project.projectRole],
+            ["Type", project.type],
+            ["Start", project.startDate],
+            ["End", project.endDate],
+            ["Bid Date/Time", project.status === "Bid" ? formatDateTime(project.contractDate) : ""],
+            ["Contract Value", typeof project.contractValue === "number" ? fmt(project.contractValue) : ""],
+          ].filter(([, value]) => value).map(([label, value]) => (
+            <div key={label as string} className="min-w-0">
+            <div className="text-[10px] uppercase text-muted-foreground">{label as string}</div>
+            <div className="font-medium truncate">{value as string}</div>
+            </div>
+          ))}
+          {!locationText && !project.code && !project.projectManager && !project.contractor && !project.projectRole && !project.type && !project.contractDate && !project.contractValue && (
+            <p className="text-sm text-muted-foreground col-span-2 md:col-span-4">No project details recorded yet.</p>
+          )}
+          </div>
+          {locationText && (
+          <div className="flex flex-wrap gap-2 mt-4">
+            <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" type="button">🧭 Get Directions</Button>
+            </a>
+            <Button size="sm" variant="outline" type="button" onClick={shareLocation}>📤 Share Location</Button>
+          </div>
+          )}
+          <Dialog open={projectDetailsOpen} onOpenChange={setProjectDetailsOpen}>
+          <DialogContent className="sm:max-w-3xl">
+            <DialogHeader>
+            <DialogTitle>Edit Project Details</DialogTitle>
+            <DialogDescription>Add or update the baseline information used across this project.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="project-name">Project name</Label>
+              <Input id="project-name" value={projectDetailsForm.name} onChange={(e) => updateProjectDetailsField("name", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-code">Project code</Label>
+              <Input id="project-code" value={projectDetailsForm.code} onChange={(e) => updateProjectDetailsField("code", e.target.value)} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="project-address">Address</Label>
+              <Input id="project-address" value={projectDetailsForm.address} onChange={(e) => updateProjectDetailsField("address", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-city">City</Label>
+              <Input id="project-city" value={projectDetailsForm.city} onChange={(e) => updateProjectDetailsField("city", e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+              <Label htmlFor="project-state">State</Label>
+              <Input id="project-state" value={projectDetailsForm.state} onChange={(e) => updateProjectDetailsField("state", e.target.value)} />
+              </div>
+              <div className="space-y-2">
+              <Label htmlFor="project-zip">ZIP</Label>
+              <Input id="project-zip" value={projectDetailsForm.zip} onChange={(e) => updateProjectDetailsField("zip", e.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-manager">Project manager</Label>
+              <Input id="project-manager" value={projectDetailsForm.projectManager} onChange={(e) => updateProjectDetailsField("projectManager", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-contractor">Contractor</Label>
+              <Input id="project-contractor" value={projectDetailsForm.contractor} onChange={(e) => updateProjectDetailsField("contractor", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-role">Project role</Label>
+              <select
+                id="project-role"
+                value={projectDetailsForm.projectRole}
+                onChange={(e) => updateProjectDetailsField("projectRole", e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              >
+                <option value="">Select role...</option>
+                <option value="General Contractor">General Contractor</option>
+                <option value="Subcontractor">Subcontractor</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-type">Project type</Label>
+              <Input id="project-type" value={projectDetailsForm.type} onChange={(e) => updateProjectDetailsField("type", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-status">Status</Label>
+              <select
+                id="project-status"
+                value={projectDetailsForm.status || "Active"}
+                onChange={(e) => updateProjectDetailsField("status", e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              >
+                <option value="Active">Active</option>
+                <option value="Bid">Bid</option>
+                <option value="Lost Bid">Lost Bid</option>
+                <option value="On Hold">On Hold</option>
+                <option value="Complete">Complete</option>
+              </select>
+            </div>
+            {projectDetailsForm.status === "Bid" && (
+              <div className="space-y-2">
+                <Label htmlFor="project-bid-date-time">Bid date and time</Label>
+                <Input id="project-bid-date-time" type="datetime-local" value={projectDetailsForm.bidDateTime} onChange={(e) => updateProjectDetailsField("bidDateTime", e.target.value)} />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="project-start">Start date</Label>
+              <Input id="project-start" type="date" value={projectDetailsForm.startDate} onChange={(e) => updateProjectDetailsField("startDate", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-end">End date</Label>
+              <Input id="project-end" type="date" value={projectDetailsForm.endDate} onChange={(e) => updateProjectDetailsField("endDate", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-contract-value">Contract value</Label>
+              <Input id="project-contract-value" type="number" min="0" step="0.01" value={projectDetailsForm.contractValue} onChange={(e) => updateProjectDetailsField("contractValue", e.target.value)} />
+            </div>
+            </div>
+            {projectDetailsError && <p className="text-sm text-destructive">{projectDetailsError}</p>}
+            <DialogFooter>
+            <Button type="button" variant="outline" disabled={projectDetailsSaving} onClick={handleArchiveProject}>Archive project</Button>
+            <Button type="button" variant="destructive" disabled={projectDetailsSaving} onClick={handleDeleteProject}>Delete project</Button>
+            <Button type="button" variant="outline" disabled={projectDetailsSaving} onClick={() => setProjectDetailsOpen(false)}>Cancel</Button>
+            <Button type="button" disabled={projectDetailsSaving} onClick={handleSaveProjectDetails}>{projectDetailsSaving ? "Saving..." : "Save Project Details"}</Button>
+            </DialogFooter>
+          </DialogContent>
+          </Dialog>
+        </CardContent>
+        </Card>
+
+
+      {/* Project team member contacts */}
+      <Card className="bg-card border-border mb-6">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-bold text-sm">Project Team Members</h3>
+              <p className="text-xs text-muted-foreground mt-1">Project contact cards for people working this job.</p>
+            </div>
+            <Button size="sm" type="button" onClick={() => openProjectTeamMemberEditor()} className="h-8 px-3">
+              <Plus className="size-3.5" />
+              Add member
+            </Button>
+          </div>
+
+          {projectTeamMembers === undefined ? (
+            <p className="text-sm text-muted-foreground">Loading project team members...</p>
+          ) : projectTeamMembers.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {projectTeamMembers.map((member) => {
+                const name = [member.firstName, member.lastName].filter(Boolean).join(" ");
+                const smsHref = member.phone ? getSmsHref(member.phone) : "";
+                const emailHref = member.email ? `mailto:${member.email}?subject=${encodeURIComponent(`${project.name || "Project"} location`)}&body=${encodeURIComponent(projectLocationMessage)}` : "";
+                const bidInviteStatus = bidInvitationStatus[String(member._id)];
+                const bidInviteSending = bidInvitationSendingId === String(member._id);
+                return (
+                  <div key={member._id} className="rounded-xl border border-border bg-secondary/20 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{name || "Unnamed team member"}</p>
+                        <p className="text-xs text-muted-foreground truncate">{member.company || "Company not set"}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 space-y-2 text-xs">
+                      {member.phone ? (
+                        <a href={`tel:${member.phone}`} className="flex min-w-0 items-center gap-2 text-muted-foreground hover:text-primary">
+                          <Phone className="size-3.5 shrink-0" />
+                          <span className="truncate">{member.phone}</span>
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-muted-foreground/70">
+                          <Phone className="size-3.5 shrink-0" />
+                          <span>No phone number</span>
+                        </div>
+                      )}
+                      {member.email ? (
+                        <a href={`mailto:${member.email}`} className="flex min-w-0 items-center gap-2 text-muted-foreground hover:text-primary">
+                          <Mail className="size-3.5 shrink-0" />
+                          <span className="truncate">{member.email}</span>
+                        </a>
+                      ) : (
+                        <div className="flex items-center gap-2 text-muted-foreground/70">
+                          <Mail className="size-3.5 shrink-0" />
+                          <span>No email address</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Button size="sm" type="button" variant="outline" className="h-8 justify-start px-2 text-xs" onClick={() => openProjectTeamMemberEditor(member)}>
+                        <Pencil className="size-3.5" />
+                        Edit
+                      </Button>
+                      <Button size="sm" type="button" variant="outline" className="h-8 justify-start px-2 text-xs" onClick={() => removeProjectTeamMember({ id: member._id })}>
+                        <Trash2 className="size-3.5" />
+                        Delete
+                      </Button>
+                      {smsHref ? (
+                        <Button size="sm" type="button" variant="outline" className="h-8 justify-start px-2 text-xs" onClick={() => handleTextProjectLocation(member.phone)}>
+                          <Phone className="size-3.5" />
+                          Text location
+                        </Button>
+                      ) : (
+                        <Button size="sm" type="button" variant="outline" disabled className="h-8 justify-start px-2 text-xs">
+                          <Phone className="size-3.5" />
+                          Text location
+                        </Button>
+                      )}
+                      {emailHref ? (
+                        <Button asChild size="sm" variant="outline" className="h-8 w-full justify-start px-2 text-xs">
+                          <a href={emailHref}>
+                            <Mail className="size-3.5" />
+                            Send email
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button size="sm" type="button" variant="outline" disabled className="h-8 justify-start px-2 text-xs">
+                          <Mail className="size-3.5" />
+                          Send email
+                        </Button>
+                      )}
+                    </div>
+                    <div className="mt-2">
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="secondary"
+                        disabled={!member.email || bidInvitationSendingId !== null}
+                        className="h-8 w-full justify-start px-2 text-xs"
+                        onClick={() => handleInviteToBid(member)}
+                      >
+                        <Mail className="size-3.5" />
+                        {bidInviteSending ? "Sending invite..." : "Invite to Bid"}
+                      </Button>
+                      {bidInviteStatus === "sent" && <p className="mt-1 text-xs text-green-400">Bid invitation sent.</p>}
+                      {bidInviteStatus === "failed" && <p className="mt-1 text-xs text-red-400">Bid invitation failed.</p>}
+                      {!member.email && <p className="mt-1 text-xs text-muted-foreground">Add an email to send bid invites.</p>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No project team members added yet.</p>
+          )}
+
+          <Dialog open={projectTeamOpen} onOpenChange={(open) => {
+            setProjectTeamOpen(open);
+            if (!open) {
+              setEditingProjectTeamMember(null);
+              setProjectTeamForm(emptyProjectTeamMemberForm);
+              setProjectTeamError(null);
+            }
+          }}>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{editingProjectTeamMember ? "Edit Project Team Member" : "Add Project Team Member"}</DialogTitle>
+                <DialogDescription>Create a project contact card with the key team member details.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="project-team-first-name">First name</Label>
+                  <Input id="project-team-first-name" value={projectTeamForm.firstName} onChange={(e) => updateProjectTeamField("firstName", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="project-team-last-name">Last name</Label>
+                  <Input id="project-team-last-name" value={projectTeamForm.lastName} onChange={(e) => updateProjectTeamField("lastName", e.target.value)} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="project-team-company">Company</Label>
+                  <Input id="project-team-company" value={projectTeamForm.company} onChange={(e) => updateProjectTeamField("company", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="project-team-phone">Contact phone Number</Label>
+                  <Input id="project-team-phone" value={projectTeamForm.phone} onChange={(e) => updateProjectTeamField("phone", e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="project-team-email">Email address</Label>
+                  <Input id="project-team-email" type="email" value={projectTeamForm.email} onChange={(e) => updateProjectTeamField("email", e.target.value)} />
+                </div>
+              </div>
+              {projectTeamError && <p className="text-sm text-destructive">{projectTeamError}</p>}
+              <DialogFooter>
+                <Button type="button" variant="outline" disabled={projectTeamSaving} onClick={() => setProjectTeamOpen(false)}>Cancel</Button>
+                <Button type="button" disabled={projectTeamSaving} onClick={handleSaveProjectTeamMember}>{projectTeamSaving ? "Saving..." : editingProjectTeamMember ? "Update Team Member" : "Save Team Member"}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </CardContent>
+      </Card>
+
+      {params.id && (
+        <SpecIntelligenceCommandCenter projectId={params.id as Id<"projects">} />
+      )}
+
+      {user?.companyId && params.id && (
+        <SpecDNAPanel
+          companyId={user.companyId}
+          projectId={params.id as Id<"projects">}
+          userName={user.name}
+          projectRole={project.projectRole}
+        />
+      )}
+
+      {params.id && (
+        <ScheduleIntelligencePanel projectId={params.id as Id<"projects">} />
+      )}
+
+      {params.id && (
+        <EstimateRequirementsPanel projectId={params.id as Id<"projects">} />
+      )}
+
+      {params.id && (
+        <BillingOpsBooksPanel projectId={params.id as Id<"projects">} />
+      )}
+
       {/* PM Weather Monitor */}
       <Card className="bg-gradient-to-r from-sky-500/5 to-blue-500/5 border-sky-500/30 border-l-4 border-l-sky-500 mb-6">
         <CardContent className="p-4">
@@ -432,43 +1168,6 @@ function ProjectDashboardContent() {
 
       {/* Project record essentials */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 mb-6">
-        <Card className="bg-card border-border lg:col-span-2">
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h3 className="font-bold text-sm">Project Details</h3>
-                <p className="text-xs text-muted-foreground mt-1">Location and baseline job info</p>
-              </div>
-              {project.status && <Badge variant="outline" className="text-[10px]">{project.status}</Badge>}
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              {[
-                ["Address", locationText],
-                ["Manager", project.projectManager],
-                ["Contractor", project.contractor],
-                ["Type", project.type],
-                ["Start", project.startDate],
-                ["End", project.endDate],
-              ].filter(([, value]) => value).map(([label, value]) => (
-                <div key={label as string} className="min-w-0">
-                  <div className="text-[10px] uppercase text-muted-foreground">{label as string}</div>
-                  <div className="font-medium truncate">{value as string}</div>
-                </div>
-              ))}
-              {!locationText && !project.projectManager && !project.contractor && !project.type && (
-                <p className="text-sm text-muted-foreground col-span-2">No project details recorded yet.</p>
-              )}
-            </div>
-            {locationText && (
-              <div className="flex flex-wrap gap-2 mt-4">
-                <a href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                  <Button size="sm" variant="outline" type="button">🧭 Get Directions</Button>
-                </a>
-                <Button size="sm" variant="outline" type="button" onClick={shareLocation}>📤 Share Location</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         <Card className="bg-card border-border">
           <CardContent className="p-4">
@@ -670,7 +1369,7 @@ function ProjectDashboardContent() {
         <ModuleCard icon="✅" title="Punch List" href="/punch-list" alert={data.punch.overdue > 0 ? `${data.punch.overdue} overdue` : undefined} stats={[{ label: "Open", value: data.punch.open, color: data.punch.open > 0 ? "text-yellow-400" : "" }, { label: "Complete", value: data.punch.complete, color: "text-green-400" }]} />
         <ModuleCard icon="🔄" title="Change Orders" href="/change-orders" alert={data.changeOrders.pending > 0 ? `${data.changeOrders.pending} pending` : undefined} stats={[{ label: "Pending", value: data.changeOrders.pending, color: "text-yellow-400" }, { label: "Approved", value: data.changeOrders.approved, color: "text-green-400" }]} />
         <ModuleCard icon="🦺" title="Safety" href="/safety" alert={data.safety.critical > 0 ? `${data.safety.critical} critical` : undefined} stats={[{ label: "Open", value: data.safety.open, color: data.safety.open > 0 ? "text-red-400" : "" }, { label: "Total", value: data.safety.total }]} />
-        <ModuleCard icon="❓" title="RFIs" href="/rfis" alert={data.rfis.overdue > 0 ? `${data.rfis.overdue} overdue` : undefined} stats={[{ label: "Open", value: data.rfis.open, color: data.rfis.open > 0 ? "text-purple-400" : "" }, { label: "Total", value: data.rfis.total }]} />
+        <ModuleCard icon="❓" title="RFIs" href={`/rfis?projectId=${params.id}`} alert={data.rfis.overdue > 0 ? `${data.rfis.overdue} overdue` : undefined} stats={[{ label: "Open", value: data.rfis.open, color: data.rfis.open > 0 ? "text-purple-400" : "" }, { label: "Total", value: data.rfis.total }]} />
         <ModuleCard icon="📋" title="Submittals" href="/submittals" stats={[{ label: "Pending", value: data.submittals.pending, color: data.submittals.pending > 0 ? "text-yellow-400" : "" }, { label: "Total", value: data.submittals.total }]} />
         <ModuleCard icon="⏱️" title="Time" href="/time-tracking" stats={[{ label: "Hours", value: data.time.totalHours.toFixed(0) }, { label: "Cost", value: fmt(data.time.totalCost), color: "text-green-400" }]} />
         <ModuleCard icon="💰" title="Budget" href="/budget" stats={[{ label: "Budgeted", value: fmt(data.budget.budgeted) }, { label: "Actual", value: fmt(data.budget.actual), color: data.budget.actual > data.budget.budgeted ? "text-red-400" : "text-green-400" }]} />

@@ -125,14 +125,14 @@ export const listEstimateItems = query({
 });
 
 export const createEstimateItem = mutation({
-  args: { companyId: v.id("companies"), estimateId: v.id("estimates"), section: v.optional(v.string()), description: v.string(), quantity: v.optional(v.number()), unit: v.optional(v.string()), unitCost: v.optional(v.number()), taxPct: v.optional(v.number()), costItemId: v.optional(v.id("costItems")), notes: v.optional(v.string()) },
+  args: { companyId: v.id("companies"), estimateId: v.id("estimates"), section: v.optional(v.string()), description: v.string(), quantity: v.optional(v.number()), unit: v.optional(v.string()), unitCost: v.optional(v.number()), taxPct: v.optional(v.number()), costItemId: v.optional(v.id("costItems")), costCode: v.optional(v.string()), assemblyId: v.optional(v.string()), assemblyName: v.optional(v.string()), duplicateFingerprint: v.optional(v.string()), notes: v.optional(v.string()) },
   handler: async (ctx, args) => {
     return await ctx.db.insert("estimateItems", args);
   },
 });
 
 export const updateEstimateItem = mutation({
-  args: { id: v.id("estimateItems"), section: v.optional(v.string()), description: v.optional(v.string()), quantity: v.optional(v.number()), unit: v.optional(v.string()), unitCost: v.optional(v.number()), taxPct: v.optional(v.number()), notes: v.optional(v.string()) },
+  args: { id: v.id("estimateItems"), section: v.optional(v.string()), description: v.optional(v.string()), quantity: v.optional(v.number()), unit: v.optional(v.string()), unitCost: v.optional(v.number()), taxPct: v.optional(v.number()), costCode: v.optional(v.string()), assemblyId: v.optional(v.string()), assemblyName: v.optional(v.string()), duplicateFingerprint: v.optional(v.string()), notes: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const cleaned = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
@@ -145,8 +145,66 @@ export const deleteEstimateItem = mutation({
   handler: async (ctx, args) => { await ctx.db.delete(args.id); },
 });
 
+// ===== ESTIMATE SPEC BOOKS =====
+export const listEstimateSpecBooks = query({
+  args: { estimateId: v.id("estimates") },
+  handler: async (ctx, args) => {
+    return await ctx.db.query("estimateSpecBooks").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId)).collect();
+  },
+});
+
+function compactServerSpecBook(raw: any) {
+  const now = new Date().toISOString();
+  const sections = Array.isArray(raw?.sections) ? raw.sections : [];
+  return {
+    clientBookId: raw?.clientBookId ? String(raw.clientBookId) : raw?.id ? String(raw.id) : undefined,
+    name: String(raw?.name || raw?.fileName || "Spec Book"),
+    fileName: raw?.fileName ? String(raw.fileName) : undefined,
+    pageCount: typeof raw?.pageCount === "number" ? raw.pageCount : undefined,
+    status: raw?.status ? String(raw.status) : "indexed",
+    sections,
+    storageNote: raw?.storageNote ? String(raw.storageNote) : undefined,
+    createdAt: raw?.createdAt ? String(raw.createdAt) : now,
+    updatedAt: now,
+  };
+}
+
+export const saveEstimateSpecBooks = mutation({
+  args: { companyId: v.id("companies"), estimateId: v.id("estimates"), books: v.array(v.any()) },
+  handler: async (ctx, args) => {
+    const estimate = await ctx.db.get(args.estimateId);
+    if (!estimate || estimate.companyId !== args.companyId) throw new Error("Estimate not found for company");
+
+    const existing = await ctx.db.query("estimateSpecBooks").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId)).collect();
+    for (const book of existing) await ctx.db.delete(book._id);
+
+    for (const raw of args.books) {
+      const book = compactServerSpecBook(raw);
+      await ctx.db.insert("estimateSpecBooks", {
+        companyId: args.companyId,
+        estimateId: args.estimateId,
+        ...book,
+      });
+    }
+    return await ctx.db.query("estimateSpecBooks").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId)).collect();
+  },
+});
+
+export const deleteEstimateSpecBook = mutation({
+  args: { estimateId: v.id("estimates"), id: v.optional(v.id("estimateSpecBooks")), clientBookId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const books = await ctx.db.query("estimateSpecBooks").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId)).collect();
+    for (const book of books) {
+      if ((args.id && book._id === args.id) || (args.clientBookId && book.clientBookId === args.clientBookId)) {
+        await ctx.db.delete(book._id);
+      }
+    }
+    return await ctx.db.query("estimateSpecBooks").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId)).collect();
+  },
+});
+
 export const bulkCreateEstimateItems = mutation({
-  args: { items: v.array(v.object({ companyId: v.id("companies"), estimateId: v.id("estimates"), section: v.optional(v.string()), description: v.string(), quantity: v.optional(v.number()), unit: v.optional(v.string()), unitCost: v.optional(v.number()), taxPct: v.optional(v.number()), notes: v.optional(v.string()) })) },
+  args: { items: v.array(v.object({ companyId: v.id("companies"), estimateId: v.id("estimates"), section: v.optional(v.string()), description: v.string(), quantity: v.optional(v.number()), unit: v.optional(v.string()), unitCost: v.optional(v.number()), taxPct: v.optional(v.number()), costCode: v.optional(v.string()), assemblyId: v.optional(v.string()), assemblyName: v.optional(v.string()), duplicateFingerprint: v.optional(v.string()), notes: v.optional(v.string()) })) },
   handler: async (ctx, args) => {
     const ids = [];
     for (const item of args.items) {
@@ -154,6 +212,303 @@ export const bulkCreateEstimateItems = mutation({
     }
     return ids;
   },
+});
+
+export const listProjectEstimates = query({
+  args: { projectId: v.id("projects") },
+  handler: async (ctx, args) => {
+    return await ctx.db.query("estimates").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect();
+  },
+});
+
+function inferEstimateUnit(text?: string) {
+  const value = String(text || "").toLowerCase();
+  if (/cubic yard|\bcy\b|cu yd/.test(value)) return "CY";
+  if (/square foot|sq ft|\bsf\b/.test(value)) return "SF";
+  if (/linear foot|lineal foot|lin ft|\blf\b/.test(value)) return "LF";
+  if (/ton|tons/.test(value)) return "TON";
+  if (/hour|labor hour|\bhr\b/.test(value)) return "HR";
+  if (/each|\bea\b|unit/.test(value)) return "EA";
+  if (/lump sum|allowance|complete|all work/.test(value)) return "LS";
+  return "LS";
+}
+
+function normalizeSuggestionText(value?: string) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function inferEstimateSection(source: any, text: string) {
+  const explicit = source.trade || source.phase || source.requirementType || source.ruleType;
+  if (explicit) return String(explicit);
+  if (/concrete|rebar|form|footing|slab/i.test(text)) return "Concrete";
+  if (/steel|metal|joist|deck|beam/i.test(text)) return "Structural Steel";
+  if (/electrical|conduit|panel|charger|ev/i.test(text)) return "Electrical";
+  if (/asphalt|paving|roadway|traffic/i.test(text)) return "Site / Civil";
+  if (/plumb|pipe|water|sanitary/i.test(text)) return "Plumbing";
+  return "Spec Scope";
+}
+
+function inferCostCode(source: any, text: string) {
+  const section = String(source.sourceSpecSection || "").replace(/\s+/g, "");
+  if (/^\d{5,6}$/.test(section)) return section;
+  if (/concrete|rebar|form|footing|slab/i.test(text)) return "03-CONCRETE";
+  if (/steel|metal|joist|deck|beam/i.test(text)) return "05-METALS";
+  if (/electrical|conduit|panel|charger|ev/i.test(text)) return "26-ELECTRICAL";
+  if (/asphalt|paving|roadway|traffic/i.test(text)) return "32-SITE";
+  if (/subcontract|by others/i.test(text)) return "SUBCONTRACT";
+  if (/labor|install/i.test(text)) return "LABOR";
+  if (/material|product|furnish/i.test(text)) return "MATERIAL";
+  return "SPEC-SCOPE";
+}
+
+function tokenScore(text: string, candidate: string) {
+  const sourceTokens = new Set(normalizeSuggestionText(text).split(" ").filter((word) => word.length > 3));
+  const candidateTokens = normalizeSuggestionText(candidate).split(" ").filter((word) => word.length > 3);
+  if (!sourceTokens.size || !candidateTokens.length) return 0;
+  return candidateTokens.filter((word) => sourceTokens.has(word)).length / Math.max(candidateTokens.length, 1);
+}
+
+function matchCatalogItem(text: string, costItems: any[]) {
+  const scored = costItems
+    .map((item) => ({ item, score: tokenScore(text, [item.name, item.category, item.description, item.unit].filter(Boolean).join(" ")) }))
+    .filter((entry) => entry.score >= 0.28)
+    .sort((a, b) => b.score - a.score);
+  const match = scored[0]?.item;
+  if (!match) return {};
+  return {
+    costItemId: match._id,
+    catalogMatchName: match.name,
+    catalogMatchCategory: match.category,
+    catalogMatchScore: scored[0].score,
+    unitCost: typeof match.unitCost === "number" ? match.unitCost : 0,
+    unit: match.unit,
+  };
+}
+
+function matchAssembly(text: string, assemblies: any[]) {
+  const scored = assemblies
+    .map((assembly) => ({ assembly, score: tokenScore(text, [assembly.name, assembly.description].filter(Boolean).join(" ")) }))
+    .filter((entry) => entry.score >= 0.28)
+    .sort((a, b) => b.score - a.score);
+  const match = scored[0]?.assembly;
+  if (!match) return {};
+  return {
+    assemblyId: String(match._id),
+    assemblyName: match.name,
+    assemblyMatchScore: scored[0].score,
+  };
+}
+
+function suggestionFingerprint(value: any) {
+  return [
+    value.sourceType,
+    value.sourceRequirementId || value.sourcePaymentRuleId || "",
+    normalizeSuggestionText(value.section),
+    normalizeSuggestionText(value.description).split(" ").slice(0, 12).join(" "),
+    value.unit || "",
+    value.costCode || "",
+  ].join(":");
+}
+
+function suggestionDescription(source: any) {
+  return source.scopeAssumption || source.measurementLanguage || source.payItemNotes || source.description || source.title || "Suggested line item";
+}
+
+function isDuplicateSuggestion(suggestion: any, existingItems: any[]) {
+  const fingerprint = suggestionFingerprint(suggestion);
+  return existingItems.some((item) => {
+    if (item.duplicateFingerprint && item.duplicateFingerprint === fingerprint) return true;
+    if (suggestion.sourceRequirementId && item.sourceRequirementId === suggestion.sourceRequirementId) return true;
+    if (suggestion.sourcePaymentRuleId && item.sourcePaymentRuleId === suggestion.sourcePaymentRuleId) return true;
+    const sameDescription = normalizeSuggestionText(item.description) === normalizeSuggestionText(suggestion.description);
+    const sameSection = normalizeSuggestionText(item.section) === normalizeSuggestionText(suggestion.section);
+    const sameUnit = String(item.unit || "") === String(suggestion.unit || "");
+    return sameDescription && (sameSection || sameUnit);
+  });
+}
+
+function enrichEstimateSuggestion(source: any, base: any, text: string, costItems: any[], assemblies: any[], existingItems: any[]) {
+  const catalog = matchCatalogItem(text, costItems);
+  const assembly = matchAssembly(text, assemblies);
+  const suggestion = {
+    ...base,
+    section: inferEstimateSection(source, text),
+    costCode: inferCostCode(source, text),
+    costItemId: catalog.costItemId ? String(catalog.costItemId) : undefined,
+    catalogMatchName: catalog.catalogMatchName,
+    catalogMatchCategory: catalog.catalogMatchCategory,
+    catalogMatchScore: catalog.catalogMatchScore,
+    assemblyId: assembly.assemblyId,
+    assemblyName: assembly.assemblyName,
+    assemblyMatchScore: assembly.assemblyMatchScore,
+    unit: catalog.unit || base.unit,
+    unitCost: catalog.unitCost ?? base.unitCost,
+  };
+  const duplicateFingerprint = suggestionFingerprint(suggestion);
+  return {
+    ...suggestion,
+    duplicateFingerprint,
+    duplicateReason: isDuplicateSuggestion({ ...suggestion, duplicateFingerprint }, existingItems) ? "Likely duplicate of an existing estimate item" : undefined,
+  };
+}
+
+function buildEstimateItemSuggestions(requirements: any[], paymentRules: any[], existingItems: any[] = [], costItems: any[] = [], assemblies: any[] = []) {
+  const suggestions: any[] = [];
+
+  for (const requirement of requirements) {
+    if (requirement.status === "inactive" || requirement.exclusion) continue;
+    const text = [requirement.title, requirement.description, requirement.scopeAssumption, requirement.allowance, requirement.alternate].filter(Boolean).join(" ");
+    if (!text.trim()) continue;
+    const description = requirement.allowance
+      ? `Allowance - ${requirement.title}`
+      : requirement.alternate
+        ? `Alternate - ${requirement.title}`
+        : requirement.title;
+    const suggestion = enrichEstimateSuggestion(requirement, {
+      sourceType: "estimate_requirement",
+      sourceRequirementId: String(requirement._id),
+      description,
+      quantity: 1,
+      unit: inferEstimateUnit(text),
+      unitCost: 0,
+      taxPct: 0,
+      notes: suggestionDescription(requirement),
+      measurementBasis: requirement.scopeAssumption || requirement.description || requirement.allowance || requirement.alternate,
+      sourceSpecSection: requirement.sourceSpecSection,
+      sourceQuote: requirement.sourceQuote,
+      suggestionConfidence: requirement.sourceConfidence ?? 0.7,
+    }, text, costItems, assemblies, existingItems);
+    if (!suggestion.duplicateReason) suggestions.push(suggestion);
+  }
+
+  for (const rule of paymentRules) {
+    if (rule.status === "inactive" || rule.status === "resolved") continue;
+    const text = [rule.title, rule.description, rule.measurementLanguage, rule.unitPriceRule, rule.payItemNotes].filter(Boolean).join(" ");
+    if (!text.trim()) continue;
+    const description = rule.payItemNotes ? rule.payItemNotes.slice(0, 140) : rule.title;
+    const suggestion = enrichEstimateSuggestion(rule, {
+      sourceType: "payment_rule",
+      sourcePaymentRuleId: String(rule._id),
+      description,
+      quantity: 1,
+      unit: inferEstimateUnit(text),
+      unitCost: 0,
+      taxPct: 0,
+      notes: suggestionDescription(rule),
+      measurementBasis: rule.measurementLanguage || rule.unitPriceRule || rule.description,
+      sourceSpecSection: rule.sourceSpecSection,
+      sourceQuote: rule.sourceQuote,
+      suggestionConfidence: rule.sourceConfidence ?? 0.72,
+    }, text, costItems, assemblies, existingItems);
+    if (!suggestion.duplicateReason) suggestions.push(suggestion);
+  }
+
+  return suggestions.slice(0, 40);
+}
+
+export const listEstimateItemSuggestions = query({
+  args: { projectId: v.id("projects"), estimateId: v.optional(v.id("estimates")) },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    const requirements = await ctx.db.query("estimateRequirements").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect();
+    const paymentRules = await ctx.db.query("paymentRules").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect();
+    const existingItems = args.estimateId ? await ctx.db.query("estimateItems").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId!)).collect() : [];
+    const costItems = project?.companyId ? await ctx.db.query("costItems").withIndex("by_company", q => q.eq("companyId", project.companyId)).collect() : [];
+    const assemblies = project?.companyId ? await ctx.db.query("estimateAssemblies").withIndex("by_company", q => q.eq("companyId", project.companyId)).collect() : [];
+    return buildEstimateItemSuggestions(requirements, paymentRules, existingItems, costItems, assemblies);
+  },
+});
+
+export const createSuggestedEstimateItems = mutation({
+  args: {
+    companyId: v.id("companies"),
+    projectId: v.id("projects"),
+    estimateId: v.id("estimates"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const requirements = await ctx.db.query("estimateRequirements").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect();
+    const paymentRules = await ctx.db.query("paymentRules").withIndex("by_project", q => q.eq("projectId", args.projectId)).collect();
+    const existingItems = await ctx.db.query("estimateItems").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId)).collect();
+    const costItems = await ctx.db.query("costItems").withIndex("by_company", q => q.eq("companyId", args.companyId)).collect();
+    const assemblies = await ctx.db.query("estimateAssemblies").withIndex("by_company", q => q.eq("companyId", args.companyId)).collect();
+    const suggestions = buildEstimateItemSuggestions(requirements, paymentRules, existingItems, costItems, assemblies).slice(0, args.limit || 12);
+    const ids = [];
+    for (const suggestion of suggestions) {
+      ids.push(await ctx.db.insert("estimateItems", {
+        companyId: args.companyId,
+        estimateId: args.estimateId,
+        section: suggestion.section,
+        description: suggestion.description,
+        quantity: suggestion.quantity,
+        unit: suggestion.unit,
+        unitCost: suggestion.unitCost,
+        taxPct: suggestion.taxPct,
+        costItemId: suggestion.costItemId as any,
+        costCode: suggestion.costCode,
+        assemblyId: suggestion.assemblyId,
+        assemblyName: suggestion.assemblyName,
+        duplicateFingerprint: suggestion.duplicateFingerprint,
+        notes: [`Measurement basis: ${suggestion.measurementBasis || "review spec"}`, suggestion.notes].filter(Boolean).join("\n\n"),
+        sourceType: suggestion.sourceType,
+        sourceRequirementId: suggestion.sourceRequirementId,
+        sourcePaymentRuleId: suggestion.sourcePaymentRuleId,
+        sourceSpecSection: suggestion.sourceSpecSection,
+        sourceQuote: suggestion.sourceQuote,
+        suggestionConfidence: suggestion.suggestionConfidence,
+      } as any));
+    }
+    return { created: ids.length, ids };
+  },
+});
+
+// ===== ESTIMATE REQUIREMENTS =====
+export const listEstimateRequirements = query({
+  args: { projectId: v.optional(v.id("projects")), estimateId: v.optional(v.id("estimates")) },
+  handler: async (ctx, args) => {
+    if (args.estimateId) {
+      return await ctx.db.query("estimateRequirements").withIndex("by_estimate", q => q.eq("estimateId", args.estimateId!)).collect();
+    }
+    if (args.projectId) {
+      return await ctx.db.query("estimateRequirements").withIndex("by_project", q => q.eq("projectId", args.projectId!)).collect();
+    }
+    return [];
+  },
+});
+
+export const createEstimateRequirement = mutation({
+  args: {
+    companyId: v.id("companies"), projectId: v.id("projects"), estimateId: v.optional(v.id("estimates")),
+    title: v.string(), requirementType: v.optional(v.string()), description: v.optional(v.string()),
+    allowance: v.optional(v.string()), alternate: v.optional(v.string()), exclusion: v.optional(v.string()),
+    wageRule: v.optional(v.string()), bondRule: v.optional(v.string()), taxRule: v.optional(v.string()), dbeRule: v.optional(v.string()),
+    liquidatedDamagesRule: v.optional(v.string()), scopeAssumption: v.optional(v.string()),
+    trade: v.optional(v.string()), phase: v.optional(v.string()), priority: v.optional(v.string()), status: v.optional(v.string()), projectRole: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("estimateRequirements", { ...args, status: args.status || "active", createdAt: Date.now() });
+  },
+});
+
+export const updateEstimateRequirement = mutation({
+  args: {
+    id: v.id("estimateRequirements"), estimateId: v.optional(v.id("estimates")),
+    title: v.optional(v.string()), requirementType: v.optional(v.string()), description: v.optional(v.string()),
+    allowance: v.optional(v.string()), alternate: v.optional(v.string()), exclusion: v.optional(v.string()),
+    wageRule: v.optional(v.string()), bondRule: v.optional(v.string()), taxRule: v.optional(v.string()), dbeRule: v.optional(v.string()),
+    liquidatedDamagesRule: v.optional(v.string()), scopeAssumption: v.optional(v.string()),
+    trade: v.optional(v.string()), phase: v.optional(v.string()), priority: v.optional(v.string()), status: v.optional(v.string()), projectRole: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    const cleaned = Object.fromEntries(Object.entries(updates).filter(([_, v]) => v !== undefined));
+    await ctx.db.patch(id, cleaned);
+  },
+});
+
+export const deleteEstimateRequirement = mutation({
+  args: { id: v.id("estimateRequirements") },
+  handler: async (ctx, args) => { await ctx.db.delete(args.id); },
 });
 
 // ===== CREWS & ASSEMBLIES =====
