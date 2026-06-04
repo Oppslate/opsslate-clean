@@ -121,6 +121,24 @@ const INSPIRATION_LINES = [
   "Talent builds the estimate. Discipline wins the bid.",
 ];
 
+const COMMON_CONSTRUCTION_PHASES = [
+  "Preconstruction",
+  "Mobilization",
+  "Survey Operations",
+  "Site Preparation",
+  "Demolition",
+  "Earthwork",
+  "Underground Utilities",
+  "Storm Drainage",
+  "Concrete",
+  "Asphalt Paving",
+  "Electrical",
+  "Site Lighting",
+  "Landscaping",
+  "Restoration",
+  "Closeout",
+];
+
 function statusLabel(status?: string) {
   const clean = String(status || "draft").trim();
   if (!clean) return "Draft";
@@ -309,6 +327,67 @@ function CockpitMetricCard({ label, value, sub, tone = "orange" }: { label: stri
   );
 }
 
+function SectionPhaseModal({
+  open,
+  phaseOptions,
+  selectedPhase,
+  customPhase,
+  onPhaseChange,
+  onCustomPhaseChange,
+  onCancel,
+  onContinue,
+}: {
+  open: boolean;
+  phaseOptions: string[];
+  selectedPhase: string;
+  customPhase: string;
+  onPhaseChange: (value: string) => void;
+  onCustomPhaseChange: (value: string) => void;
+  onCancel: () => void;
+  onContinue: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-4xl rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <h2 className="text-2xl font-black text-white">Add Section / Phase</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Choose a common construction phase or add your own. Custom phases are saved for future dropdowns.</p>
+        <div className="mt-5">
+          <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Section / Phase Type</label>
+          <select
+            value={selectedPhase}
+            onChange={(event) => onPhaseChange(event.target.value)}
+            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+          >
+            {phaseOptions.map((phase) => (
+              <option key={phase} value={phase}>{phase}</option>
+            ))}
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        {selectedPhase === "Other" && (
+          <div className="mt-4">
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Custom Phase Name</label>
+            <input
+              value={customPhase}
+              onChange={(event) => onCustomPhaseChange(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              placeholder="Type a phase name..."
+            />
+          </div>
+        )}
+        <div className="mt-3 text-xs text-muted-foreground">
+          Estimate sections should match schedule phases so bid scope can flow into milestones and tasks later.
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={onContinue} disabled={selectedPhase === "Other" && !customPhase.trim()}>Continue</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProductionRateBreakdownView({
   estimate,
   rows,
@@ -454,6 +533,10 @@ function EstimatingWorkspace() {
 
   const [activeTool, setActiveTool] = useState<EstimatingToolKey>("cockpit");
   const [productionMenuOpen, setProductionMenuOpen] = useState(false);
+  const [sectionPhaseModalOpen, setSectionPhaseModalOpen] = useState(false);
+  const [customPhaseOptions, setCustomPhaseOptions] = useState<string[]>([]);
+  const [selectedPhaseType, setSelectedPhaseType] = useState(COMMON_CONSTRUCTION_PHASES[0]);
+  const [customPhaseName, setCustomPhaseName] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const projectFilteredEstimates = useMemo(() => {
@@ -536,10 +619,23 @@ function EstimatingWorkspace() {
   const submittedOrClosed = projectFilteredEstimates.filter((estimate) => ["submitted", "won", "lost"].includes(String(estimate.status || "").toLowerCase())).length;
   const winRate = submittedOrClosed ? Math.round((wonBids / submittedOrClosed) * 100) : 0;
   const inspirationLine = INSPIRATION_LINES[projectFilteredEstimates.length % INSPIRATION_LINES.length];
+  const phaseOptions = useMemo(() => {
+    return [...new Set([...COMMON_CONSTRUCTION_PHASES, ...customPhaseOptions])].sort((a, b) => a.localeCompare(b));
+  }, [customPhaseOptions]);
 
   useEffect(() => {
     setSignatureProfile(loadSignatureProfile(user));
   }, [user?._id, user?.email, user?.name]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = JSON.parse(localStorage.getItem("opsslate_estimate_custom_phases") || "[]");
+      if (Array.isArray(saved)) setCustomPhaseOptions(saved.filter((phase) => typeof phase === "string" && phase.trim()));
+    } catch {
+      setCustomPhaseOptions([]);
+    }
+  }, []);
 
   function toggleItem(id: string, checked: boolean) {
     setSelectedItemIds((current) => checked ? [...new Set([...current, id])] : current.filter((itemId) => itemId !== id));
@@ -721,13 +817,27 @@ function EstimatingWorkspace() {
     });
   }
 
+  function saveSectionPhase() {
+    const nextPhase = selectedPhaseType === "Other" ? customPhaseName.trim() : selectedPhaseType;
+    if (!nextPhase) return;
+    if (selectedPhaseType === "Other") {
+      const nextOptions = [...new Set([...customPhaseOptions, nextPhase])].sort((a, b) => a.localeCompare(b));
+      setCustomPhaseOptions(nextOptions);
+      if (typeof window !== "undefined") localStorage.setItem("opsslate_estimate_custom_phases", JSON.stringify(nextOptions));
+      setSelectedPhaseType(nextPhase);
+      setCustomPhaseName("");
+    }
+    setSectionPhaseModalOpen(false);
+  }
+
   if (!user) return null;
   const activeToolConfig = ESTIMATING_TOOLS.find((tool) => tool.key === activeTool) || ESTIMATING_TOOLS[0];
   const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
   const bidActionToolbar = (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/65 p-3">
       <button type="button" className={bidActionButtonClass} onClick={() => window.history.back()}>← Back</button>
-      <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setActiveTool("estimates")}>+ Section</button>
+      <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
+      <button type="button" className={`${bidActionButtonClass} border-blue-500/35 bg-blue-500/80 text-white hover:bg-blue-500`} onClick={() => setActiveTool("calendar")}>+ Milestone</button>
       <button type="button" className={`${bidActionButtonClass} border-green-500/35 bg-green-500/85 text-white hover:bg-green-500`} onClick={() => setActiveTool("estimates")}>+ Add Item</button>
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cost")}>+ From Cost DB</button>
       <button type="button" className={bidActionButtonClass} onClick={() => window.print()}>Print Bid</button>
@@ -798,6 +908,16 @@ function EstimatingWorkspace() {
       <EstimatorCommandCenter activeTool={activeTool} onSelect={setActiveTool} />
       <main className="min-w-0 flex-1 space-y-5">
         {bidActionToolbar}
+        <SectionPhaseModal
+          open={sectionPhaseModalOpen}
+          phaseOptions={phaseOptions}
+          selectedPhase={selectedPhaseType}
+          customPhase={customPhaseName}
+          onPhaseChange={setSelectedPhaseType}
+          onCustomPhaseChange={setCustomPhaseName}
+          onCancel={() => setSectionPhaseModalOpen(false)}
+          onContinue={saveSectionPhase}
+        />
         <div className="xl:hidden">
           <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimator Command Center</label>
           <select
