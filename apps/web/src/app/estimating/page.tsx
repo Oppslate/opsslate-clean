@@ -73,20 +73,180 @@ function itemLabel(item: Record<string, unknown>) {
   return [item.section, item.description].filter(Boolean).join(" - ") || "Estimate item";
 }
 
+type EstimatingToolKey =
+  | "cockpit"
+  | "estimates"
+  | "rfq"
+  | "takeoff"
+  | "cost"
+  | "materials"
+  | "labor"
+  | "equipment"
+  | "history"
+  | "risk"
+  | "war-room"
+  | "calendar"
+  | "analytics"
+  | "settings";
+
+const ESTIMATING_TOOLS: Array<{ key: EstimatingToolKey; label: string; icon: string; description?: string }> = [
+  { key: "cockpit", label: "Dashboard", icon: "DB", description: "Bid-first command center" },
+  { key: "estimates", label: "Estimates", icon: "EST", description: "Bid portfolio and estimate list" },
+  { key: "rfq", label: "RFQ Desk", icon: "RFQ", description: "Draft, compare, and award quote packages" },
+  { key: "takeoff", label: "Takeoff Handoff", icon: "QTY", description: "Quantities and proof entering the bid" },
+  { key: "cost", label: "Cost Database", icon: "COST", description: "Company cost health" },
+  { key: "materials", label: "Materials", icon: "MAT", description: "Shared material costs" },
+  { key: "labor", label: "Labor", icon: "LAB", description: "Shared labor costs" },
+  { key: "equipment", label: "Equipment", icon: "EQ", description: "Shared equipment costs" },
+  { key: "history", label: "Historical Bid Database", icon: "HIST", description: "Past bid intelligence" },
+  { key: "risk", label: "Risk Database", icon: "RISK", description: "Known risk language and patterns" },
+  { key: "war-room", label: "Bid War Room", icon: "WAR", description: "Bid day pressure and checklist" },
+  { key: "calendar", label: "Bid Calendar", icon: "CAL", description: "Due dates and bid milestones" },
+  { key: "analytics", label: "Win/Loss Analytics", icon: "WIN", description: "Win rate and lessons learned" },
+  { key: "settings", label: "Settings", icon: "SET", description: "Estimator preferences" },
+];
+
+const INSPIRATION_LINES = [
+  "Anyone can do a takeoff and calculate a markup. OpsSlate predicts whether the number can survive.",
+  "The bid is where the money is made or lost.",
+  "Protect the margin before the contract exists.",
+  "Find the miss before bid day finds it for you.",
+  "Do not tell me the price is close. Show me why it survives.",
+  "Talent builds the estimate. Discipline wins the bid.",
+];
+
+function statusLabel(status?: string) {
+  const clean = String(status || "draft").trim();
+  if (!clean) return "Draft";
+  return clean.charAt(0).toUpperCase() + clean.slice(1).replace(/[-_]/g, " ");
+}
+
+function estimateTotal(items: Array<Record<string, unknown>> = []) {
+  return items.reduce((sum, item) => {
+    const quantity = Number(item.quantity || 0) || 0;
+    const unitCost = Number(item.unitCost || 0) || 0;
+    const taxPct = Number(item.taxPct || 0) || 0;
+    return sum + quantity * unitCost * (1 + taxPct / 100);
+  }, 0);
+}
+
+function rfqCounts(rfqs: Array<Record<string, unknown>> = []) {
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    total: rfqs.length,
+    draft: rfqs.filter((rfq) => String(rfq.status || "").toLowerCase() === "draft").length,
+    open: rfqs.filter((rfq) => !["received", "accepted"].includes(String(rfq.status || "").toLowerCase())).length,
+    overdue: rfqs.filter((rfq) => String(rfq.dueDate || "") && String(rfq.dueDate || "") < today && !["received", "accepted"].includes(String(rfq.status || "").toLowerCase())).length,
+    received: rfqs.filter((rfq) => ["received", "accepted"].includes(String(rfq.status || "").toLowerCase())).length,
+  };
+}
+
+function scheduleReadinessScore(items: Array<Record<string, unknown>> = []) {
+  if (!items.length) return 0;
+  const ready = items.filter((item) => {
+    const text = `${item.section || ""} ${item.notes || ""} ${item.sourceSpecSection || ""}`.toLowerCase();
+    return Boolean(item.section || item.sourceSpecSection || text.includes("phase") || text.includes("milestone") || text.includes("lead time"));
+  }).length;
+  return Math.round((ready / items.length) * 100);
+}
+
+function predictiveSignalsForEstimate({
+  estimate,
+  items,
+  rfqSummary,
+  costItems,
+}: {
+  estimate?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  rfqSummary: ReturnType<typeof rfqCounts>;
+  costItems: Array<Record<string, unknown>>;
+}) {
+  const signals: Array<{ label: string; detail: string; severity: "high" | "medium" | "low" }> = [];
+  const unsectioned = items.filter((item) => !item.section && !item.sourceSpecSection).length;
+  const zeroCost = items.filter((item) => Number(item.unitCost || 0) <= 0).length;
+  const materialHeavy = items.filter((item) => /(material|concrete|asphalt|pipe|steel|wire|conduit|stone|aggregate|equipment)/i.test(`${item.description || ""} ${item.section || ""}`)).length;
+  if (!estimate?.projectId) signals.push({ label: "Project context missing", detail: "Attach a Project Management record so bid data can hand off cleanly.", severity: "medium" });
+  if (unsectioned) signals.push({ label: "Scope map gap", detail: `${unsectioned} item${unsectioned === 1 ? "" : "s"} lack a spec/section connection.`, severity: "high" });
+  if (zeroCost) signals.push({ label: "Placeholder pricing", detail: `${zeroCost} line${zeroCost === 1 ? "" : "s"} have no unit cost.`, severity: "high" });
+  if (materialHeavy && rfqSummary.total === 0) signals.push({ label: "RFQ exposure", detail: "Material-heavy work exists with no quote records yet.", severity: "high" });
+  if (rfqSummary.overdue) signals.push({ label: "Vendor response risk", detail: `${rfqSummary.overdue} RFQ package${rfqSummary.overdue === 1 ? "" : "s"} appear overdue.`, severity: "medium" });
+  if (!costItems.length) signals.push({ label: "Cost database empty", detail: "Seed labor, equipment, and material costs before trusting predictions.", severity: "medium" });
+  if (!estimate?.bidDate) signals.push({ label: "Bid calendar gap", detail: "Bid date is missing, so bid-day pressure cannot be predicted.", severity: "low" });
+  return signals.slice(0, 5);
+}
+
 export default function EstimatingPage() {
   return (
     <AppShell>
-      <EstimatingRfqWorkspace />
+      <EstimatingWorkspace />
     </AppShell>
   );
 }
 
-function EstimatingRfqWorkspace() {
+function EstimatorCommandCenter({
+  activeTool,
+  onSelect,
+}: {
+  activeTool: EstimatingToolKey;
+  onSelect: (tool: EstimatingToolKey) => void;
+}) {
+  return (
+    <aside className="sticky top-20 hidden h-[calc(100vh-7rem)] w-64 shrink-0 overflow-y-auto rounded-lg border border-border bg-card/85 p-3 xl:block">
+      <div className="mb-4 border-b border-border pb-4">
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">Estimator Command Center</div>
+        <div className="mt-2 text-lg font-black text-white">Bid Control</div>
+        <p className="mt-1 text-xs text-muted-foreground">The bid-first tools that protect scope, price, risk, and schedule.</p>
+      </div>
+      <nav className="space-y-1">
+        {ESTIMATING_TOOLS.map((tool) => {
+          const active = tool.key === activeTool;
+          return (
+            <button
+              key={tool.key}
+              type="button"
+              onClick={() => onSelect(tool.key)}
+              className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-all ${
+                active
+                  ? "bg-orange-500/18 font-semibold text-orange-300 ring-1 ring-orange-500/25"
+                  : "text-muted-foreground hover:bg-secondary/70 hover:text-white"
+              }`}
+            >
+              <span className="grid h-5 min-w-8 place-items-center rounded text-[9px] font-black text-current">{tool.icon}</span>
+              <span>{tool.label}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </aside>
+  );
+}
+
+function CockpitMetricCard({ label, value, sub, tone = "orange" }: { label: string; value: string | number; sub: string; tone?: "orange" | "green" | "blue" | "purple" | "red" }) {
+  const tones = {
+    orange: "text-orange-400",
+    green: "text-green-400",
+    blue: "text-blue-300",
+    purple: "text-purple-300",
+    red: "text-red-300",
+  };
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className={`text-2xl font-black ${tones[tone]}`}>{value}</div>
+      <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100">{label}</div>
+      <div className="mt-2 text-xs text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+function EstimatingWorkspace() {
   const { user } = useAuth();
   const estimates = useQuery(api.estimating.listEstimates, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
   const vendors = useQuery(api.vendors.list, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
+  const projects = useQuery(api.projects.list, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
+  const costItems = useQuery(api.estimating.listCostItems, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
   const branding = useQuery(api.companyBranding.get, user ? { companyId: user.companyId as Id<"companies"> } : "skip") as any;
 
+  const [activeTool, setActiveTool] = useState<EstimatingToolKey>("cockpit");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const selectedEstimate = (estimates || []).find((estimate) => String(estimate._id) === selectedEstimateId) || estimates?.[0];
   const estimateId = selectedEstimate?._id ? String(selectedEstimate._id) : "";
@@ -146,6 +306,22 @@ function EstimatingRfqWorkspace() {
     });
     return map;
   }, [rfqsWithNotes]);
+  const selectedProject = (projects || []).find((project) => String(project._id) === String(selectedEstimate?.projectId || ""));
+  const selectedEstimateTotal = useMemo(() => estimateTotal(estimateItems || []), [estimateItems]);
+  const rfqSummary = useMemo(() => rfqCounts(rfqsWithNotes), [rfqsWithNotes]);
+  const scheduleScore = useMemo(() => scheduleReadinessScore(estimateItems || []), [estimateItems]);
+  const predictiveSignals = useMemo(() => predictiveSignalsForEstimate({
+    estimate: selectedEstimate,
+    items: estimateItems || [],
+    rfqSummary,
+    costItems: costItems || [],
+  }), [selectedEstimate, estimateItems, rfqSummary, costItems]);
+  const activeBids = (estimates || []).filter((estimate) => !["won", "lost", "archived"].includes(String(estimate.status || "").toLowerCase())).length;
+  const draftBids = (estimates || []).filter((estimate) => String(estimate.status || "").toLowerCase() === "draft").length;
+  const wonBids = (estimates || []).filter((estimate) => String(estimate.status || "").toLowerCase() === "won").length;
+  const submittedOrClosed = (estimates || []).filter((estimate) => ["submitted", "won", "lost"].includes(String(estimate.status || "").toLowerCase())).length;
+  const winRate = submittedOrClosed ? Math.round((wonBids / submittedOrClosed) * 100) : 0;
+  const inspirationLine = INSPIRATION_LINES[(estimates || []).length % INSPIRATION_LINES.length];
 
   useEffect(() => {
     setSignatureProfile(loadSignatureProfile(user));
@@ -332,9 +508,199 @@ function EstimatingRfqWorkspace() {
   }
 
   if (!user) return null;
+  const activeToolConfig = ESTIMATING_TOOLS.find((tool) => tool.key === activeTool) || ESTIMATING_TOOLS[0];
+  const stagedTool = (
+    <div className="rounded-lg border border-border bg-card p-6">
+      <Badge className="mb-3 bg-orange-500/15 text-orange-300">{activeToolConfig.label}</Badge>
+      <h1 className="text-3xl font-black text-white">{activeToolConfig.label}</h1>
+      <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{activeToolConfig.description}</p>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="rounded-lg border border-border bg-background/50 p-4">
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">First-pass status</div>
+          <div className="mt-2 text-lg font-bold text-white">Staged for buildout</div>
+          <p className="mt-1 text-xs text-muted-foreground">This tool is now visible in the Estimator Command Center and ready for the shared database workflow.</p>
+        </div>
+        <div className="rounded-lg border border-border bg-background/50 p-4">
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Shared data</div>
+          <div className="mt-2 text-lg font-bold text-white">Project-aware</div>
+          <p className="mt-1 text-xs text-muted-foreground">Designed to pull project, estimate, RFQ, cost, risk, and schedule alignment signals.</p>
+        </div>
+        <div className="rounded-lg border border-border bg-background/50 p-4">
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Predictive layer</div>
+          <div className="mt-2 text-lg font-bold text-white">Signal-ready</div>
+          <p className="mt-1 text-xs text-muted-foreground">Future panels will feed the Predictive Bid Engine from the same database backbone.</p>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-5">
+    <div className="flex gap-5">
+      <EstimatorCommandCenter activeTool={activeTool} onSelect={setActiveTool} />
+      <main className="min-w-0 flex-1 space-y-5">
+        <div className="xl:hidden">
+          <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimator Command Center</label>
+          <select
+            value={activeTool}
+            onChange={(event) => setActiveTool(event.target.value as EstimatingToolKey)}
+            className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+          >
+            {ESTIMATING_TOOLS.map((tool) => <option key={tool.key} value={tool.key}>{tool.label}</option>)}
+          </select>
+        </div>
+        {activeTool === "cockpit" ? (
+          <div className="space-y-5">
+            <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <Badge className="mb-3 bg-orange-500/15 text-orange-300">Bid Command Center</Badge>
+                <h1 className="text-4xl font-black tracking-tight text-white">Estimating Cockpit</h1>
+                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                  Pipeline, bid day risk, cost database health, and takeoff handoff in one screen.
+                </p>
+                <p className="mt-3 max-w-3xl rounded-lg border border-orange-500/25 bg-orange-500/10 px-3 py-2 text-sm font-semibold text-orange-100">
+                  {inspirationLine}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setActiveTool("takeoff")}>Takeoff</Button>
+                <Button variant="outline" onClick={() => setActiveTool("war-room")}>War Room</Button>
+                <Button onClick={() => setActiveTool("estimates")}>+ New Estimate</Button>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <CockpitMetricCard label="Total Estimates" value={(estimates || []).length} sub={`${draftBids} draft${draftBids === 1 ? "" : "s"}`} />
+              <CockpitMetricCard label="Active Bids" value={activeBids} sub="Bid work in motion" tone="blue" />
+              <CockpitMetricCard label="Bid Value" value={money(selectedEstimateTotal)} sub={selectedEstimate?.name ? "Selected estimate total" : "No estimate selected"} />
+              <CockpitMetricCard label="RFQs Open" value={rfqSummary.open} sub={`${rfqSummary.overdue} overdue`} tone={rfqSummary.overdue ? "red" : "purple"} />
+              <CockpitMetricCard label="Schedule Readiness" value={`${scheduleScore}%`} sub="Estimate-to-scheduler handoff" tone={scheduleScore > 70 ? "green" : "orange"} />
+            </div>
+
+            <div className="grid gap-5 2xl:grid-cols-[1fr_360px]">
+              <section className="rounded-lg border border-border bg-card">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Bid Portfolio</h2>
+                    <p className="text-xs text-muted-foreground">Bid-first estimate control with project context attached.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <input className="w-72 rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Search estimates, clients, scopes..." />
+                    <Button variant="outline" size="sm" onClick={() => setActiveTool("analytics")}>Analytics</Button>
+                  </div>
+                </div>
+                <div className="overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-background text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                      <tr>
+                        <th className="p-3 text-left">Bid</th>
+                        <th className="p-3 text-left">Project</th>
+                        <th className="p-3 text-left">Client</th>
+                        <th className="p-3 text-left">Bid Date</th>
+                        <th className="p-3 text-left">Status</th>
+                        <th className="p-3 text-left">Type</th>
+                        <th className="p-3 text-left">RFQ</th>
+                        <th className="p-3 text-left">Schedule</th>
+                        <th className="p-3 text-left">Risk</th>
+                        <th className="p-3 text-left">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(estimates || []).map((estimate) => {
+                        const project = (projects || []).find((entry) => String(entry._id) === String(estimate.projectId || ""));
+                        const isSelected = String(estimate._id) === estimateId;
+                        return (
+                          <tr key={String(estimate._id)} className="border-t border-border">
+                            <td className="p-3">
+                              <div className="font-bold text-white">{estimate.name}</div>
+                              <div className="text-xs text-muted-foreground">{estimate.description || "No scope note yet"}</div>
+                            </td>
+                            <td className="p-3 text-muted-foreground">{project?.name || estimate.location || "Project link needed"}</td>
+                            <td className="p-3 text-muted-foreground">{estimate.client || project?.contractor || "No client"}</td>
+                            <td className="p-3 text-muted-foreground">{estimate.bidDate || "No date"}</td>
+                            <td className="p-3"><Badge variant="outline">{statusLabel(estimate.status)}</Badge></td>
+                            <td className="p-3 text-muted-foreground">{estimate.bidType || estimate.buildingType || "General"}</td>
+                            <td className="p-3"><Badge className="bg-blue-500/15 text-blue-200">{isSelected ? `${rfqSummary.total} records` : "Open RFQ Desk"}</Badge></td>
+                            <td className="p-3"><Badge className={isSelected && scheduleScore > 70 ? "bg-green-500/15 text-green-300" : "bg-orange-500/15 text-orange-300"}>{isSelected ? `${scheduleScore}% ready` : "Needs map"}</Badge></td>
+                            <td className="p-3"><Badge className={predictiveSignals.length ? "bg-red-500/15 text-red-300" : "bg-green-500/15 text-green-300"}>{isSelected ? `${predictiveSignals.length} signals` : "Review"}</Badge></td>
+                            <td className="p-3"><Button size="sm" variant="outline" onClick={() => { setSelectedEstimateId(String(estimate._id)); setActiveTool("rfq"); }}>Open</Button></td>
+                          </tr>
+                        );
+                      })}
+                      {!(estimates || []).length && (
+                        <tr>
+                          <td colSpan={10} className="p-10 text-center text-muted-foreground">
+                            No estimates yet. Create your first bid, then OpsSlate will start watching RFQ exposure, risk, and schedule readiness.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <aside className="space-y-4">
+                <section className="rounded-lg border border-border bg-card p-4">
+                  <h2 className="font-bold text-white">Bid Pulse</h2>
+                  <div className="mt-3 space-y-2">
+                    {[
+                      ["Submitted Bids", (estimates || []).filter((estimate) => String(estimate.status || "").toLowerCase() === "submitted").length, "bg-blue-400"],
+                      ["Drafts Needing Review", draftBids, "bg-orange-400"],
+                      ["RFQs Waiting", rfqSummary.open, "bg-purple-400"],
+                      ["Won Bids", wonBids, "bg-green-400"],
+                    ].map(([label, value, color]) => (
+                      <div key={String(label)} className="flex items-center justify-between rounded-md border border-border bg-background/50 px-3 py-2 text-sm">
+                        <span className="flex items-center gap-2 text-blue-100"><span className={`h-2 w-2 rounded-full ${color}`} />{label}</span>
+                        <span className="font-bold text-white">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-border bg-card p-4">
+                  <h2 className="font-bold text-white">Predictive Bid Engine</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">What could move the number, hurt the margin, or break the handoff?</p>
+                  <div className="mt-3 space-y-2">
+                    {predictiveSignals.map((signal) => (
+                      <div key={signal.label} className="rounded-md border border-border bg-background/50 p-3">
+                        <div className={signal.severity === "high" ? "text-sm font-bold text-red-300" : signal.severity === "medium" ? "text-sm font-bold text-orange-300" : "text-sm font-bold text-blue-200"}>{signal.label}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">{signal.detail}</div>
+                      </div>
+                    ))}
+                    {!predictiveSignals.length && (
+                      <div className="rounded-md border border-green-500/25 bg-green-500/10 p-3 text-sm text-green-200">No major predictive warnings on the selected estimate.</div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-border bg-card p-4">
+                  <h2 className="font-bold text-white">Cost Database</h2>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    {["Labor", "Equipment", "Materials"].map((category) => {
+                      const count = (costItems || []).filter((item) => String(item.category || "").toLowerCase().includes(category.toLowerCase())).length;
+                      return (
+                        <div key={category} className="rounded-md border border-border bg-background/50 p-3">
+                          <div className="text-lg font-black text-white">{count}</div>
+                          <div className="text-[10px] uppercase text-muted-foreground">{category}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section className="rounded-lg border border-border bg-card p-4">
+                  <h2 className="font-bold text-white">AI Estimator</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Draft actions for the bid room. Review before it changes anything.</p>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <button className="w-full rounded-md border border-border bg-background/50 px-3 py-2 text-left text-blue-100" onClick={() => setActiveTool("rfq")}>Create RFQ drafts for exposed material items</button>
+                    <button className="w-full rounded-md border border-border bg-background/50 px-3 py-2 text-left text-blue-100" onClick={() => setActiveTool("risk")}>Review risk database matches</button>
+                    <button className="w-full rounded-md border border-border bg-background/50 px-3 py-2 text-left text-blue-100" onClick={() => setActiveTool("calendar")}>Map bid date and schedule handoff</button>
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </div>
+        ) : activeTool !== "rfq" ? stagedTool : (
+    <div className="space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <Badge className="mb-2 bg-blue-500/15 text-blue-300">Estimating RFQ Workspace</Badge>
@@ -603,6 +969,9 @@ function EstimatingRfqWorkspace() {
           </div>
         </div>
       )}
+    </div>
+        )}
+      </main>
     </div>
   );
 }
