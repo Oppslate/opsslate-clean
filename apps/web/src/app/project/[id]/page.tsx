@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { Mail, Pencil, Phone, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarDays, Mail, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -204,6 +204,62 @@ function ProjectDetailSelectField({
           placeholder={customPlaceholder}
         />
       )}
+    </div>
+  );
+}
+
+function ProjectDetailDatePickerField({
+  id,
+  label,
+  value,
+  type = "date",
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  type?: "date" | "datetime-local";
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const openPicker = () => {
+    const input = inputRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === "function") {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // Some browsers only allow showPicker during direct user activation.
+      }
+    }
+    input.focus();
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <input
+          ref={inputRef}
+          id={id}
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onClick={openPicker}
+          className="dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 pr-11 text-base shadow-xs outline-none transition-[color,box-shadow] [color-scheme:dark] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Open ${label} date picker`}
+          onClick={openPicker}
+          className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        >
+          <CalendarDays className="size-4" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1048,19 +1104,26 @@ function ProjectDashboardContent() {
               onCustomChange={(value) => updateProjectDetailsCustomDropdown("status", value)}
             />
             {projectDetailsForm.status === "Bid" && (
-              <div className="space-y-2">
-                <Label htmlFor="project-bid-date-time">Bid date and time</Label>
-                <Input id="project-bid-date-time" type="datetime-local" value={projectDetailsForm.bidDateTime} onChange={(e) => updateProjectDetailsField("bidDateTime", e.target.value)} />
-              </div>
+              <ProjectDetailDatePickerField
+                id="project-bid-date-time"
+                label="Bid date and time"
+                type="datetime-local"
+                value={projectDetailsForm.bidDateTime}
+                onChange={(value) => updateProjectDetailsField("bidDateTime", value)}
+              />
             )}
-            <div className="space-y-2">
-              <Label htmlFor="project-start">Start date</Label>
-              <Input id="project-start" type="date" value={projectDetailsForm.startDate} onChange={(e) => updateProjectDetailsField("startDate", e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="project-end">End date</Label>
-              <Input id="project-end" type="date" value={projectDetailsForm.endDate} onChange={(e) => updateProjectDetailsField("endDate", e.target.value)} />
-            </div>
+            <ProjectDetailDatePickerField
+              id="project-start"
+              label="Start date"
+              value={projectDetailsForm.startDate}
+              onChange={(value) => updateProjectDetailsField("startDate", value)}
+            />
+            <ProjectDetailDatePickerField
+              id="project-end"
+              label="End date"
+              value={projectDetailsForm.endDate}
+              onChange={(value) => updateProjectDetailsField("endDate", value)}
+            />
             <div className="space-y-2">
               <Label htmlFor="project-contract-value">Contract value</Label>
               <Input id="project-contract-value" type="number" min="0" step="0.01" value={projectDetailsForm.contractValue} onChange={(e) => updateProjectDetailsField("contractValue", e.target.value)} />

@@ -35,6 +35,9 @@ for (const field of ["contractor", "projectRole", "type", "status"]) {
 assert.ok(projectPage.includes("bidDateTime"), "project details should track bid date and time");
 assert.ok(projectPage.includes('id="project-bid-date-time"'), "Bid status should request a bid date and time");
 assert.ok(projectPage.includes('type="datetime-local"'), "Bid date and time should use a datetime input");
+assert.ok(projectPage.includes("ProjectDetailDatePickerField"), "project date inputs should use the date picker field");
+assert.ok(projectPage.includes("input.showPicker"), "project date picker should open the native browser date picker");
+assert.ok(projectPage.includes("CalendarDays"), "project date picker should expose a visible calendar button");
 assert.ok(projectPage.includes('projectDetailsForm.status === "Bid"'), "Bid date/time input should only appear for Bid status");
 assert.ok(projectPage.includes("Bid date and time is required when status is Bid."), "Bid status should require a bid date/time before save");
 assert.ok(projectPage.includes("Bid Date/Time"), "project details view should show the saved bid date/time");
