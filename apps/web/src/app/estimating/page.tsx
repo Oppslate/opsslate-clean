@@ -247,8 +247,13 @@ function EstimatingWorkspace() {
   const branding = useQuery(api.companyBranding.get, user ? { companyId: user.companyId as Id<"companies"> } : "skip") as any;
 
   const [activeTool, setActiveTool] = useState<EstimatingToolKey>("cockpit");
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
-  const selectedEstimate = (estimates || []).find((estimate) => String(estimate._id) === selectedEstimateId) || estimates?.[0];
+  const projectFilteredEstimates = useMemo(() => {
+    if (!selectedProjectId) return estimates || [];
+    return (estimates || []).filter((estimate) => String(estimate.projectId || "") === selectedProjectId);
+  }, [estimates, selectedProjectId]);
+  const selectedEstimate = projectFilteredEstimates.find((estimate) => String(estimate._id) === selectedEstimateId) || projectFilteredEstimates[0] || (selectedProjectId ? undefined : estimates?.[0]);
   const estimateId = selectedEstimate?._id ? String(selectedEstimate._id) : "";
 
   const estimateItems = useQuery(
@@ -306,7 +311,7 @@ function EstimatingWorkspace() {
     });
     return map;
   }, [rfqsWithNotes]);
-  const selectedProject = (projects || []).find((project) => String(project._id) === String(selectedEstimate?.projectId || ""));
+  const selectedProject = (projects || []).find((project) => String(project._id) === String(selectedProjectId || selectedEstimate?.projectId || ""));
   const selectedEstimateTotal = useMemo(() => estimateTotal(estimateItems || []), [estimateItems]);
   const rfqSummary = useMemo(() => rfqCounts(rfqsWithNotes), [rfqsWithNotes]);
   const scheduleScore = useMemo(() => scheduleReadinessScore(estimateItems || []), [estimateItems]);
@@ -316,12 +321,12 @@ function EstimatingWorkspace() {
     rfqSummary,
     costItems: costItems || [],
   }), [selectedEstimate, estimateItems, rfqSummary, costItems]);
-  const activeBids = (estimates || []).filter((estimate) => !["won", "lost", "archived"].includes(String(estimate.status || "").toLowerCase())).length;
-  const draftBids = (estimates || []).filter((estimate) => String(estimate.status || "").toLowerCase() === "draft").length;
-  const wonBids = (estimates || []).filter((estimate) => String(estimate.status || "").toLowerCase() === "won").length;
-  const submittedOrClosed = (estimates || []).filter((estimate) => ["submitted", "won", "lost"].includes(String(estimate.status || "").toLowerCase())).length;
+  const activeBids = projectFilteredEstimates.filter((estimate) => !["won", "lost", "archived"].includes(String(estimate.status || "").toLowerCase())).length;
+  const draftBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "draft").length;
+  const wonBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "won").length;
+  const submittedOrClosed = projectFilteredEstimates.filter((estimate) => ["submitted", "won", "lost"].includes(String(estimate.status || "").toLowerCase())).length;
   const winRate = submittedOrClosed ? Math.round((wonBids / submittedOrClosed) * 100) : 0;
-  const inspirationLine = INSPIRATION_LINES[(estimates || []).length % INSPIRATION_LINES.length];
+  const inspirationLine = INSPIRATION_LINES[projectFilteredEstimates.length % INSPIRATION_LINES.length];
 
   useEffect(() => {
     setSignatureProfile(loadSignatureProfile(user));
@@ -561,7 +566,26 @@ function EstimatingWorkspace() {
                   {inspirationLine}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[280px]">
+                  <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Project Selection</label>
+                  <select
+                    value={selectedProjectId}
+                    onChange={(event) => {
+                      setSelectedProjectId(event.target.value);
+                      setSelectedEstimateId("");
+                      setSelectedItemIds([]);
+                    }}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+                  >
+                    <option value="">All projects</option>
+                    {(projects || []).map((project) => (
+                      <option key={String(project._id)} value={String(project._id)}>
+                        {project.name || project.projectName || project.code || "Unnamed project"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Button variant="outline" onClick={() => setActiveTool("takeoff")}>Takeoff</Button>
                 <Button variant="outline" onClick={() => setActiveTool("war-room")}>War Room</Button>
                 <Button onClick={() => setActiveTool("estimates")}>+ New Estimate</Button>
@@ -569,7 +593,7 @@ function EstimatingWorkspace() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <CockpitMetricCard label="Total Estimates" value={(estimates || []).length} sub={`${draftBids} draft${draftBids === 1 ? "" : "s"}`} />
+              <CockpitMetricCard label="Total Estimates" value={projectFilteredEstimates.length} sub={`${draftBids} draft${draftBids === 1 ? "" : "s"}${selectedProject ? ` for ${selectedProject.name || "selected project"}` : ""}`} />
               <CockpitMetricCard label="Active Bids" value={activeBids} sub="Bid work in motion" tone="blue" />
               <CockpitMetricCard label="Bid Value" value={money(selectedEstimateTotal)} sub={selectedEstimate?.name ? "Selected estimate total" : "No estimate selected"} />
               <CockpitMetricCard label="RFQs Open" value={rfqSummary.open} sub={`${rfqSummary.overdue} overdue`} tone={rfqSummary.overdue ? "red" : "purple"} />
@@ -605,7 +629,7 @@ function EstimatingWorkspace() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(estimates || []).map((estimate) => {
+                      {projectFilteredEstimates.map((estimate) => {
                         const project = (projects || []).find((entry) => String(entry._id) === String(estimate.projectId || ""));
                         const isSelected = String(estimate._id) === estimateId;
                         return (
@@ -626,10 +650,10 @@ function EstimatingWorkspace() {
                           </tr>
                         );
                       })}
-                      {!(estimates || []).length && (
+                      {!projectFilteredEstimates.length && (
                         <tr>
                           <td colSpan={10} className="p-10 text-center text-muted-foreground">
-                            No estimates yet. Create your first bid, then OpsSlate will start watching RFQ exposure, risk, and schedule readiness.
+                            {selectedProject ? "No estimates are attached to this project yet." : "No estimates yet. Create your first bid, then OpsSlate will start watching RFQ exposure, risk, and schedule readiness."}
                           </td>
                         </tr>
                       )}
@@ -643,7 +667,7 @@ function EstimatingWorkspace() {
                   <h2 className="font-bold text-white">Bid Pulse</h2>
                   <div className="mt-3 space-y-2">
                     {[
-                      ["Submitted Bids", (estimates || []).filter((estimate) => String(estimate.status || "").toLowerCase() === "submitted").length, "bg-blue-400"],
+                      ["Submitted Bids", projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "submitted").length, "bg-blue-400"],
                       ["Drafts Needing Review", draftBids, "bg-orange-400"],
                       ["RFQs Waiting", rfqSummary.open, "bg-purple-400"],
                       ["Won Bids", wonBids, "bg-green-400"],
@@ -727,7 +751,7 @@ function EstimatingWorkspace() {
               }}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
             >
-              {(estimates || []).map((estimate) => (
+              {projectFilteredEstimates.map((estimate) => (
                 <option key={String(estimate._id)} value={String(estimate._id)}>{estimate.name}</option>
               ))}
             </select>

@@ -7,6 +7,10 @@ const page = readFileSync(join(process.cwd(), "src", "app", "estimating", "page.
 assert.match(page, /Estimating Cockpit/, "estimating route should render the cockpit");
 assert.match(page, /<AppShell showSidebar={false}>/, "estimating cockpit should not render the Project Management sidebar shell");
 assert.match(page, /Estimator Command Center/, "estimating route should include an estimating-specific sidebar");
+assert.match(page, /Project Selection/, "estimating cockpit should include a project selection dropdown");
+assert.match(page, /setSelectedProjectId/, "project selection should update cockpit project context");
+assert.match(page, /projectFilteredEstimates/, "project selection should filter the bid portfolio and metrics");
+assert.match(page, /All projects/, "project dropdown should allow the estimator to view all projects");
 assert.match(page, /Bid Command Center/, "cockpit should use bid-first command center language");
 assert.match(page, /RFQ Desk/, "RFQ workspace should remain available as a tool");
 assert.match(page, /Predictive Bid Engine/, "cockpit should include predictive bid engine panel");
