@@ -27,7 +27,7 @@ export const signup = mutation({
       .query("users")
       .withIndex("by_email", (q) => q.eq("email", email))
       .first();
-    if (existing) throw new Error("Email already registered");
+    if (existing) return { error: "Email already registered. Please sign in or use a different email." };
 
     const companyId = await ctx.db.insert("companies", {
       name: args.companyName,

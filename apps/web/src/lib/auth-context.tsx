@@ -253,6 +253,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       name,
     });
+    if ("error" in res && res.error) throw new Error(res.error);
+    if (!("token" in res) || !res.token) throw new Error("Signup did not return a valid session.");
 
     localStorage.setItem("eq_token", res.token);
     clearSuiteLogoutMarker();
