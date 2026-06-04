@@ -92,7 +92,7 @@ const nav: NavItem[] = [
   { href: "/crm", label: "CRM", icon: "CRM" },
   { href: "/cad", label: "CAD", icon: "CAD" },
   { href: process.env.NEXT_PUBLIC_TAKEOFF_APP_URL || "https://takeoff.opsslate.app", label: "Takeoff", icon: "Q", external: true },
-  { href: process.env.NEXT_PUBLIC_ESTIMATING_APP_URL || "https://estimating.opsslate.app", label: "Estimating", icon: "B", external: true },
+  { href: process.env.NEXT_PUBLIC_ESTIMATING_APP_URL || "https://opsslate-clean-web-seven.vercel.app/estimating", label: "Estimating", icon: "B", external: true },
   { href: process.env.NEXT_PUBLIC_SCHEDULER_APP_URL || "https://opsslate-clean-web-seven.vercel.app/scheduler", label: "Scheduler", icon: "S", external: true },
   { href: process.env.NEXT_PUBLIC_BOOKS_APP_URL || "https://books.opsslate.app", label: "Books", icon: "AR", external: true },
 
