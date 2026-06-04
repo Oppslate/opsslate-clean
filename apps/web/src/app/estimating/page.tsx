@@ -177,7 +177,7 @@ function predictiveSignalsForEstimate({
 
 export default function EstimatingPage() {
   return (
-    <AppShell>
+    <AppShell showSidebar={false}>
       <EstimatingWorkspace />
     </AppShell>
   );
@@ -557,7 +557,7 @@ function EstimatingWorkspace() {
                 <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
                   Pipeline, bid day risk, cost database health, and takeoff handoff in one screen.
                 </p>
-                <p className="mt-3 max-w-3xl rounded-lg border border-orange-500/25 bg-orange-500/10 px-3 py-2 text-sm font-semibold text-orange-100">
+                <p className="mt-3 max-w-3xl rounded-lg border border-orange-500/25 bg-orange-500/10 px-3 py-2 text-sm font-semibold italic text-orange-100">
                   {inspirationLine}
                 </p>
               </div>

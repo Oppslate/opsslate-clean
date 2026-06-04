@@ -5,6 +5,7 @@ import { join } from "node:path";
 const page = readFileSync(join(process.cwd(), "src", "app", "estimating", "page.tsx"), "utf8");
 
 assert.match(page, /Estimating Cockpit/, "estimating route should render the cockpit");
+assert.match(page, /<AppShell showSidebar={false}>/, "estimating cockpit should not render the Project Management sidebar shell");
 assert.match(page, /Estimator Command Center/, "estimating route should include an estimating-specific sidebar");
 assert.match(page, /Bid Command Center/, "cockpit should use bid-first command center language");
 assert.match(page, /RFQ Desk/, "RFQ workspace should remain available as a tool");
@@ -13,6 +14,7 @@ assert.match(page, /Schedule Readiness/, "cockpit should include schedule alignm
 assert.match(page, /Bid Portfolio/, "cockpit should include bid portfolio table");
 assert.match(page, /Bid Pulse/, "cockpit should include bid pulse panel");
 assert.match(page, /AI Estimator/, "cockpit should include AI Estimator action queue");
+assert.match(page, /italic text-orange-100/, "inspiration quote should use italic styling");
 
 for (const label of ["Materials", "Labor", "Equipment", "Historical Bid Database", "Risk Database"]) {
   assert.ok(page.includes(label), `estimating sidebar should include ${label}`);
