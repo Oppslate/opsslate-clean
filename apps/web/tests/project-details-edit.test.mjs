@@ -22,7 +22,15 @@ assert.ok(projectPage.includes("Contract value"), "project details edit form sho
 assert.ok(projectPage.includes("<select"), "project status should use a dropdown control");
 assert.ok(!projectPage.includes('<Input id="project-status"'), "project status should not be a free-text input");
 for (const status of ["Active", "Bid", "On Hold", "Complete"]) {
-  assert.ok(projectPage.includes(`option value="${status}"`), `project status dropdown should include ${status}`);
+  assert.ok(projectPage.includes(`"${status}"`), `project status dropdown should include ${status}`);
+}
+assert.ok(projectPage.includes("generateProjectCode"), "project details should generate a YY-##### project code");
+assert.ok(projectPage.includes("PROJECT_CODE_STORAGE_KEY"), "project generated codes should be tracked for local uniqueness");
+assert.ok(projectPage.includes("ProjectDetailSelectField"), "project details should use reusable dropdown controls");
+assert.ok(projectPage.includes("PROJECT_DETAIL_DROPDOWN_STORAGE_KEY"), "project dropdown custom values should be stored for reuse");
+assert.ok(projectPage.includes("__other__"), "project dropdowns should support an Other custom entry");
+for (const field of ["contractor", "projectRole", "type", "status"]) {
+  assert.ok(projectPage.includes(`updateProjectDetailsDropdown("${field}"`), `${field} should use the dropdown/custom-entry rule`);
 }
 assert.ok(projectPage.includes("bidDateTime"), "project details should track bid date and time");
 assert.ok(projectPage.includes('id="project-bid-date-time"'), "Bid status should request a bid date and time");

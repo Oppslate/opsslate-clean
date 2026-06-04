@@ -68,6 +68,16 @@ type ProjectTeamMemberFormState = {
   email: string;
 };
 
+type DropdownProjectDetailsField = "contractor" | "projectRole" | "type" | "status";
+
+const PROJECT_DETAIL_DROPDOWN_STORAGE_KEY = "opsslate-project-detail-dropdown-options";
+const PROJECT_CODE_STORAGE_KEY = "opsslate-project-codes";
+
+const PROJECT_ROLE_DEFAULTS = ["Owner", "Project Manager", "Engineer", "Estimator"];
+const PROJECT_STATUS_DEFAULTS = ["Active", "Bid", "On Hold", "Complete"];
+const PROJECT_TYPE_DEFAULTS = ["Civil/Infrastructure", "Commercial", "Industrial", "EV Charging"];
+const CONTRACTOR_DEFAULTS: string[] = [];
+
 const emptyProjectDetailsForm: ProjectDetailsFormState = {
   name: "",
   code: "",
@@ -85,6 +95,118 @@ const emptyProjectDetailsForm: ProjectDetailsFormState = {
   status: "",
   contractValue: "",
 };
+
+function uniqueValues(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  return values
+    .map((value) => String(value || "").trim())
+    .filter((value) => {
+      if (!value) return false;
+      const key = value.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function readStoredProjectDetailOptions(): Partial<Record<DropdownProjectDetailsField, string[]>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PROJECT_DETAIL_DROPDOWN_STORAGE_KEY) || "{}");
+    return {
+      contractor: Array.isArray(parsed.contractor) ? parsed.contractor : [],
+      projectRole: Array.isArray(parsed.projectRole) ? parsed.projectRole : [],
+      type: Array.isArray(parsed.type) ? parsed.type : [],
+      status: Array.isArray(parsed.status) ? parsed.status : [],
+    };
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredProjectDetailOptions(options: Partial<Record<DropdownProjectDetailsField, string[]>>) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PROJECT_DETAIL_DROPDOWN_STORAGE_KEY, JSON.stringify(options));
+}
+
+function readStoredProjectCodes() {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(PROJECT_CODE_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberProjectCode(code: string) {
+  const cleanCode = code.trim();
+  if (!cleanCode || typeof window === "undefined") return;
+  const codes = uniqueValues([...readStoredProjectCodes(), cleanCode]);
+  window.localStorage.setItem(PROJECT_CODE_STORAGE_KEY, JSON.stringify(codes));
+}
+
+function generateProjectCode(existingCodes: string[] = []) {
+  const prefix = String(new Date().getFullYear()).slice(-2);
+  const used = new Set(uniqueValues([...existingCodes, ...readStoredProjectCodes()]));
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const suffix = Math.floor(10000 + Math.random() * 90000);
+    const candidate = `${prefix}-${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  return `${prefix}-${String(Date.now()).slice(-5)}`;
+}
+
+function ProjectDetailSelectField({
+  id,
+  label,
+  value,
+  options,
+  customOpen,
+  placeholder,
+  customPlaceholder,
+  onSelect,
+  onCustomChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: string[];
+  customOpen: boolean;
+  placeholder?: string;
+  customPlaceholder: string;
+  onSelect: (value: string) => void;
+  onCustomChange: (value: string) => void;
+}) {
+  const cleanOptions = uniqueValues(options);
+  const selectedValue = customOpen ? "__other__" : cleanOptions.includes(value) ? value : value ? value : "";
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        value={selectedValue}
+        onChange={(e) => onSelect(e.target.value)}
+        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+      >
+        {placeholder && <option value="">{placeholder}</option>}
+        {cleanOptions.map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+        <option value="__other__">Other</option>
+      </select>
+      {customOpen && (
+        <Input
+          id={`${id}-other`}
+          value={value}
+          onChange={(e) => onCustomChange(e.target.value)}
+          placeholder={customPlaceholder}
+        />
+      )}
+    </div>
+  );
+}
 
 const emptyProjectTeamMemberForm: ProjectTeamMemberFormState = {
   firstName: "",
@@ -196,6 +318,7 @@ function ProjectDashboardContent() {
   const projectPmMessages = useQuery(api.aiPm.getMessages, projectPm?.id ? { pmId: projectPm.id as Id<"aiProjectManagers"> } : "skip") as any[] | undefined;
   const projectPmTasks = useQuery(api.aiPm.getTasks, projectPm?.id ? { pmId: projectPm.id as Id<"aiProjectManagers"> } : "skip") as any[] | undefined;
   const teamMembers = useQuery(api.team.list, user?.companyId ? { companyId: user.companyId as Id<"companies"> } : "skip") as any[] | undefined;
+  const allProjects = useQuery(api.projects.list, user?.companyId ? { companyId: user.companyId as Id<"companies"> } : "skip") as Doc<"projects">[] | undefined;
   const projectTeamMembers = useQuery(
     api.contacts.list,
     params.id && user ? { projectId: params.id as Id<"projects"> } : "skip",
@@ -216,6 +339,8 @@ function ProjectDashboardContent() {
   const [aiPmCardWorking, setAiPmCardWorking] = useState(false);
   const [projectDetailsOpen, setProjectDetailsOpen] = useState(false);
   const [projectDetailsForm, setProjectDetailsForm] = useState<ProjectDetailsFormState>(emptyProjectDetailsForm);
+  const [projectDetailsCustomFields, setProjectDetailsCustomFields] = useState<Partial<Record<DropdownProjectDetailsField, boolean>>>({});
+  const [storedProjectDetailOptions, setStoredProjectDetailOptions] = useState<Partial<Record<DropdownProjectDetailsField, string[]>>>({});
   const [projectDetailsSaving, setProjectDetailsSaving] = useState(false);
   const [projectDetailsError, setProjectDetailsError] = useState<string | null>(null);
   const [projectTeamOpen, setProjectTeamOpen] = useState(false);
@@ -231,6 +356,10 @@ function ProjectDashboardContent() {
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [selectedWeatherRecipientIds, setSelectedWeatherRecipientIds] = useState<string[]>([]);
   const [weatherAlertState, setWeatherAlertState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+
+  useEffect(() => {
+    setStoredProjectDetailOptions(readStoredProjectDetailOptions());
+  }, []);
 
   const project = data?.project || {};
   const projectDetailsSeed = useMemo(() => getProjectDetailsForm(project), [
@@ -250,6 +379,48 @@ function ProjectDashboardContent() {
     project?.contractDate,
     project?.status,
     project?.contractValue,
+  ]);
+  const existingProjectCodes = useMemo(() => uniqueValues((allProjects || []).map((item) => item.code)), [allProjects]);
+  const projectDetailDropdownOptions = useMemo(() => ({
+    contractor: uniqueValues([
+      ...CONTRACTOR_DEFAULTS,
+      ...(allProjects || []).map((item) => item.contractor),
+      ...(storedProjectDetailOptions.contractor || []),
+      projectDetailsForm.contractor,
+      project?.contractor,
+    ]),
+    projectRole: uniqueValues([
+      ...PROJECT_ROLE_DEFAULTS,
+      ...(allProjects || []).map((item) => item.projectRole),
+      ...(storedProjectDetailOptions.projectRole || []),
+      projectDetailsForm.projectRole,
+      project?.projectRole,
+    ]),
+    type: uniqueValues([
+      ...PROJECT_TYPE_DEFAULTS,
+      ...(allProjects || []).map((item) => item.type),
+      ...(storedProjectDetailOptions.type || []),
+      projectDetailsForm.type,
+      project?.type,
+    ]),
+    status: uniqueValues([
+      ...PROJECT_STATUS_DEFAULTS,
+      ...(allProjects || []).map((item) => item.status),
+      ...(storedProjectDetailOptions.status || []),
+      projectDetailsForm.status,
+      project?.status,
+    ]),
+  }), [
+    allProjects,
+    project?.contractor,
+    project?.projectRole,
+    project?.type,
+    project?.status,
+    projectDetailsForm.contractor,
+    projectDetailsForm.projectRole,
+    projectDetailsForm.type,
+    projectDetailsForm.status,
+    storedProjectDetailOptions,
   ]);
   const weatherPrimary = weatherMonitor?.primary;
   const weatherConsensus = weatherMonitor?.consensus;
@@ -397,7 +568,10 @@ function ProjectDashboardContent() {
   };
 
   const openProjectDetailsEditor = () => {
-    setProjectDetailsForm(getProjectDetailsForm(project));
+    const nextForm = getProjectDetailsForm(project);
+    if (!nextForm.code) nextForm.code = generateProjectCode(existingProjectCodes);
+    setProjectDetailsForm(nextForm);
+    setProjectDetailsCustomFields({});
     setProjectDetailsError(null);
     setProjectDetailsOpen(true);
   };
@@ -405,6 +579,33 @@ function ProjectDashboardContent() {
   const updateProjectDetailsField = (field: keyof ProjectDetailsFormState, value: string) => {
     setProjectDetailsForm((current) => ({ ...current, [field]: value }));
     if (projectDetailsError) setProjectDetailsError(null);
+  };
+
+  const updateProjectDetailsDropdown = (field: DropdownProjectDetailsField, value: string) => {
+    if (value === "__other__") {
+      setProjectDetailsCustomFields((current) => ({ ...current, [field]: true }));
+      setProjectDetailsForm((current) => ({ ...current, [field]: "" }));
+    } else {
+      setProjectDetailsCustomFields((current) => ({ ...current, [field]: false }));
+      updateProjectDetailsField(field, value);
+    }
+  };
+
+  const updateProjectDetailsCustomDropdown = (field: DropdownProjectDetailsField, value: string) => {
+    setProjectDetailsCustomFields((current) => ({ ...current, [field]: true }));
+    updateProjectDetailsField(field, value);
+  };
+
+  const persistProjectDetailsDropdownValues = (values: ProjectDetailsFormState) => {
+    const current = readStoredProjectDetailOptions();
+    const next = {
+      contractor: uniqueValues([...(current.contractor || []), values.contractor]),
+      projectRole: uniqueValues([...(current.projectRole || []), values.projectRole]),
+      type: uniqueValues([...(current.type || []), values.type]),
+      status: uniqueValues([...(current.status || []), values.status]),
+    };
+    saveStoredProjectDetailOptions(next);
+    setStoredProjectDetailOptions(next);
   };
 
   const updateProjectTeamField = (field: keyof ProjectTeamMemberFormState, value: string) => {
@@ -439,10 +640,11 @@ function ProjectDashboardContent() {
     setProjectDetailsSaving(true);
     setProjectDetailsError(null);
     try {
+      const projectCode = projectDetailsForm.code.trim() || generateProjectCode(existingProjectCodes);
       await updateProject({
         id: project._id as Id<"projects">,
         name,
-        code: projectDetailsForm.code.trim() || undefined,
+        code: projectCode,
         address: projectDetailsForm.address.trim() || undefined,
         city: projectDetailsForm.city.trim() || undefined,
         state: projectDetailsForm.state.trim() || undefined,
@@ -457,6 +659,8 @@ function ProjectDashboardContent() {
         status: projectDetailsForm.status.trim() || undefined,
         contractValue: optionalNumber(projectDetailsForm.contractValue),
       });
+      rememberProjectCode(projectCode);
+      persistProjectDetailsDropdownValues({ ...projectDetailsForm, code: projectCode });
       setProjectDetailsOpen(false);
     } catch (error) {
       setProjectDetailsError(error instanceof Error ? error.message : "Project details could not be saved.");
@@ -771,7 +975,12 @@ function ProjectDashboardContent() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="project-code">Project code</Label>
-              <Input id="project-code" value={projectDetailsForm.code} onChange={(e) => updateProjectDetailsField("code", e.target.value)} />
+              <div className="flex gap-2">
+                <Input id="project-code" value={projectDetailsForm.code} onChange={(e) => updateProjectDetailsField("code", e.target.value)} placeholder="Auto-generated" />
+                <Button type="button" variant="outline" onClick={() => updateProjectDetailsField("code", generateProjectCode(existingProjectCodes))}>
+                  Generate
+                </Button>
+              </div>
             </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="project-address">Address</Label>
@@ -795,42 +1004,49 @@ function ProjectDashboardContent() {
               <Label htmlFor="project-manager">Project manager</Label>
               <Input id="project-manager" value={projectDetailsForm.projectManager} onChange={(e) => updateProjectDetailsField("projectManager", e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="project-contractor">Contractor</Label>
-              <Input id="project-contractor" value={projectDetailsForm.contractor} onChange={(e) => updateProjectDetailsField("contractor", e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="project-role">Project role</Label>
-              <select
-                id="project-role"
-                value={projectDetailsForm.projectRole}
-                onChange={(e) => updateProjectDetailsField("projectRole", e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              >
-                <option value="">Select role...</option>
-                <option value="General Contractor">General Contractor</option>
-                <option value="Subcontractor">Subcontractor</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="project-type">Project type</Label>
-              <Input id="project-type" value={projectDetailsForm.type} onChange={(e) => updateProjectDetailsField("type", e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="project-status">Status</Label>
-              <select
-                id="project-status"
-                value={projectDetailsForm.status || "Active"}
-                onChange={(e) => updateProjectDetailsField("status", e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              >
-                <option value="Active">Active</option>
-                <option value="Bid">Bid</option>
-                <option value="Lost Bid">Lost Bid</option>
-                <option value="On Hold">On Hold</option>
-                <option value="Complete">Complete</option>
-              </select>
-            </div>
+            <ProjectDetailSelectField
+              id="project-contractor"
+              label="Contractor"
+              value={projectDetailsForm.contractor}
+              options={projectDetailDropdownOptions.contractor}
+              placeholder="Select contractor..."
+              customOpen={Boolean(projectDetailsCustomFields.contractor)}
+              customPlaceholder="Enter contractor..."
+              onSelect={(value) => updateProjectDetailsDropdown("contractor", value)}
+              onCustomChange={(value) => updateProjectDetailsCustomDropdown("contractor", value)}
+            />
+            <ProjectDetailSelectField
+              id="project-role"
+              label="Project role"
+              value={projectDetailsForm.projectRole}
+              options={projectDetailDropdownOptions.projectRole}
+              placeholder="Select role..."
+              customOpen={Boolean(projectDetailsCustomFields.projectRole)}
+              customPlaceholder="Enter project role..."
+              onSelect={(value) => updateProjectDetailsDropdown("projectRole", value)}
+              onCustomChange={(value) => updateProjectDetailsCustomDropdown("projectRole", value)}
+            />
+            <ProjectDetailSelectField
+              id="project-type"
+              label="Project type"
+              value={projectDetailsForm.type}
+              options={projectDetailDropdownOptions.type}
+              placeholder="Select project type..."
+              customOpen={Boolean(projectDetailsCustomFields.type)}
+              customPlaceholder="Enter project type..."
+              onSelect={(value) => updateProjectDetailsDropdown("type", value)}
+              onCustomChange={(value) => updateProjectDetailsCustomDropdown("type", value)}
+            />
+            <ProjectDetailSelectField
+              id="project-status"
+              label="Status"
+              value={projectDetailsForm.status || "Active"}
+              options={projectDetailDropdownOptions.status}
+              customOpen={Boolean(projectDetailsCustomFields.status)}
+              customPlaceholder="Enter status..."
+              onSelect={(value) => updateProjectDetailsDropdown("status", value)}
+              onCustomChange={(value) => updateProjectDetailsCustomDropdown("status", value)}
+            />
             {projectDetailsForm.status === "Bid" && (
               <div className="space-y-2">
                 <Label htmlFor="project-bid-date-time">Bid date and time</Label>
