@@ -5,19 +5,21 @@ import { join } from "node:path";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const schedulerPage = readFileSync(join(root, "src/app/scheduler/page.tsx"), "utf8");
+const scheduler2Page = readFileSync(join(root, "src/app/scheduler2/page.tsx"), "utf8");
 
 assert.ok(schedulerPage.includes('"use client"'), "/scheduler should be an interactive workspace");
 assert.ok(schedulerPage.includes("AppShell"), "/scheduler should live inside the OpsSlate app shell");
-assert.ok(schedulerPage.includes("OpsSlate Scheduler"), "/scheduler should render the scheduler main page");
-assert.ok(schedulerPage.includes("No groups yet"), "/scheduler should start on the task table empty state");
+assert.ok(schedulerPage.includes("Scheduler Workspace"), "/scheduler should render the scheduler main page");
 assert.ok(schedulerPage.includes("3-Week Lookahead"), "/scheduler should start with a lookahead planning board");
 assert.ok(schedulerPage.includes("Schedule Intelligence"), "/scheduler should include schedule intelligence context");
-assert.ok(schedulerPage.includes("Construction Gantt"), "/scheduler should separate the Gantt view from the task table");
+assert.ok(schedulerPage.includes("Construction Task Library"), "/scheduler should include construction task templates");
 assert.ok(schedulerPage.includes("Task / WBS"), "/scheduler should render a construction task table");
 assert.ok(schedulerPage.includes("Gantt Timeline"), "/scheduler should render a Gantt-style timeline");
-assert.ok(schedulerPage.includes('activeView === "table"'), "/scheduler should keep task table as a distinct view");
-assert.ok(schedulerPage.includes('activeView === "gantt"'), "/scheduler should keep Gantt chart as a distinct view");
 assert.ok(schedulerPage.includes("Predecessor"), "/scheduler should expose predecessor/dependency fields");
 assert.ok(schedulerPage.includes("Critical Path"), "/scheduler should surface critical path scheduling");
 assert.ok(schedulerPage.includes("Mobilization"), "/scheduler should include construction phase templates");
 assert.ok(!schedulerPage.includes("ProductSalesPage"), "/scheduler should no longer render the marketing page");
+
+assert.ok(scheduler2Page.includes("OpsSlate Scheduler"), "/scheduler2 should archive the separated scheduler shell");
+assert.ok(scheduler2Page.includes("No groups yet"), "/scheduler2 should keep the task table empty state");
+assert.ok(scheduler2Page.includes("Construction Gantt"), "/scheduler2 should keep the separated Gantt view");
