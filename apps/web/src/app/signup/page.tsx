@@ -16,5 +16,5 @@ export default function SignupPage() {
   if (loading) return <div className="min-h-screen bg-[#0b0f14]" />;
   if (user) return null;
 
-  return <LoginForm defaultMode="signup" direct />;
+  return <LoginForm defaultMode="signup" direct lockedMode="signup" />;
 }

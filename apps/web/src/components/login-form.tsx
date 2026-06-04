@@ -26,10 +26,18 @@ function OpsSlateMark() {
   );
 }
 
-export function LoginForm({ defaultMode = "login", direct = false }: { defaultMode?: "login" | "signup"; direct?: boolean }) {
+export function LoginForm({
+  defaultMode = "login",
+  direct = false,
+  lockedMode,
+}: {
+  defaultMode?: "login" | "signup";
+  direct?: boolean;
+  lockedMode?: "login" | "signup";
+}) {
   const { login, signup } = useAuth();
   const [showAuth, setShowAuth] = useState(direct);
-  const [mode, setMode] = useState<"login" | "signup">(defaultMode);
+  const [mode, setMode] = useState<"login" | "signup">(lockedMode ?? defaultMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -90,6 +98,14 @@ export function LoginForm({ defaultMode = "login", direct = false }: { defaultMo
             <span className="rounded-md border border-orange-300/18 bg-orange-300/10 px-2.5 py-1 text-orange-100">Ops Suite</span>
             <span className="rounded-md border border-lime-300/16 bg-lime-300/8 px-2.5 py-1 text-lime-100">AI Ready</span>
             <span className="rounded-md border border-sky-300/16 bg-sky-300/8 px-2.5 py-1 text-sky-100">Secure Access</span>
+          </div>
+          <div className="mt-6">
+            <h1 className="text-2xl font-black">
+              {mode === "signup" ? "Create your OpsSlate account" : "Sign in to OpsSlate"}
+            </h1>
+            <p className="mt-2 text-sm font-medium text-white/56">
+              {mode === "signup" ? "Start a new company workspace connected to your OpsSlate database." : "Access your existing company workspace."}
+            </p>
           </div>
         </div>
 
@@ -181,16 +197,25 @@ export function LoginForm({ defaultMode = "login", direct = false }: { defaultMo
             </div>
           )}
 
-          <button
-            type="button"
-            className="w-full text-center text-sm font-medium text-white/56 transition hover:text-lime-200"
-            onClick={() => {
-              setMode(mode === "login" ? "signup" : "login");
-              setError("");
-            }}
-          >
-            {mode === "login" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-          </button>
+          {lockedMode ? (
+            <Link
+              href={lockedMode === "signup" ? "/login" : "/signup"}
+              className="block w-full text-center text-sm font-medium text-white/56 transition hover:text-lime-200"
+            >
+              {lockedMode === "signup" ? "Already have an account? Sign in instead" : "Need a new company account? Create one"}
+            </Link>
+          ) : (
+            <button
+              type="button"
+              className="w-full text-center text-sm font-medium text-white/56 transition hover:text-lime-200"
+              onClick={() => {
+                setMode(mode === "login" ? "signup" : "login");
+                setError("");
+              }}
+            >
+              {mode === "login" ? "Need an account? Sign up" : "Already have an account? Sign in"}
+            </button>
+          )}
         </form>
       </div>
     </div>
