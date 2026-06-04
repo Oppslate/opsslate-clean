@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { CalendarDays, Clock, Users, AlertTriangle, Plus, Filter, GitBranch, Layers, HardHat, Flag, Save, Download, SlidersHorizontal, Search, Printer, ClipboardList, FileText, FolderOpen, Trash2, LayoutDashboard } from "lucide-react";
+import { CalendarDays, Clock, Users, AlertTriangle, Plus, Filter, GitBranch, Layers, HardHat, Flag, Save, Download, SlidersHorizontal, Search, Printer, ClipboardList, FileText, FolderOpen, Trash2, LayoutDashboard, Pencil } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -193,6 +193,11 @@ function ganttGridStyle(task: ConstructionTask) {
   };
 }
 
+function promptForName(label: string, currentValue = "") {
+  const value = window.prompt(label, currentValue);
+  return value?.trim() || "";
+}
+
 function SchedulerContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [activeWindow, setActiveWindow] = useState<"week" | "three-week" | "month">("three-week");
@@ -249,17 +254,40 @@ function SchedulerContent() {
   const addPhase = () => {
     if (!hasProject) return;
     const nextNumber = schedulePhases.length + 1;
+    const name = promptForName("Phase name", `Phase ${nextNumber}`);
+    if (!name) return;
     setSchedulePhases((current) => [
       ...current,
       {
         id: `phase-${Date.now()}`,
-        name: `Phase ${nextNumber}`,
+        name,
         milestones: [],
       },
     ]);
   };
 
+  const editPhase = (phaseId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    if (!phase) return;
+    const name = promptForName("Edit phase name", phase.name);
+    if (!name) return;
+    setSchedulePhases((current) =>
+      current.map((item) => item.id === phaseId ? { ...item, name } : item),
+    );
+  };
+
+  const deletePhase = (phaseId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    if (!phase) return;
+    if (!window.confirm(`Delete phase "${phase.name}" and everything inside it?`)) return;
+    setSchedulePhases((current) => current.filter((item) => item.id !== phaseId));
+  };
+
   const addMilestone = (phaseId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    const nextNumber = (phase?.milestones.length || 0) + 1;
+    const name = promptForName("Milestone name", `Milestone ${nextNumber}`);
+    if (!name) return;
     setSchedulePhases((current) =>
       current.map((phase) =>
         phase.id === phaseId
@@ -269,7 +297,7 @@ function SchedulerContent() {
                 ...phase.milestones,
                 {
                   id: `milestone-${Date.now()}`,
-                  name: `Milestone ${phase.milestones.length + 1}`,
+                  name,
                   target: "TBD",
                   tasks: [],
                 },
@@ -280,7 +308,44 @@ function SchedulerContent() {
     );
   };
 
+  const editMilestone = (phaseId: string, milestoneId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    const milestone = phase?.milestones.find((item) => item.id === milestoneId);
+    if (!milestone) return;
+    const name = promptForName("Edit milestone name", milestone.name);
+    if (!name) return;
+    setSchedulePhases((current) =>
+      current.map((phase) =>
+        phase.id === phaseId
+          ? {
+              ...phase,
+              milestones: phase.milestones.map((item) => item.id === milestoneId ? { ...item, name } : item),
+            }
+          : phase,
+      ),
+    );
+  };
+
+  const deleteMilestone = (phaseId: string, milestoneId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    const milestone = phase?.milestones.find((item) => item.id === milestoneId);
+    if (!milestone) return;
+    if (!window.confirm(`Delete milestone "${milestone.name}" and its tasks?`)) return;
+    setSchedulePhases((current) =>
+      current.map((phase) =>
+        phase.id === phaseId
+          ? { ...phase, milestones: phase.milestones.filter((item) => item.id !== milestoneId) }
+          : phase,
+      ),
+    );
+  };
+
   const addTask = (phaseId: string, milestoneId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    const milestone = phase?.milestones.find((item) => item.id === milestoneId);
+    const nextNumber = (milestone?.tasks.length || 0) + 1;
+    const name = promptForName("Task name", `Task ${nextNumber}`);
+    if (!name) return;
     setSchedulePhases((current) =>
       current.map((phase) =>
         phase.id === phaseId
@@ -294,13 +359,61 @@ function SchedulerContent() {
                         ...milestone.tasks,
                         {
                           id: `task-${Date.now()}`,
-                          name: `Task ${milestone.tasks.length + 1}`,
+                          name,
                           duration: 1,
                           crew: "Unassigned",
                           status: "Planned",
                         },
                       ],
                     }
+                  : milestone,
+              ),
+            }
+          : phase,
+      ),
+    );
+  };
+
+  const editTask = (phaseId: string, milestoneId: string, taskId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    const milestone = phase?.milestones.find((item) => item.id === milestoneId);
+    const task = milestone?.tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    const name = promptForName("Edit task name", task.name);
+    if (!name) return;
+    setSchedulePhases((current) =>
+      current.map((phase) =>
+        phase.id === phaseId
+          ? {
+              ...phase,
+              milestones: phase.milestones.map((milestone) =>
+                milestone.id === milestoneId
+                  ? {
+                      ...milestone,
+                      tasks: milestone.tasks.map((item) => item.id === taskId ? { ...item, name } : item),
+                    }
+                  : milestone,
+              ),
+            }
+          : phase,
+      ),
+    );
+  };
+
+  const deleteTask = (phaseId: string, milestoneId: string, taskId: string) => {
+    const phase = schedulePhases.find((item) => item.id === phaseId);
+    const milestone = phase?.milestones.find((item) => item.id === milestoneId);
+    const task = milestone?.tasks.find((item) => item.id === taskId);
+    if (!task) return;
+    if (!window.confirm(`Delete task "${task.name}"?`)) return;
+    setSchedulePhases((current) =>
+      current.map((phase) =>
+        phase.id === phaseId
+          ? {
+              ...phase,
+              milestones: phase.milestones.map((milestone) =>
+                milestone.id === milestoneId
+                  ? { ...milestone, tasks: milestone.tasks.filter((item) => item.id !== taskId) }
                   : milestone,
               ),
             }
@@ -456,8 +569,14 @@ function SchedulerContent() {
               projectName={selectedProjectName}
               phases={schedulePhases}
               onAddPhase={addPhase}
+              onEditPhase={editPhase}
+              onDeletePhase={deletePhase}
               onAddMilestone={addMilestone}
+              onEditMilestone={editMilestone}
+              onDeleteMilestone={deleteMilestone}
               onAddTask={addTask}
+              onEditTask={editTask}
+              onDeleteTask={deleteTask}
             />
           ) : (
             <GanttChartView tasks={visibleTasks} criticalTasks={criticalTasks} phaseCount={phaseCount} />
@@ -557,15 +676,27 @@ function TaskTableView({
   projectName,
   phases,
   onAddPhase,
+  onEditPhase,
+  onDeletePhase,
   onAddMilestone,
+  onEditMilestone,
+  onDeleteMilestone,
   onAddTask,
+  onEditTask,
+  onDeleteTask,
 }: {
   hasProject: boolean;
   projectName: string;
   phases: SchedulePhase[];
   onAddPhase: () => void;
+  onEditPhase: (phaseId: string) => void;
+  onDeletePhase: (phaseId: string) => void;
   onAddMilestone: (phaseId: string) => void;
+  onEditMilestone: (phaseId: string, milestoneId: string) => void;
+  onDeleteMilestone: (phaseId: string, milestoneId: string) => void;
   onAddTask: (phaseId: string, milestoneId: string) => void;
+  onEditTask: (phaseId: string, milestoneId: string, taskId: string) => void;
+  onDeleteTask: (phaseId: string, milestoneId: string, taskId: string) => void;
 }) {
   if (!hasProject) {
     return (
@@ -625,10 +756,20 @@ function TaskTableView({
               <div className="text-[11px] font-black uppercase tracking-[0.14em] text-blue-100/42">Phase {phaseIndex + 1}</div>
               <h3 className="mt-1 text-lg font-black text-white">{phase.name}</h3>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => onAddMilestone(phase.id)} className="gap-2">
-              <Flag className="size-4" />
-              Add Milestone
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => onEditPhase(phase.id)} className="gap-2">
+                <Pencil className="size-4" />
+                Edit Phase
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => onDeletePhase(phase.id)} className="gap-2 text-red-200 hover:text-red-100">
+                <Trash2 className="size-4" />
+                Delete Phase
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => onAddMilestone(phase.id)} className="gap-2">
+                <Flag className="size-4" />
+                Add Milestone
+              </Button>
+            </div>
           </div>
 
           {phase.milestones.length === 0 ? (
@@ -646,10 +787,20 @@ function TaskTableView({
                     </div>
                     <h4 className="mt-2 text-base font-black text-white">{milestone.name}</h4>
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={() => onAddTask(phase.id, milestone.id)} className="gap-2">
-                    <Plus className="size-4" />
-                    Add Task
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => onEditMilestone(phase.id, milestone.id)} className="gap-2">
+                      <Pencil className="size-4" />
+                      Edit Milestone
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onDeleteMilestone(phase.id, milestone.id)} className="gap-2 text-red-200 hover:text-red-100">
+                      <Trash2 className="size-4" />
+                      Delete Milestone
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => onAddTask(phase.id, milestone.id)} className="gap-2">
+                      <Plus className="size-4" />
+                      Add Task
+                    </Button>
+                  </div>
                 </div>
 
                 {milestone.tasks.length === 0 ? (
@@ -658,18 +809,29 @@ function TaskTableView({
                   </div>
                 ) : (
                   <div className="mt-3 overflow-hidden rounded-md border border-white/10">
-                    <div className="grid grid-cols-[minmax(240px,1.5fr)_110px_150px_120px] bg-white/[0.035] px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-blue-100/42">
+                    <div className="grid grid-cols-[minmax(240px,1.5fr)_110px_150px_120px_190px] bg-white/[0.035] px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-blue-100/42">
                       <span>Task</span>
                       <span>Duration</span>
                       <span>Crew</span>
                       <span>Status</span>
+                      <span>Actions</span>
                     </div>
                     {milestone.tasks.map((task) => (
-                      <div key={task.id} className="grid grid-cols-[minmax(240px,1.5fr)_110px_150px_120px] items-center border-t border-white/[0.06] px-3 py-2 text-sm text-blue-100/72">
+                      <div key={task.id} className="grid grid-cols-[minmax(240px,1.5fr)_110px_150px_120px_190px] items-center border-t border-white/[0.06] px-3 py-2 text-sm text-blue-100/72">
                         <span className="font-bold text-white">{task.name}</span>
                         <span>{task.duration} days</span>
                         <span>{task.crew}</span>
                         <Badge variant="outline" className={`w-fit justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
+                        <span className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => onEditTask(phase.id, milestone.id, task.id)} className="inline-flex items-center gap-1 text-xs font-bold text-blue-200 transition hover:text-white">
+                            <Pencil className="size-3" />
+                            Edit Task
+                          </button>
+                          <button type="button" onClick={() => onDeleteTask(phase.id, milestone.id, task.id)} className="inline-flex items-center gap-1 text-xs font-bold text-red-200 transition hover:text-red-100">
+                            <Trash2 className="size-3" />
+                            Delete Task
+                          </button>
+                        </span>
                       </div>
                     ))}
                   </div>

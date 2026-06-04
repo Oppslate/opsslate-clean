@@ -26,4 +26,13 @@ assert.ok(scheduler2Page.includes("Start with a phase"), "/scheduler2 should sta
 assert.ok(scheduler2Page.includes("Milestones"), "/scheduler2 should nest milestone checkpoints inside phases");
 assert.ok(scheduler2Page.includes("Tasks"), "/scheduler2 should nest detailed task activities inside milestones");
 assert.ok(scheduler2Page.includes("Import From Estimate"), "/scheduler2 should expose estimate import as a prompted action");
+assert.ok(scheduler2Page.includes("Phase name"), "/scheduler2 should prompt for phase names");
+assert.ok(scheduler2Page.includes("Milestone name"), "/scheduler2 should prompt for milestone names");
+assert.ok(scheduler2Page.includes("Task name"), "/scheduler2 should prompt for task names");
+assert.ok(scheduler2Page.includes("Edit Phase"), "/scheduler2 should allow phase editing");
+assert.ok(scheduler2Page.includes("Delete Phase"), "/scheduler2 should allow phase deletion");
+assert.ok(scheduler2Page.includes("Edit Milestone"), "/scheduler2 should allow milestone editing");
+assert.ok(scheduler2Page.includes("Delete Milestone"), "/scheduler2 should allow milestone deletion");
+assert.ok(scheduler2Page.includes("Edit Task"), "/scheduler2 should allow task editing");
+assert.ok(scheduler2Page.includes("Delete Task"), "/scheduler2 should allow task deletion");
 assert.ok(scheduler2Page.includes("Construction Gantt"), "/scheduler2 should keep the separated Gantt view");
