@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Clock, Link2, Users, AlertTriangle, Plus, Filter, GitBranch, Layers, HardHat, Flag } from "lucide-react";
+import { CalendarDays, Clock, Users, AlertTriangle, Plus, Filter, GitBranch, Layers, HardHat, Flag, Save, Download, SlidersHorizontal } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -178,7 +178,7 @@ function SchedulerContent() {
               <Badge variant="outline" className="border-cyan-400/35 text-cyan-100">PLAN</Badge>
               <Badge variant="outline" className="border-orange-400/30 text-orange-100">Main Scheduler</Badge>
             </div>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-white">Scheduler Workspace</h1>
+            <h1 className="mt-3 text-3xl font-black text-white">Scheduler Workspace</h1>
             <p className="mt-2 max-w-3xl text-sm text-white/58">
               Build the weekly plan, watch job constraints, and keep field dates tied to project activity.
             </p>
@@ -219,6 +219,25 @@ function SchedulerContent() {
             </div>
           </div>
         </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
+          <Button type="button" size="sm" className="gap-2">
+            <Save className="size-4" />
+            Save Baseline
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2">
+            <GitBranch className="size-4" />
+            Dependencies
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2">
+            <SlidersHorizontal className="size-4" />
+            Schedule Options
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2">
+            <Download className="size-4" />
+            Export
+          </Button>
+        </div>
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -250,7 +269,7 @@ function SchedulerContent() {
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[1160px]">
+          <div className="min-w-[1180px]">
             <div className="grid grid-cols-[420px_minmax(720px,1fr)] border-b border-white/10 bg-[#0b1118]">
               <div className="grid grid-cols-[74px_118px_1fr_96px] gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">
                 <span>WBS</span>
@@ -258,14 +277,16 @@ function SchedulerContent() {
                 <span>Task / WBS</span>
                 <span>Status</span>
               </div>
-              <div className="px-4 pt-2 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">Gantt Timeline</div>
-              <div className="grid grid-cols-24 gap-px px-4 pb-3 pt-1 text-center text-[10px] font-black uppercase tracking-[0.08em] text-white/38">
-                {Array.from({ length: 24 }, (_, index) => <span key={index}>D{index + 1}</span>)}
+              <div>
+                <div className="px-4 pt-2 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">Gantt Timeline</div>
+                <div className="grid [grid-template-columns:repeat(24,minmax(0,1fr))] gap-px px-4 pb-3 pt-1 text-center text-[10px] font-black uppercase tracking-[0.08em] text-white/38">
+                  {Array.from({ length: 24 }, (_, index) => <span key={index}>D{index + 1}</span>)}
+                </div>
               </div>
             </div>
 
             {CONSTRUCTION_TASKS.map((task) => (
-              <div key={task.id} className="grid min-h-[58px] grid-cols-[420px_minmax(720px,1fr)] border-b border-white/8 bg-[#0c1219] hover:bg-[#111b26]">
+              <div key={task.id} className="grid min-h-[62px] grid-cols-[420px_minmax(720px,1fr)] border-b border-white/8 bg-[#0c1219] transition hover:bg-[#111b26]">
                 <div className="grid grid-cols-[74px_118px_1fr_96px] items-center gap-2 px-4 py-3">
                   <div className="font-mono text-xs font-black text-white/72">{task.wbs}</div>
                   <div className="truncate text-xs font-bold text-cyan-100">{task.phase}</div>
@@ -279,7 +300,7 @@ function SchedulerContent() {
                   </div>
                   <Badge variant="outline" className={`justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
                 </div>
-                <div className="relative grid grid-cols-24 gap-px px-4 py-3">
+                <div className="relative grid [grid-template-columns:repeat(24,minmax(0,1fr))] gap-px px-4 py-3">
                   {Array.from({ length: 24 }, (_, index) => <div key={index} className="min-h-8 border-l border-white/[0.035]" />)}
                   <div
                     className={`absolute inset-y-3 rounded-md border px-2 py-1 shadow-[0_10px_24px_rgba(0,0,0,0.25)] ${task.critical ? "border-orange-300/45 bg-orange-500/35" : "border-cyan-300/35 bg-cyan-500/24"}`}
@@ -302,15 +323,15 @@ function SchedulerContent() {
         <div className="grid gap-3 p-4 md:grid-cols-3">
           <div className="rounded-lg border border-orange-400/25 bg-orange-400/8 p-3">
             <div className="flex items-center gap-2 text-sm font-black text-orange-100"><Flag className="size-4" /> Critical Path</div>
-            <p className="mt-1 text-xs text-white/50">Critical activities are highlighted in orange and should drive the baseline sequence.</p>
+            <p className="mt-1 text-xs text-white/50">{criticalTasks.length} activities are driving the baseline sequence.</p>
           </div>
           <div className="rounded-lg border border-cyan-400/25 bg-cyan-400/8 p-3">
             <div className="flex items-center gap-2 text-sm font-black text-cyan-100"><GitBranch className="size-4" /> Dependencies</div>
-            <p className="mt-1 text-xs text-white/50">Predecessor logic is visible in the task row and ready for dependency editing.</p>
+            <p className="mt-1 text-xs text-white/50">{CONSTRUCTION_TASKS.filter((task) => task.predecessor !== "-").length} predecessor links are visible in the task matrix.</p>
           </div>
           <div className="rounded-lg border border-lime-400/25 bg-lime-400/8 p-3">
             <div className="flex items-center gap-2 text-sm font-black text-lime-100"><Layers className="size-4" /> Construction Flow</div>
-            <p className="mt-1 text-xs text-white/50">Tasks follow a field sequence from mobilization through closeout.</p>
+            <p className="mt-1 text-xs text-white/50">{phaseCount} phases are arranged from mobilization through closeout.</p>
           </div>
         </div>
       </section>
@@ -380,12 +401,19 @@ function SchedulerContent() {
             )}
           </Panel>
 
-          <Panel title="Next Build Step" subtitle="Scheduler rebuild path">
-            <ol className="space-y-2 text-sm text-white/62">
-              <li>1. Add real task creation and editing.</li>
-              <li>2. Add dependency links and drag schedule dates.</li>
-              <li>3. Add crew assignment and weather shift logic.</li>
-            </ol>
+          <Panel title="Project Flow" subtitle="Baseline sequence health">
+            <div className="space-y-3">
+              {[
+                ["Mobilization", "Ready", "text-lime-200"],
+                ["Underground", "Watch", "text-amber-200"],
+                ["Closeout", "Planned", "text-white/60"],
+              ].map(([label, status, color]) => (
+                <div key={label} className="flex items-center justify-between rounded-md border border-white/10 bg-[#0b1118] px-3 py-2">
+                  <span className="text-sm font-bold text-white">{label}</span>
+                  <span className={`text-xs font-black uppercase ${color}`}>{status}</span>
+                </div>
+              ))}
+            </div>
           </Panel>
         </aside>
       </section>
