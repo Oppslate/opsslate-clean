@@ -10,6 +10,12 @@ assert.match(page, /Estimator Command Center/, "estimating route should include 
 assert.match(page, /Project Selection/, "estimating cockpit should include a project selection dropdown");
 assert.match(page, /setSelectedProjectId/, "project selection should update cockpit project context");
 assert.match(page, /projectFilteredEstimates/, "project selection should filter the bid portfolio and metrics");
+assert.match(page, /bidPortfolioRows/, "bid portfolio should be driven by project rows");
+assert.match(page, /estimateForProject/, "bid portfolio should attach estimates to their project rows");
+assert.match(page, /projectDisplayName/, "bid portfolio should show the project name as the primary row label");
+assert.match(page, /Open Estimate/, "project portfolio rows with estimates should open the estimate");
+assert.match(page, /Start Estimate/, "project portfolio rows without estimates should prompt the estimator to start one");
+assert.match(page, /No estimate/, "project portfolio should show a clear empty estimate state");
 assert.match(page, /All projects/, "project dropdown should allow the estimator to view all projects");
 assert.match(page, /Bid Command Center/, "cockpit should use bid-first command center language");
 assert.match(page, /RFQ Desk/, "RFQ workspace should remain available as a tool");

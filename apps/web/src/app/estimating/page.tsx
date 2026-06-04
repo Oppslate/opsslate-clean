@@ -73,6 +73,79 @@ function itemLabel(item: Record<string, unknown>) {
   return [item.section, item.description].filter(Boolean).join(" - ") || "Estimate item";
 }
 
+type BidPortfolioRow = {
+  key: string;
+  project?: Record<string, unknown>;
+  estimate?: Record<string, unknown>;
+};
+
+function recordId(record?: Record<string, unknown>) {
+  return String(record?._id || "");
+}
+
+function projectDisplayName(project?: Record<string, unknown>, estimate?: Record<string, unknown>) {
+  return String(project?.name || project?.projectName || estimate?.name || "Unnamed project");
+}
+
+function projectAddressLine(project?: Record<string, unknown>, estimate?: Record<string, unknown>) {
+  const parts = [
+    project?.address,
+    project?.city,
+    project?.state,
+    project?.zip,
+  ].filter(Boolean);
+  return parts.length ? parts.join(", ") : String(estimate?.location || estimate?.description || "No project address yet");
+}
+
+function portfolioClientLabel(project?: Record<string, unknown>, estimate?: Record<string, unknown>) {
+  return String(estimate?.client || project?.client || project?.contractor || "No client");
+}
+
+function portfolioTypeLabel(project?: Record<string, unknown>, estimate?: Record<string, unknown>) {
+  return String(estimate?.bidType || estimate?.buildingType || project?.projectType || project?.type || "Project");
+}
+
+function portfolioStoredTotal(estimate?: Record<string, unknown>) {
+  const total = estimate?.total ?? estimate?.totalAmount ?? estimate?.bidValue ?? estimate?.contractValue ?? estimate?.amount;
+  return typeof total === "number" || typeof total === "string" ? total : undefined;
+}
+
+function estimateForProject(project: Record<string, unknown>, estimates: Array<Record<string, unknown>> = []) {
+  const projectId = recordId(project);
+  return estimates.find((estimate) => String(estimate.projectId || "") === projectId);
+}
+
+function bidPortfolioRows({
+  projects,
+  estimates,
+  selectedProjectId,
+}: {
+  projects: Array<Record<string, unknown>>;
+  estimates: Array<Record<string, unknown>>;
+  selectedProjectId: string;
+}) {
+  const visibleProjects = selectedProjectId ? projects.filter((project) => recordId(project) === selectedProjectId) : projects;
+  const rows: BidPortfolioRow[] = visibleProjects.map((project) => ({
+    key: `project-${recordId(project)}`,
+    project,
+    estimate: estimateForProject(project, estimates),
+  }));
+  const projectIds = new Set(visibleProjects.map((project) => recordId(project)));
+  const matchedEstimateIds = new Set(rows.map((row) => recordId(row.estimate)).filter(Boolean));
+  if (!selectedProjectId) {
+    estimates.forEach((estimate) => {
+      const estimateProjectId = String(estimate.projectId || "");
+      if (!estimateProjectId || (!projectIds.has(estimateProjectId) && !matchedEstimateIds.has(recordId(estimate)))) {
+        rows.push({
+          key: `estimate-${recordId(estimate)}`,
+          estimate,
+        });
+      }
+    });
+  }
+  return rows;
+}
+
 type EstimatingToolKey =
   | "cockpit"
   | "estimates"
@@ -545,6 +618,11 @@ function EstimatingWorkspace() {
   }, [estimates, selectedProjectId]);
   const selectedEstimate = projectFilteredEstimates.find((estimate) => String(estimate._id) === selectedEstimateId) || projectFilteredEstimates[0] || (selectedProjectId ? undefined : estimates?.[0]);
   const estimateId = selectedEstimate?._id ? String(selectedEstimate._id) : "";
+  const portfolioRows = useMemo(() => bidPortfolioRows({
+    projects: projects || [],
+    estimates: estimates || [],
+    selectedProjectId,
+  }), [projects, estimates, selectedProjectId]);
 
   const estimateItems = useQuery(
     api.estimating.listEstimateItems,
@@ -965,7 +1043,7 @@ function EstimatingWorkspace() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <CockpitMetricCard label="Total Estimates" value={projectFilteredEstimates.length} sub={`${draftBids} draft${draftBids === 1 ? "" : "s"}${selectedProject ? ` for ${selectedProject.name || "selected project"}` : ""}`} />
+              <CockpitMetricCard label="Bid Portfolio" value={portfolioRows.length} sub={`${projectFilteredEstimates.length} estimate${projectFilteredEstimates.length === 1 ? "" : "s"}${selectedProject ? ` for ${selectedProject.name || "selected project"}` : ""}`} />
               <CockpitMetricCard label="Active Bids" value={activeBids} sub="Bid work in motion" tone="blue" />
               <CockpitMetricCard label="Bid Value" value={money(selectedEstimateTotal)} sub={selectedEstimate?.name ? "Selected estimate total" : "No estimate selected"} />
               <CockpitMetricCard label="RFQs Open" value={rfqSummary.open} sub={`${rfqSummary.overdue} overdue`} tone={rfqSummary.overdue ? "red" : "purple"} />
@@ -988,44 +1066,56 @@ function EstimatingWorkspace() {
                   <table className="w-full text-sm">
                     <thead className="bg-background text-xs uppercase tracking-[0.14em] text-muted-foreground">
                       <tr>
-                        <th className="p-3 text-left">Bid</th>
                         <th className="p-3 text-left">Project</th>
                         <th className="p-3 text-left">Client</th>
-                        <th className="p-3 text-left">Bid Date</th>
                         <th className="p-3 text-left">Status</th>
                         <th className="p-3 text-left">Type</th>
-                        <th className="p-3 text-left">RFQ</th>
-                        <th className="p-3 text-left">Schedule</th>
-                        <th className="p-3 text-left">Risk</th>
+                        <th className="p-3 text-right">Total</th>
                         <th className="p-3 text-left">Action</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {projectFilteredEstimates.map((estimate) => {
-                        const project = (projects || []).find((entry) => String(entry._id) === String(estimate.projectId || ""));
-                        const isSelected = String(estimate._id) === estimateId;
+                      {portfolioRows.map((row) => {
+                        const { project, estimate } = row;
+                        const isSelected = Boolean(estimate?._id && String(estimate._id) === estimateId);
+                        const storedTotal = portfolioStoredTotal(estimate);
+                        const totalLabel = isSelected ? money(selectedEstimateTotal) : storedTotal !== undefined ? money(storedTotal) : estimate ? "Open" : "No estimate";
                         return (
-                          <tr key={String(estimate._id)} className="border-t border-border">
+                          <tr key={row.key} className="border-t border-border">
                             <td className="p-3">
-                              <div className="font-bold text-white">{estimate.name}</div>
-                              <div className="text-xs text-muted-foreground">{estimate.description || "No scope note yet"}</div>
+                              <div className="font-bold text-white">{projectDisplayName(project, estimate)}</div>
+                              <div className="text-xs text-muted-foreground">{projectAddressLine(project, estimate)}</div>
+                              {estimate?.name && project && String(estimate.name) !== projectDisplayName(project, estimate) ? (
+                                <div className="mt-1 text-[11px] font-semibold text-blue-200">Estimate: {String(estimate.name)}</div>
+                              ) : null}
                             </td>
-                            <td className="p-3 text-muted-foreground">{project?.name || estimate.location || "Project link needed"}</td>
-                            <td className="p-3 text-muted-foreground">{estimate.client || project?.contractor || "No client"}</td>
-                            <td className="p-3 text-muted-foreground">{estimate.bidDate || "No date"}</td>
-                            <td className="p-3"><Badge variant="outline">{statusLabel(estimate.status)}</Badge></td>
-                            <td className="p-3 text-muted-foreground">{estimate.bidType || estimate.buildingType || "General"}</td>
-                            <td className="p-3"><Badge className="bg-blue-500/15 text-blue-200">{isSelected ? `${rfqSummary.total} records` : "Open RFQ Desk"}</Badge></td>
-                            <td className="p-3"><Badge className={isSelected && scheduleScore > 70 ? "bg-green-500/15 text-green-300" : "bg-orange-500/15 text-orange-300"}>{isSelected ? `${scheduleScore}% ready` : "Needs map"}</Badge></td>
-                            <td className="p-3"><Badge className={predictiveSignals.length ? "bg-red-500/15 text-red-300" : "bg-green-500/15 text-green-300"}>{isSelected ? `${predictiveSignals.length} signals` : "Review"}</Badge></td>
-                            <td className="p-3"><Button size="sm" variant="outline" onClick={() => { setSelectedEstimateId(String(estimate._id)); setActiveTool("rfq"); }}>Open</Button></td>
+                            <td className="p-3 text-muted-foreground">{portfolioClientLabel(project, estimate)}</td>
+                            <td className="p-3">
+                              <Badge variant={estimate ? "outline" : "secondary"}>{estimate ? statusLabel(String(estimate.status || "draft")) : "No estimate"}</Badge>
+                            </td>
+                            <td className="p-3 text-muted-foreground">{portfolioTypeLabel(project, estimate)}</td>
+                            <td className="p-3 text-right font-bold text-white">{totalLabel}</td>
+                            <td className="p-3">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  if (project?._id) setSelectedProjectId(String(project._id));
+                                  setSelectedEstimateId(estimate?._id ? String(estimate._id) : "");
+                                  setSelectedItemIds([]);
+                                  setActiveTool(estimate?._id ? "rfq" : "estimates");
+                                }}
+                              >
+                                {estimate?._id ? "Open Estimate" : "Start Estimate"}
+                              </Button>
+                            </td>
                           </tr>
                         );
                       })}
-                      {!projectFilteredEstimates.length && (
+                      {!portfolioRows.length && (
                         <tr>
-                          <td colSpan={10} className="p-10 text-center text-muted-foreground">
-                            {selectedProject ? "No estimates are attached to this project yet." : "No estimates yet. Create your first bid, then OpsSlate will start watching RFQ exposure, risk, and schedule readiness."}
+                          <td colSpan={6} className="p-10 text-center text-muted-foreground">
+                            {selectedProject ? "No portfolio row is available for this project yet." : "No projects or estimates yet. Create a project first, then open its estimate from the Bid Portfolio."}
                           </td>
                         </tr>
                       )}
