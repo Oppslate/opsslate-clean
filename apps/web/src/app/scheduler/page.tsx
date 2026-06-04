@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Clock, Users, AlertTriangle, Plus, Filter, GitBranch, Layers, HardHat, Flag, Save, Download, SlidersHorizontal } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { CalendarDays, Clock, Users, AlertTriangle, Plus, Filter, GitBranch, Layers, HardHat, Flag, Save, Download, SlidersHorizontal, Search, Printer, ClipboardList, FileText, FolderOpen, Trash2, LayoutDashboard } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -64,6 +65,14 @@ const PHASE_TEMPLATES = [
   "Electrical",
   "Restoration",
   "Closeout",
+];
+
+const SCHEDULER_TABS: Array<{ label: string; icon: LucideIcon }> = [
+  { label: "Schedule", icon: ClipboardList },
+  { label: "Team", icon: Users },
+  { label: "Crews", icon: HardHat },
+  { label: "Details", icon: FileText },
+  { label: "Documents", icon: FolderOpen },
 ];
 
 const TYPE_STYLES: Record<string, string> = {
@@ -133,6 +142,8 @@ function ganttGridStyle(task: ConstructionTask) {
 function SchedulerContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [activeWindow, setActiveWindow] = useState<"week" | "three-week" | "month">("three-week");
+  const [activeView, setActiveView] = useState<"table" | "gantt">("table");
+  const [sampleLoaded, setSampleLoaded] = useState(false);
   const { user } = useAuth();
 
   const projects = useQuery(api.projects.list, user ? { companyId: user.companyId } : "skip") as Project[] | undefined;
@@ -143,8 +154,6 @@ function SchedulerContent() {
 
   const today = useMemo(() => todayDate(), []);
   const windowDays = activeWindow === "week" ? 7 : activeWindow === "three-week" ? 21 : 30;
-  const selectedProject = projects?.find((project) => project._id === selectedProjectId);
-
   const lookaheadDays = useMemo(() => {
     const safeEvents = events || [];
     return Array.from({ length: windowDays }, (_, index) => {
@@ -165,178 +174,128 @@ function SchedulerContent() {
 
   const highRiskEvents = upcomingEvents.filter((event) => event.priority === "high" || ["rfi", "insurance", "rental-end"].includes(event.type));
   const crewEvents = upcomingEvents.filter((event) => event.type.startsWith("crew"));
-  const blockedEvents = upcomingEvents.filter((event) => ["rfi", "submittal", "delivery"].includes(event.type));
   const criticalTasks = CONSTRUCTION_TASKS.filter((task) => task.critical);
   const phaseCount = new Set(CONSTRUCTION_TASKS.map((task) => task.phase)).size;
 
-  return (
-    <div className="mx-auto max-w-[1680px] space-y-5">
-      <section className="rounded-lg border border-white/10 bg-[#101821] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="border-cyan-400/35 text-cyan-100">PLAN</Badge>
-              <Badge variant="outline" className="border-orange-400/30 text-orange-100">Main Scheduler</Badge>
-            </div>
-            <h1 className="mt-3 text-3xl font-black text-white">Scheduler Workspace</h1>
-            <p className="mt-2 max-w-3xl text-sm text-white/58">
-              Build the weekly plan, watch job constraints, and keep field dates tied to project activity.
-            </p>
-          </div>
+  const visibleTasks = sampleLoaded ? CONSTRUCTION_TASKS : [];
 
-          <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_auto] xl:min-w-[560px]">
-            <label className="block">
-              <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.16em] text-white/46">Project</span>
+  return (
+    <div className="min-h-[calc(100vh-96px)] bg-[#07101a]">
+      <section className="border-b border-white/10 bg-[#0b1320] px-4 py-4 lg:px-6">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2 border-r border-white/10 pr-4">
+              <span className="flex size-4 items-center justify-center rounded border border-blue-400/70 text-blue-300">
+                <span className="size-1.5 rounded-full bg-blue-300" />
+              </span>
+              <h1 className="text-xl font-black text-white">OpsSlate Scheduler</h1>
+            </div>
+            <label className="flex h-9 items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-3">
+              <span className="text-xs text-white/48">Project:</span>
               <select
                 value={selectedProjectId}
                 onChange={(event) => setSelectedProjectId(event.target.value)}
-                className="h-11 w-full rounded-lg border border-white/10 bg-[#070b10] px-3 text-sm font-semibold text-white outline-none transition focus:border-cyan-400/50"
+                className="max-w-[220px] bg-transparent text-sm font-black text-white outline-none"
               >
-                <option value="all">All active projects</option>
+                <option value="all">MAz</option>
                 {(projects || []).map((project) => (
                   <option key={project._id} value={project._id}>{project.name}</option>
                 ))}
               </select>
             </label>
-            <div>
-              <span className="mb-1 block text-[11px] font-bold uppercase tracking-[0.16em] text-white/46">Window</span>
-              <div className="grid h-11 grid-cols-3 rounded-lg border border-white/10 bg-[#070b10] p-1">
-                {[
-                  ["week", "7d"],
-                  ["three-week", "21d"],
-                  ["month", "30d"],
-                ].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setActiveWindow(value as typeof activeWindow)}
-                    className={`rounded-md px-3 text-xs font-black transition ${activeWindow === value ? "bg-cyan-400 text-slate-950" : "text-white/58 hover:bg-white/[0.06] hover:text-white"}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" size="sm" className="gap-2">
+              <LayoutDashboard className="size-4" />
+              Dashboard
+            </Button>
+            <Button type="button" size="sm" className="gap-2 bg-blue-600 hover:bg-blue-500">
+              <Plus className="size-4" />
+              New Project
+            </Button>
+            <button type="button" className="rounded-md p-2 text-white/42 transition hover:bg-white/[0.06] hover:text-white">
+              <Trash2 className="size-4" />
+            </button>
+            <div className="h-6 w-px bg-white/10" />
+            <div className="flex size-8 items-center justify-center rounded-full bg-blue-600 text-xs font-black text-white">T</div>
+            <span className="text-sm font-semibold text-white/72">Test</span>
+            <Button type="button" variant="outline" size="sm">Log out</Button>
           </div>
         </div>
 
-        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
-          <Button type="button" size="sm" className="gap-2">
-            <Save className="size-4" />
-            Save Baseline
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="gap-2">
-            <GitBranch className="size-4" />
-            Dependencies
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="gap-2">
-            <SlidersHorizontal className="size-4" />
-            Schedule Options
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="gap-2">
-            <Download className="size-4" />
-            Export
-          </Button>
+        <nav className="mt-6 flex flex-wrap gap-6">
+          {SCHEDULER_TABS.map(({ label, icon: Icon }) => (
+            <button
+              key={label}
+              type="button"
+              className={`flex h-10 items-center gap-2 border-b-2 px-5 text-sm font-black transition ${
+                label === "Schedule" ? "border-blue-500 text-white" : "border-transparent text-blue-200/72 hover:text-white"
+              }`}
+            >
+              <Icon className="size-4" />
+              {label}
+            </button>
+          ))}
+        </nav>
+      </section>
+
+      <section className="px-4 py-9 lg:px-6">
+        <div className="mx-auto max-w-[1540px]">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <Button type="button" className="h-10 gap-2 bg-emerald-600 px-6 font-black hover:bg-emerald-500">
+                <Plus className="size-4" />
+                New Item
+              </Button>
+              <label className="flex h-11 w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 md:w-64">
+                <Search className="size-4 text-white/45" />
+                <input
+                  type="search"
+                  placeholder="Search tasks..."
+                  className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/42"
+                />
+              </label>
+              <div className="flex h-11 rounded-lg border border-white/10 bg-white/[0.04] p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveView("table")}
+                  className={`rounded-md px-4 text-sm font-black transition ${activeView === "table" ? "bg-blue-600 text-white" : "text-blue-200/70 hover:text-white"}`}
+                >
+                  Table
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveView("gantt")}
+                  className={`rounded-md px-4 text-sm font-black transition ${activeView === "gantt" ? "bg-blue-600 text-white" : "text-blue-200/70 hover:text-white"}`}
+                >
+                  Gantt
+                </button>
+              </div>
+              <Button type="button" variant="ghost" size="sm" className="gap-2 text-blue-200/72">
+                <Printer className="size-4" />
+                Print
+              </Button>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSampleLoaded(true)}>
+              Load Sample Data
+            </Button>
+          </div>
+
+          <button type="button" className="mt-9 text-sm font-semibold text-blue-200 transition hover:text-white">
+            + Add new group
+          </button>
+
+          {activeView === "table" ? (
+            <TaskTableView tasks={visibleTasks} />
+          ) : (
+            <GanttChartView tasks={visibleTasks} criticalTasks={criticalTasks} phaseCount={phaseCount} />
+          )}
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={<CalendarDays className="size-5" />} label="Scheduled Items" value={upcomingEvents.length} tone="cyan" />
-        <MetricCard icon={<AlertTriangle className="size-5" />} label="Watch Items" value={highRiskEvents.length} tone="orange" />
-        <MetricCard icon={<Users className="size-5" />} label="Crew Dates" value={crewEvents.length} tone="green" />
-        <MetricCard icon={<Flag className="size-5" />} label="Critical Path" value={criticalTasks.length} tone="purple" />
-      </section>
-
-      {selectedProject?._id && <ScheduleIntelligencePanel projectId={selectedProject._id} />}
-
-      <section className="rounded-lg border border-white/10 bg-[#101821]">
-        <div className="flex flex-col gap-3 border-b border-white/10 p-4 xl:flex-row xl:items-center xl:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <HardHat className="size-5 text-orange-300" />
-              <h2 className="text-lg font-black text-white">Construction Task Library</h2>
-              <Badge variant="outline" className="border-white/10 text-white/52">{phaseCount} phases</Badge>
-            </div>
-            <p className="mt-1 text-sm text-white/50">Start with construction-ready phase templates, then build the project flow into the Gantt schedule.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {PHASE_TEMPLATES.map((phase) => (
-              <button key={phase} type="button" className="rounded-md border border-white/10 bg-[#0b1118] px-3 py-1.5 text-xs font-bold text-white/62 transition hover:border-orange-400/40 hover:text-orange-100">
-                {phase}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <div className="min-w-[1180px]">
-            <div className="grid grid-cols-[420px_minmax(720px,1fr)] border-b border-white/10 bg-[#0b1118]">
-              <div className="grid grid-cols-[74px_118px_1fr_96px] gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">
-                <span>WBS</span>
-                <span>Phase</span>
-                <span>Task / WBS</span>
-                <span>Status</span>
-              </div>
-              <div>
-                <div className="px-4 pt-2 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">Gantt Timeline</div>
-                <div className="grid [grid-template-columns:repeat(24,minmax(0,1fr))] gap-px px-4 pb-3 pt-1 text-center text-[10px] font-black uppercase tracking-[0.08em] text-white/38">
-                  {Array.from({ length: 24 }, (_, index) => <span key={index}>D{index + 1}</span>)}
-                </div>
-              </div>
-            </div>
-
-            {CONSTRUCTION_TASKS.map((task) => (
-              <div key={task.id} className="grid min-h-[62px] grid-cols-[420px_minmax(720px,1fr)] border-b border-white/8 bg-[#0c1219] transition hover:bg-[#111b26]">
-                <div className="grid grid-cols-[74px_118px_1fr_96px] items-center gap-2 px-4 py-3">
-                  <div className="font-mono text-xs font-black text-white/72">{task.wbs}</div>
-                  <div className="truncate text-xs font-bold text-cyan-100">{task.phase}</div>
-                  <div className="min-w-0">
-                    <div className="line-clamp-1 text-sm font-bold text-white">{task.task}</div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
-                      <span>{task.crew}</span>
-                      <span>{task.duration}d</span>
-                      <span>Predecessor: {task.predecessor}</span>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className={`justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
-                </div>
-                <div className="relative grid [grid-template-columns:repeat(24,minmax(0,1fr))] gap-px px-4 py-3">
-                  {Array.from({ length: 24 }, (_, index) => <div key={index} className="min-h-8 border-l border-white/[0.035]" />)}
-                  <div
-                    className={`absolute inset-y-3 rounded-md border px-2 py-1 shadow-[0_10px_24px_rgba(0,0,0,0.25)] ${task.critical ? "border-orange-300/45 bg-orange-500/35" : "border-cyan-300/35 bg-cyan-500/24"}`}
-                    style={{
-                      left: `calc(${(task.startOffset / 24) * 100}% + 1rem)`,
-                      width: `calc(${(task.duration / 24) * 100}% - 2px)`,
-                    }}
-                  >
-                    <div className="flex h-full items-center justify-between gap-2 overflow-hidden text-[11px] font-black text-white">
-                      <span className="truncate">{task.phase}</span>
-                      <span>{task.percent}%</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-3 p-4 md:grid-cols-3">
-          <div className="rounded-lg border border-orange-400/25 bg-orange-400/8 p-3">
-            <div className="flex items-center gap-2 text-sm font-black text-orange-100"><Flag className="size-4" /> Critical Path</div>
-            <p className="mt-1 text-xs text-white/50">{criticalTasks.length} activities are driving the baseline sequence.</p>
-          </div>
-          <div className="rounded-lg border border-cyan-400/25 bg-cyan-400/8 p-3">
-            <div className="flex items-center gap-2 text-sm font-black text-cyan-100"><GitBranch className="size-4" /> Dependencies</div>
-            <p className="mt-1 text-xs text-white/50">{CONSTRUCTION_TASKS.filter((task) => task.predecessor !== "-").length} predecessor links are visible in the task matrix.</p>
-          </div>
-          <div className="rounded-lg border border-lime-400/25 bg-lime-400/8 p-3">
-            <div className="flex items-center gap-2 text-sm font-black text-lime-100"><Layers className="size-4" /> Construction Flow</div>
-            <p className="mt-1 text-xs text-white/50">{phaseCount} phases are arranged from mobilization through closeout.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      {activeView === "gantt" && (
+      <section className="mx-auto grid max-w-[1540px] gap-5 px-4 pb-10 lg:px-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rounded-lg border border-white/10 bg-[#101821]">
           <div className="flex flex-col gap-3 border-b border-white/10 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -417,7 +376,178 @@ function SchedulerContent() {
           </Panel>
         </aside>
       </section>
+      )}
     </div>
+  );
+}
+
+function TaskTableView({ tasks }: { tasks: ConstructionTask[] }) {
+  const groupedTasks = useMemo(() => {
+    return PHASE_TEMPLATES.map((phase) => ({
+      phase,
+      tasks: tasks.filter((task) => task.phase === phase),
+    })).filter((group) => group.tasks.length > 0);
+  }, [tasks]);
+
+  if (tasks.length === 0) {
+    return (
+      <div className="flex min-h-[430px] items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-medium text-blue-100/88">No groups yet</h2>
+          <p className="mt-3 text-sm text-blue-200/72">
+            Add a group above, or click "Load Sample Data" to see a demo.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 overflow-hidden rounded-lg border border-white/10 bg-[#0d1724]">
+      <div className="grid grid-cols-[minmax(260px,1.5fr)_110px_110px_140px_140px_110px] border-b border-white/10 bg-white/[0.035] px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-blue-100/48">
+        <span>Task</span>
+        <span>Duration</span>
+        <span>Start</span>
+        <span>Crew</span>
+        <span>Predecessor</span>
+        <span>Status</span>
+      </div>
+      {groupedTasks.map((group) => (
+        <div key={group.phase}>
+          <div className="border-b border-white/10 bg-[#111c2a] px-4 py-3 text-sm font-black text-white">
+            {group.phase}
+          </div>
+          {group.tasks.map((task) => (
+            <div key={task.id} className="grid grid-cols-[minmax(260px,1.5fr)_110px_110px_140px_140px_110px] items-center border-b border-white/[0.06] px-4 py-3 text-sm text-blue-100/76 transition hover:bg-white/[0.035]">
+              <div>
+                <div className="font-black text-white">{task.task}</div>
+                <div className="mt-1 font-mono text-xs text-blue-200/42">WBS {task.wbs}</div>
+              </div>
+              <span>{task.duration} days</span>
+              <span>D{task.startOffset + 1}</span>
+              <span>{task.crew}</span>
+              <span>{task.predecessor}</span>
+              <Badge variant="outline" className={`w-fit justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GanttChartView({ tasks, criticalTasks, phaseCount }: { tasks: ConstructionTask[]; criticalTasks: ConstructionTask[]; phaseCount: number }) {
+  if (tasks.length === 0) {
+    return (
+      <div className="mt-16 flex min-h-[330px] items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/[0.02]">
+        <div className="text-center">
+          <h2 className="text-xl font-medium text-blue-100/88">No Gantt data yet</h2>
+          <p className="mt-3 text-sm text-blue-200/72">
+            Load sample data or add schedule groups before opening the Gantt.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section className="mt-5 rounded-lg border border-white/10 bg-[#101821]">
+      <div className="flex flex-col gap-3 border-b border-white/10 p-4 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <HardHat className="size-5 text-orange-300" />
+            <h2 className="text-lg font-black text-white">Construction Gantt</h2>
+            <Badge variant="outline" className="border-white/10 text-white/52">{phaseCount} phases</Badge>
+          </div>
+          <p className="mt-1 text-sm text-white/50">Project flow, predecessor logic, and critical path timing.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" className="gap-2">
+            <Save className="size-4" />
+            Save Baseline
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2">
+            <GitBranch className="size-4" />
+            Dependencies
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2">
+            <SlidersHorizontal className="size-4" />
+            Options
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-2">
+            <Download className="size-4" />
+            Export
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[1180px]">
+          <div className="grid grid-cols-[420px_minmax(720px,1fr)] border-b border-white/10 bg-[#0b1118]">
+            <div className="grid grid-cols-[74px_118px_1fr_96px] gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">
+              <span>WBS</span>
+              <span>Phase</span>
+              <span>Task / WBS</span>
+              <span>Status</span>
+            </div>
+            <div>
+              <div className="px-4 pt-2 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">Gantt Timeline</div>
+              <div className="grid [grid-template-columns:repeat(24,minmax(0,1fr))] gap-px px-4 pb-3 pt-1 text-center text-[10px] font-black uppercase tracking-[0.08em] text-white/38">
+                {Array.from({ length: 24 }, (_, index) => <span key={index}>D{index + 1}</span>)}
+              </div>
+            </div>
+          </div>
+
+          {tasks.map((task) => (
+            <div key={task.id} className="grid min-h-[62px] grid-cols-[420px_minmax(720px,1fr)] border-b border-white/8 bg-[#0c1219] transition hover:bg-[#111b26]">
+              <div className="grid grid-cols-[74px_118px_1fr_96px] items-center gap-2 px-4 py-3">
+                <div className="font-mono text-xs font-black text-white/72">{task.wbs}</div>
+                <div className="truncate text-xs font-bold text-cyan-100">{task.phase}</div>
+                <div className="min-w-0">
+                  <div className="line-clamp-1 text-sm font-bold text-white">{task.task}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
+                    <span>{task.crew}</span>
+                    <span>{task.duration}d</span>
+                    <span>Predecessor: {task.predecessor}</span>
+                  </div>
+                </div>
+                <Badge variant="outline" className={`justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
+              </div>
+              <div className="relative grid [grid-template-columns:repeat(24,minmax(0,1fr))] gap-px px-4 py-3">
+                {Array.from({ length: 24 }, (_, index) => <div key={index} className="min-h-8 border-l border-white/[0.035]" />)}
+                <div
+                  className={`absolute inset-y-3 rounded-md border px-2 py-1 shadow-[0_10px_24px_rgba(0,0,0,0.25)] ${task.critical ? "border-orange-300/45 bg-orange-500/35" : "border-cyan-300/35 bg-cyan-500/24"}`}
+                  style={{
+                    left: `calc(${(task.startOffset / 24) * 100}% + 1rem)`,
+                    width: `calc(${(task.duration / 24) * 100}% - 2px)`,
+                  }}
+                >
+                  <div className="flex h-full items-center justify-between gap-2 overflow-hidden text-[11px] font-black text-white">
+                    <span className="truncate">{task.phase}</span>
+                    <span>{task.percent}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-4 md:grid-cols-3">
+        <div className="rounded-lg border border-orange-400/25 bg-orange-400/8 p-3">
+          <div className="flex items-center gap-2 text-sm font-black text-orange-100"><Flag className="size-4" /> Critical Path</div>
+          <p className="mt-1 text-xs text-white/50">{criticalTasks.length} activities are driving the baseline sequence.</p>
+        </div>
+        <div className="rounded-lg border border-cyan-400/25 bg-cyan-400/8 p-3">
+          <div className="flex items-center gap-2 text-sm font-black text-cyan-100"><GitBranch className="size-4" /> Dependencies</div>
+          <p className="mt-1 text-xs text-white/50">{tasks.filter((task) => task.predecessor !== "-").length} predecessor links are visible in the task matrix.</p>
+        </div>
+        <div className="rounded-lg border border-lime-400/25 bg-lime-400/8 p-3">
+          <div className="flex items-center gap-2 text-sm font-black text-lime-100"><Layers className="size-4" /> Construction Flow</div>
+          <p className="mt-1 text-xs text-white/50">{phaseCount} phases are arranged from mobilization through closeout.</p>
+        </div>
+      </div>
+    </section>
   );
 }
 
