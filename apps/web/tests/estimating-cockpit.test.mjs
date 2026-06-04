@@ -37,6 +37,7 @@ for (const label of ["Materials", "Labor", "Equipment", "Historical Bid Database
 for (const action of ["← Back", "+ Section", "+ Milestone", "+ Add Item", "+ From Cost DB", "Print Bid", "AI Tools", "Production", "Bid Package", "Settings"]) {
   assert.ok(page.includes(action), `estimating cockpit top toolbar should include ${action}`);
 }
+assert.match(page, /border-orange-500\/35 bg-orange-500\/85 text-white hover:bg-orange-500`\} onClick=\{\(\) => setActiveTool\("calendar"\)\}>\+ Milestone/, "milestone action should be orange and sit in the bid action toolbar");
 
 for (const sectionFlow of ["Add Section / Phase", "Section / Phase Type", "COMMON_CONSTRUCTION_PHASES", "Other", "Custom Phase Name", "opsslate_estimate_custom_phases"]) {
   assert.ok(page.includes(sectionFlow), `section/phase workflow should include ${sectionFlow}`);

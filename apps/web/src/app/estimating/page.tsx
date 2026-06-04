@@ -1415,7 +1415,7 @@ function EstimatingWorkspace() {
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/65 p-3">
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cockpit")}>← Back</button>
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
-      <button type="button" className={`${bidActionButtonClass} border-blue-500/35 bg-blue-500/80 text-white hover:bg-blue-500`} onClick={() => setActiveTool("calendar")}>+ Milestone</button>
+      <button type="button" className={`${bidActionButtonClass} border-orange-500/35 bg-orange-500/85 text-white hover:bg-orange-500`} onClick={() => setActiveTool("calendar")}>+ Milestone</button>
       <button type="button" className={`${bidActionButtonClass} border-green-500/35 bg-green-500/85 text-white hover:bg-green-500`} onClick={() => setActiveTool("estimates")}>+ Add Item</button>
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cost")}>+ From Cost DB</button>
       <button type="button" className={bidActionButtonClass} onClick={() => window.print()}>Print Bid</button>
