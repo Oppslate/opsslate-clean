@@ -150,6 +150,13 @@ function SidebarContent({
           </button>
         )}
       </div>
+      {!collapsed && (
+        <div className="px-3 pb-1.5">
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+            Project Management
+          </span>
+        </div>
+      )}
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto">
         {nav.map((n, i) => {
           if ("section" in n) {
