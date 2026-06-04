@@ -213,6 +213,31 @@ const COMMON_CONSTRUCTION_PHASES = [
   "Closeout",
 ];
 
+const ESTIMATE_PHASE_LIBRARY: Record<string, string[]> = {
+  Preconstruction: ["Mobilization", "Survey / Layout", "Permits", "Safety Setup", "Temporary Controls", "Project Administration"],
+  Mobilization: ["Move Equipment", "Jobsite Setup", "Temporary Facilities", "Initial Coordination"],
+  "Site Preparation": ["Clearing", "Erosion Control", "Traffic Control", "Saw Cutting", "Demolition"],
+  Earthwork: ["Excavation", "Backfill", "Subbase", "Export / Disposal", "Compaction"],
+  "Underground Utilities": ["Trenching", "Conduit", "Drainage", "Water / Sewer", "Utility Coordination"],
+  Concrete: ["Forming", "Reinforcing", "Place Concrete", "Curing", "Sawcut / Jointing"],
+  "Asphalt Paving": ["Subbase Prep", "Binder Course", "Top Course", "Pavement Markings"],
+  Electrical: ["Duct Bank", "Pull Boxes", "Wire / Cable", "Panels / Gear", "EV Equipment", "Testing"],
+  Restoration: ["Topsoil", "Seed / Mulch", "Cleanup", "Punchlist"],
+  Closeout: ["As-Builts", "Final Testing", "Submittal Closeout", "Demobilization"],
+};
+
+const ESTIMATE_ITEM_STARTERS: Record<string, string[]> = {
+  Mobilization: ["Move equipment to site", "Jobsite setup", "Temporary facilities"],
+  "Move Equipment": ["Move equipment to site", "Unload equipment", "Demobilize equipment"],
+  "Survey / Layout": ["Initial layout", "Stake work limits", "Layout utility alignment"],
+  Excavation: ["Excavation for duct bank", "Load and haul spoils", "Trench excavation"],
+  Backfill: ["Backfill material", "Place and compact backfill"],
+  "Duct Bank": ["Install conduit duct bank", "Concrete encasement", "Pull string and mandrel"],
+  Forming: ["Concrete forming and accessories", "Form slab edges"],
+  "Binder Course": ["Asphalt binder course"],
+  "Top Course": ["Asphalt top course"],
+};
+
 function statusLabel(status?: string) {
   const clean = String(status || "draft").trim();
   if (!clean) return "Draft";
@@ -641,17 +666,51 @@ function EstimateDetailView({
 
 function EstimatesListView({
   rows,
+  selectedProject,
+  selectedPhase,
+  selectedSection,
+  starterDescription,
+  starterQuantity,
+  starterUnit,
+  starterUnitCost,
+  creatingStarter,
   selectedEstimateId,
   selectedEstimateTotal,
   selectedEstimateItemCount,
   onOpenEstimate,
+  onSelectedPhaseChange,
+  onSelectedSectionChange,
+  onStarterDescriptionChange,
+  onStarterQuantityChange,
+  onStarterUnitChange,
+  onStarterUnitCostChange,
+  onCreateStarter,
 }: {
   rows: BidPortfolioRow[];
+  selectedProject?: Record<string, unknown>;
+  selectedPhase: string;
+  selectedSection: string;
+  starterDescription: string;
+  starterQuantity: string;
+  starterUnit: string;
+  starterUnitCost: string;
+  creatingStarter: boolean;
   selectedEstimateId: string;
   selectedEstimateTotal: number;
   selectedEstimateItemCount: number;
   onOpenEstimate: (row: BidPortfolioRow) => void;
+  onSelectedPhaseChange: (value: string) => void;
+  onSelectedSectionChange: (value: string) => void;
+  onStarterDescriptionChange: (value: string) => void;
+  onStarterQuantityChange: (value: string) => void;
+  onStarterUnitChange: (value: string) => void;
+  onStarterUnitCostChange: (value: string) => void;
+  onCreateStarter: () => void;
 }) {
+  const phaseSections = ESTIMATE_PHASE_LIBRARY[selectedPhase] || [];
+  const starterItems = ESTIMATE_ITEM_STARTERS[selectedSection] || ESTIMATE_ITEM_STARTERS[selectedPhase] || [];
+  const selectedProjectHasEstimate = selectedProject ? rows.some((row) => row.project && recordId(row.project) === recordId(selectedProject) && row.estimate) : false;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
@@ -724,6 +783,107 @@ function EstimatesListView({
           </table>
         </div>
       </section>
+
+      {selectedProject && !selectedProjectHasEstimate && (
+        <section className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-5">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <Badge className="mb-2 bg-orange-500/20 text-orange-200">Guided Estimate Builder</Badge>
+              <h2 className="text-2xl font-black text-white">Start the estimate structure</h2>
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                Build the job the way the field will see it: phase, section, then priced bid item.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-background/60 px-4 py-3 text-sm text-blue-100">
+              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Selected Project</div>
+              <div className="font-bold text-white">{projectDisplayName(selectedProject)}</div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 xl:grid-cols-[0.8fr_0.8fr_1.2fr]">
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">1. Phase</div>
+              <select
+                value={selectedPhase}
+                onChange={(event) => onSelectedPhaseChange(event.target.value)}
+                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              >
+                {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => <option key={phase} value={phase}>{phase}</option>)}
+              </select>
+              <div className="mt-3 space-y-2">
+                {Object.keys(ESTIMATE_PHASE_LIBRARY).slice(0, 6).map((phase) => (
+                  <button
+                    key={phase}
+                    type="button"
+                    onClick={() => onSelectedPhaseChange(phase)}
+                    className={`w-full rounded-md border px-3 py-2 text-left text-xs font-semibold ${phase === selectedPhase ? "border-orange-500/50 bg-orange-500/15 text-orange-100" : "border-border bg-background/50 text-blue-100"}`}
+                  >
+                    {phase}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">2. Section</div>
+              <select
+                value={selectedSection}
+                onChange={(event) => onSelectedSectionChange(event.target.value)}
+                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              >
+                {phaseSections.map((section) => <option key={section} value={section}>{section}</option>)}
+              </select>
+              <div className="mt-3 space-y-2">
+                {phaseSections.map((section) => (
+                  <button
+                    key={section}
+                    type="button"
+                    onClick={() => onSelectedSectionChange(section)}
+                    className={`w-full rounded-md border px-3 py-2 text-left text-xs font-semibold ${section === selectedSection ? "border-blue-500/50 bg-blue-500/15 text-blue-100" : "border-border bg-background/50 text-muted-foreground"}`}
+                  >
+                    {section}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">3. First Bid Item</div>
+              <input
+                value={starterDescription}
+                onChange={(event) => onStarterDescriptionChange(event.target.value)}
+                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+                placeholder="Move equipment to site"
+              />
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <input value={starterQuantity} onChange={(event) => onStarterQuantityChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Qty" />
+                <input value={starterUnit} onChange={(event) => onStarterUnitChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit" />
+                <input value={starterUnitCost} onChange={(event) => onStarterUnitCostChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit cost" />
+              </div>
+              {!!starterItems.length && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {starterItems.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => onStarterDescriptionChange(item)}
+                      className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-semibold text-blue-100 hover:border-orange-500/40"
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="mt-4 rounded-md border border-border bg-background/50 p-3 text-xs text-muted-foreground">
+                This will create the estimate and file the first item under <span className="font-bold text-white">{selectedPhase} / {selectedSection}</span>.
+              </div>
+              <Button className="mt-4 w-full" disabled={!starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>
+                {creatingStarter ? "Creating estimate..." : "Create Estimate + First Item"}
+              </Button>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -902,6 +1062,9 @@ function EstimatingWorkspace() {
 
   const createRfq = useMutation(api.estimating.createRfq);
   const updateRfq = useMutation(api.estimating.updateRfq);
+  const createEstimate = useMutation(api.estimating.createEstimate);
+  const updateEstimate = useMutation(api.estimating.updateEstimate);
+  const createEstimateItem = useMutation(api.estimating.createEstimateItem);
   const updateEstimateItem = useMutation(api.estimating.updateEstimateItem);
   const createVendor = useMutation(api.vendors.create);
 
@@ -913,6 +1076,13 @@ function EstimatingWorkspace() {
   const [signatureProfile, setSignatureProfile] = useState<CorrespondenceSignatureProfile>(() => defaultSignatureProfile(user));
   const [creatingDrafts, setCreatingDrafts] = useState(false);
   const [newVendor, setNewVendor] = useState({ name: "", contactName: "", email: "", phone: "", category: "Material Supplier" });
+  const [selectedBuilderPhase, setSelectedBuilderPhase] = useState("Preconstruction");
+  const [selectedBuilderSection, setSelectedBuilderSection] = useState("Mobilization");
+  const [starterDescription, setStarterDescription] = useState("Move equipment to site");
+  const [starterQuantity, setStarterQuantity] = useState("1");
+  const [starterUnit, setStarterUnit] = useState("LS");
+  const [starterUnitCost, setStarterUnitCost] = useState("0");
+  const [creatingStarterEstimate, setCreatingStarterEstimate] = useState(false);
   const [responseDraft, setResponseDraft] = useState({
     rfqId: "",
     itemId: "",
@@ -982,6 +1152,13 @@ function EstimatingWorkspace() {
     }
   }, []);
 
+  useEffect(() => {
+    const sections = ESTIMATE_PHASE_LIBRARY[selectedBuilderPhase] || [];
+    if (sections.length && !sections.includes(selectedBuilderSection)) {
+      setSelectedBuilderSection(sections[0]);
+    }
+  }, [selectedBuilderPhase, selectedBuilderSection]);
+
   function toggleItem(id: string, checked: boolean) {
     setSelectedItemIds((current) => checked ? [...new Set([...current, id])] : current.filter((itemId) => itemId !== id));
   }
@@ -1005,6 +1182,45 @@ function EstimatingWorkspace() {
     setSelectedEstimateId(row.estimate?._id ? String(row.estimate._id) : "");
     setSelectedItemIds([]);
     setActiveTool(row.estimate?._id ? "estimate-detail" : "estimates");
+  }
+
+  async function createStarterEstimate() {
+    if (!user || !selectedProject || !starterDescription.trim()) return;
+    setCreatingStarterEstimate(true);
+    try {
+      const projectName = projectDisplayName(selectedProject);
+      const estimateName = `${projectName} EST`;
+      const location = projectAddressLine(selectedProject);
+      const estimateIdCreated = await createEstimate({
+        companyId: user.companyId,
+        name: estimateName,
+        client: portfolioClientLabel(selectedProject),
+        location,
+        status: "draft",
+        bidType: portfolioTypeLabel(selectedProject),
+        description: `Estimate started from ${selectedBuilderPhase} / ${selectedBuilderSection}`,
+      });
+      await updateEstimate({
+        id: estimateIdCreated as Id<"estimates">,
+        projectId: selectedProject._id as Id<"projects">,
+      });
+      await createEstimateItem({
+        companyId: user.companyId,
+        estimateId: estimateIdCreated as Id<"estimates">,
+        section: `${selectedBuilderPhase} / ${selectedBuilderSection}`,
+        description: starterDescription.trim(),
+        quantity: Number(starterQuantity || 0) || 0,
+        unit: starterUnit.trim() || "LS",
+        unitCost: Number(starterUnitCost || 0) || 0,
+        taxPct: 0,
+        notes: "Created from guided Phase / Section / Item estimate builder.",
+      });
+      setSelectedEstimateId(String(estimateIdCreated));
+      setSelectedItemIds([]);
+      setActiveTool("estimate-detail");
+    } finally {
+      setCreatingStarterEstimate(false);
+    }
   }
 
   function buildPackageText(vendor: Record<string, unknown>, items: Array<Record<string, unknown>>) {
@@ -1478,10 +1694,25 @@ function EstimatingWorkspace() {
         ) : activeTool === "estimates" ? (
           <EstimatesListView
             rows={portfolioRows}
+            selectedProject={selectedProject}
+            selectedPhase={selectedBuilderPhase}
+            selectedSection={selectedBuilderSection}
+            starterDescription={starterDescription}
+            starterQuantity={starterQuantity}
+            starterUnit={starterUnit}
+            starterUnitCost={starterUnitCost}
+            creatingStarter={creatingStarterEstimate}
             selectedEstimateId={estimateId}
             selectedEstimateTotal={selectedEstimateTotal}
             selectedEstimateItemCount={(estimateItems || []).length}
             onOpenEstimate={openPortfolioRow}
+            onSelectedPhaseChange={setSelectedBuilderPhase}
+            onSelectedSectionChange={setSelectedBuilderSection}
+            onStarterDescriptionChange={setStarterDescription}
+            onStarterQuantityChange={setStarterQuantity}
+            onStarterUnitChange={setStarterUnit}
+            onStarterUnitCostChange={setStarterUnitCost}
+            onCreateStarter={() => void createStarterEstimate()}
           />
         ) : activeTool !== "rfq" ? stagedTool : (
     <div className="space-y-5">

@@ -46,6 +46,10 @@ for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total
   assert.ok(page.includes(detailText), `estimate detail worksheet should include ${detailText}`);
 }
 
+for (const builderText of ["Guided Estimate Builder", "1. Phase", "2. Section", "3. First Bid Item", "Create Estimate + First Item", "ESTIMATE_PHASE_LIBRARY"]) {
+  assert.ok(page.includes(builderText), `guided estimate builder should include ${builderText}`);
+}
+
 for (const productionTool of ["Ops-Takeoff", "Production Breakdown", "Equipment Analyzer", "Equipment Dealers"]) {
   assert.ok(page.includes(productionTool), `production dropdown should include ${productionTool}`);
 }
