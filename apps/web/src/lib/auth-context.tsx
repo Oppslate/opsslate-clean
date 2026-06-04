@@ -91,6 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
   const provisionMut = useMutation(api.auth.provisionFromSharedAuth);
+  const signupMut = useMutation(api.auth.signup);
   const loginMut = useMutation(api.auth.login);
   const resetPasswordMut = useMutation(api.auth.resetPassword as any);
   const logActivityMut = useMutation(api.team.logActivity as any);
@@ -245,32 +246,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signup = async (companyName: string, email: string, password: string, name: string) => {
-    // Register with shared auth
-    const authRes = await fetch(`${AUTH_URL}/api/auth/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name, companyName }),
-    });
-    const authData = await authRes.json();
-    
-    if (!authRes.ok) {
-      throw new Error(authData.error || "Signup failed");
-    }
-
-    localStorage.setItem("opsslate_token", authData.token);
-    localStorage.setItem("opsslate_user", JSON.stringify(authData.user));
-    clearSuiteLogoutMarker();
-
-    // Provision local OpsSlate account
-    const res = await provisionMut({
-      email,
-      name,
+    const signupEmail = email.trim().toLowerCase();
+    const res = await signupMut({
       companyName,
+      email: signupEmail,
+      password,
+      name,
     });
-    await resetPasswordMut({ email, newPassword: password });
+
     localStorage.setItem("eq_token", res.token);
-    await persistSuiteSession({ sharedToken: authData.token, convexToken: res.token });
+    clearSuiteLogoutMarker();
+    await persistSuiteSession({ convexToken: res.token });
     setToken(res.token);
+
+    // Keep the legacy shared auth service in sync when it is available, but do
+    // not let it block the clean Convex-owned account.
+    try {
+      const authRes = await fetch(`${AUTH_URL}/api/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: signupEmail, password, name, companyName }),
+      });
+      const authData = await authRes.json().catch(() => null);
+      if (authRes.ok && authData?.token) {
+        localStorage.setItem("opsslate_token", authData.token);
+        localStorage.setItem("opsslate_user", JSON.stringify(authData.user));
+        await persistSuiteSession({ sharedToken: authData.token, convexToken: res.token });
+      }
+    } catch {
+      // The clean app can run entirely from Convex auth.
+    }
   };
 
   const logout = () => {
