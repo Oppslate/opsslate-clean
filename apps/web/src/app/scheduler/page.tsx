@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Clock, Link2, Users, AlertTriangle, Plus, Filter } from "lucide-react";
+import { CalendarDays, Clock, Link2, Users, AlertTriangle, Plus, Filter, GitBranch, Layers, HardHat, Flag } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -30,6 +30,41 @@ interface ScheduleEvent {
   detail?: string;
   priority?: string;
 }
+
+interface ConstructionTask {
+  id: string;
+  wbs: string;
+  phase: string;
+  task: string;
+  crew: string;
+  duration: number;
+  startOffset: number;
+  predecessor: string;
+  status: "Ready" | "Active" | "Watch" | "Blocked" | "Planned";
+  percent: number;
+  critical?: boolean;
+}
+
+const CONSTRUCTION_TASKS: ConstructionTask[] = [
+  { id: "mobilize", wbs: "01.01", phase: "Mobilization", task: "Mobilize field office, permits, layout controls", crew: "PM / Field", duration: 2, startOffset: 0, predecessor: "-", status: "Ready", percent: 20, critical: true },
+  { id: "site-controls", wbs: "01.02", phase: "Mobilization", task: "Install erosion control and site protection", crew: "Site Crew", duration: 2, startOffset: 1, predecessor: "01.01", status: "Ready", percent: 0 },
+  { id: "demo", wbs: "02.01", phase: "Site Work", task: "Saw cut, demo, removals, haul off", crew: "Excavation", duration: 3, startOffset: 3, predecessor: "01.02", status: "Planned", percent: 0, critical: true },
+  { id: "underground", wbs: "03.01", phase: "Utilities", task: "Underground conduit, trench, warning tape", crew: "Electrical", duration: 5, startOffset: 6, predecessor: "02.01", status: "Watch", percent: 0, critical: true },
+  { id: "concrete", wbs: "04.01", phase: "Concrete", task: "Form, stone base, rebar, pour equipment pads", crew: "Concrete", duration: 4, startOffset: 11, predecessor: "03.01", status: "Planned", percent: 0, critical: true },
+  { id: "equipment", wbs: "05.01", phase: "Electrical", task: "Set bollards, pedestals, equipment, terminations", crew: "Electrical", duration: 4, startOffset: 15, predecessor: "04.01", status: "Planned", percent: 0 },
+  { id: "restore", wbs: "06.01", phase: "Restoration", task: "Asphalt repair, striping, turf restoration", crew: "Site Crew", duration: 3, startOffset: 19, predecessor: "05.01", status: "Planned", percent: 0 },
+  { id: "closeout", wbs: "07.01", phase: "Closeout", task: "Testing, punch list, as-builts, owner turnover", crew: "PM / QA", duration: 2, startOffset: 22, predecessor: "06.01", status: "Planned", percent: 0, critical: true },
+];
+
+const PHASE_TEMPLATES = [
+  "Mobilization",
+  "Site Work",
+  "Utilities",
+  "Concrete",
+  "Electrical",
+  "Restoration",
+  "Closeout",
+];
 
 const TYPE_STYLES: Record<string, string> = {
   milestone: "border-indigo-400/35 bg-indigo-400/10 text-indigo-100",
@@ -78,6 +113,23 @@ function eventStyle(type: string) {
   return TYPE_STYLES[type] || "border-white/12 bg-white/[0.04] text-white/86";
 }
 
+function statusStyle(status: ConstructionTask["status"]) {
+  const styles = {
+    Ready: "border-lime-400/30 bg-lime-400/10 text-lime-100",
+    Active: "border-cyan-400/30 bg-cyan-400/10 text-cyan-100",
+    Watch: "border-amber-400/30 bg-amber-400/10 text-amber-100",
+    Blocked: "border-red-400/30 bg-red-400/10 text-red-100",
+    Planned: "border-white/10 bg-white/[0.04] text-white/60",
+  };
+  return styles[status];
+}
+
+function ganttGridStyle(task: ConstructionTask) {
+  return {
+    gridColumn: `${task.startOffset + 1} / span ${task.duration}`,
+  };
+}
+
 function SchedulerContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [activeWindow, setActiveWindow] = useState<"week" | "three-week" | "month">("three-week");
@@ -114,6 +166,8 @@ function SchedulerContent() {
   const highRiskEvents = upcomingEvents.filter((event) => event.priority === "high" || ["rfi", "insurance", "rental-end"].includes(event.type));
   const crewEvents = upcomingEvents.filter((event) => event.type.startsWith("crew"));
   const blockedEvents = upcomingEvents.filter((event) => ["rfi", "submittal", "delivery"].includes(event.type));
+  const criticalTasks = CONSTRUCTION_TASKS.filter((task) => task.critical);
+  const phaseCount = new Set(CONSTRUCTION_TASKS.map((task) => task.phase)).size;
 
   return (
     <div className="mx-auto max-w-[1680px] space-y-5">
@@ -171,10 +225,95 @@ function SchedulerContent() {
         <MetricCard icon={<CalendarDays className="size-5" />} label="Scheduled Items" value={upcomingEvents.length} tone="cyan" />
         <MetricCard icon={<AlertTriangle className="size-5" />} label="Watch Items" value={highRiskEvents.length} tone="orange" />
         <MetricCard icon={<Users className="size-5" />} label="Crew Dates" value={crewEvents.length} tone="green" />
-        <MetricCard icon={<Link2 className="size-5" />} label="Coordination Holds" value={blockedEvents.length} tone="purple" />
+        <MetricCard icon={<Flag className="size-5" />} label="Critical Path" value={criticalTasks.length} tone="purple" />
       </section>
 
       {selectedProject?._id && <ScheduleIntelligencePanel projectId={selectedProject._id} />}
+
+      <section className="rounded-lg border border-white/10 bg-[#101821]">
+        <div className="flex flex-col gap-3 border-b border-white/10 p-4 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <HardHat className="size-5 text-orange-300" />
+              <h2 className="text-lg font-black text-white">Construction Task Library</h2>
+              <Badge variant="outline" className="border-white/10 text-white/52">{phaseCount} phases</Badge>
+            </div>
+            <p className="mt-1 text-sm text-white/50">Start with construction-ready phase templates, then build the project flow into the Gantt schedule.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {PHASE_TEMPLATES.map((phase) => (
+              <button key={phase} type="button" className="rounded-md border border-white/10 bg-[#0b1118] px-3 py-1.5 text-xs font-bold text-white/62 transition hover:border-orange-400/40 hover:text-orange-100">
+                {phase}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <div className="min-w-[1160px]">
+            <div className="grid grid-cols-[420px_minmax(720px,1fr)] border-b border-white/10 bg-[#0b1118]">
+              <div className="grid grid-cols-[74px_118px_1fr_96px] gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">
+                <span>WBS</span>
+                <span>Phase</span>
+                <span>Task / WBS</span>
+                <span>Status</span>
+              </div>
+              <div className="px-4 pt-2 text-[11px] font-black uppercase tracking-[0.14em] text-white/42">Gantt Timeline</div>
+              <div className="grid grid-cols-24 gap-px px-4 pb-3 pt-1 text-center text-[10px] font-black uppercase tracking-[0.08em] text-white/38">
+                {Array.from({ length: 24 }, (_, index) => <span key={index}>D{index + 1}</span>)}
+              </div>
+            </div>
+
+            {CONSTRUCTION_TASKS.map((task) => (
+              <div key={task.id} className="grid min-h-[58px] grid-cols-[420px_minmax(720px,1fr)] border-b border-white/8 bg-[#0c1219] hover:bg-[#111b26]">
+                <div className="grid grid-cols-[74px_118px_1fr_96px] items-center gap-2 px-4 py-3">
+                  <div className="font-mono text-xs font-black text-white/72">{task.wbs}</div>
+                  <div className="truncate text-xs font-bold text-cyan-100">{task.phase}</div>
+                  <div className="min-w-0">
+                    <div className="line-clamp-1 text-sm font-bold text-white">{task.task}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-white/42">
+                      <span>{task.crew}</span>
+                      <span>{task.duration}d</span>
+                      <span>Predecessor: {task.predecessor}</span>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className={`justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
+                </div>
+                <div className="relative grid grid-cols-24 gap-px px-4 py-3">
+                  {Array.from({ length: 24 }, (_, index) => <div key={index} className="min-h-8 border-l border-white/[0.035]" />)}
+                  <div
+                    className={`absolute inset-y-3 rounded-md border px-2 py-1 shadow-[0_10px_24px_rgba(0,0,0,0.25)] ${task.critical ? "border-orange-300/45 bg-orange-500/35" : "border-cyan-300/35 bg-cyan-500/24"}`}
+                    style={{
+                      left: `calc(${(task.startOffset / 24) * 100}% + 1rem)`,
+                      width: `calc(${(task.duration / 24) * 100}% - 2px)`,
+                    }}
+                  >
+                    <div className="flex h-full items-center justify-between gap-2 overflow-hidden text-[11px] font-black text-white">
+                      <span className="truncate">{task.phase}</span>
+                      <span>{task.percent}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-3 p-4 md:grid-cols-3">
+          <div className="rounded-lg border border-orange-400/25 bg-orange-400/8 p-3">
+            <div className="flex items-center gap-2 text-sm font-black text-orange-100"><Flag className="size-4" /> Critical Path</div>
+            <p className="mt-1 text-xs text-white/50">Critical activities are highlighted in orange and should drive the baseline sequence.</p>
+          </div>
+          <div className="rounded-lg border border-cyan-400/25 bg-cyan-400/8 p-3">
+            <div className="flex items-center gap-2 text-sm font-black text-cyan-100"><GitBranch className="size-4" /> Dependencies</div>
+            <p className="mt-1 text-xs text-white/50">Predecessor logic is visible in the task row and ready for dependency editing.</p>
+          </div>
+          <div className="rounded-lg border border-lime-400/25 bg-lime-400/8 p-3">
+            <div className="flex items-center gap-2 text-sm font-black text-lime-100"><Layers className="size-4" /> Construction Flow</div>
+            <p className="mt-1 text-xs text-white/50">Tasks follow a field sequence from mobilization through closeout.</p>
+          </div>
+        </div>
+      </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="rounded-lg border border-white/10 bg-[#101821]">
