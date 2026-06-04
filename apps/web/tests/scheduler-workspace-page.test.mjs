@@ -21,5 +21,9 @@ assert.ok(schedulerPage.includes("Mobilization"), "/scheduler should include con
 assert.ok(!schedulerPage.includes("ProductSalesPage"), "/scheduler should no longer render the marketing page");
 
 assert.ok(scheduler2Page.includes("OpsSlate Scheduler"), "/scheduler2 should archive the separated scheduler shell");
-assert.ok(scheduler2Page.includes("No groups yet"), "/scheduler2 should keep the task table empty state");
+assert.ok(scheduler2Page.includes("No project selected"), "/scheduler2 should require a project before scheduling");
+assert.ok(scheduler2Page.includes("Start with a phase"), "/scheduler2 should start schedule creation with phases");
+assert.ok(scheduler2Page.includes("Milestones"), "/scheduler2 should nest milestone checkpoints inside phases");
+assert.ok(scheduler2Page.includes("Tasks"), "/scheduler2 should nest detailed task activities inside milestones");
+assert.ok(scheduler2Page.includes("Import From Estimate"), "/scheduler2 should expose estimate import as a prompted action");
 assert.ok(scheduler2Page.includes("Construction Gantt"), "/scheduler2 should keep the separated Gantt view");

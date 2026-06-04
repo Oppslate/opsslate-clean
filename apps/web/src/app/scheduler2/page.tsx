@@ -46,6 +46,27 @@ interface ConstructionTask {
   critical?: boolean;
 }
 
+interface ScheduleTaskItem {
+  id: string;
+  name: string;
+  duration: number;
+  crew: string;
+  status: ConstructionTask["status"];
+}
+
+interface ScheduleMilestone {
+  id: string;
+  name: string;
+  target: string;
+  tasks: ScheduleTaskItem[];
+}
+
+interface SchedulePhase {
+  id: string;
+  name: string;
+  milestones: ScheduleMilestone[];
+}
+
 const CONSTRUCTION_TASKS: ConstructionTask[] = [
   { id: "mobilize", wbs: "01.01", phase: "Mobilization", task: "Mobilize field office, permits, layout controls", crew: "PM / Field", duration: 2, startOffset: 0, predecessor: "-", status: "Ready", percent: 20, critical: true },
   { id: "site-controls", wbs: "01.02", phase: "Mobilization", task: "Install erosion control and site protection", crew: "Site Crew", duration: 2, startOffset: 1, predecessor: "01.01", status: "Ready", percent: 0 },
@@ -65,6 +86,39 @@ const PHASE_TEMPLATES = [
   "Electrical",
   "Restoration",
   "Closeout",
+];
+
+const SAMPLE_PHASES: SchedulePhase[] = [
+  {
+    id: "phase-mobilization",
+    name: "Mobilization",
+    milestones: [
+      {
+        id: "milestone-site-ready",
+        name: "Site ready to start",
+        target: "D2",
+        tasks: [
+          { id: "task-mobilize", name: "Mobilize field office, permits, layout controls", duration: 2, crew: "PM / Field", status: "Ready" },
+          { id: "task-controls", name: "Install erosion control and site protection", duration: 2, crew: "Site Crew", status: "Ready" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "phase-underground",
+    name: "Underground Utilities",
+    milestones: [
+      {
+        id: "milestone-trench-ready",
+        name: "Trench and conduit complete",
+        target: "D11",
+        tasks: [
+          { id: "task-demo", name: "Saw cut, demo, removals, haul off", duration: 3, crew: "Excavation", status: "Planned" },
+          { id: "task-conduit", name: "Underground conduit, trench, warning tape", duration: 5, crew: "Electrical", status: "Watch" },
+        ],
+      },
+    ],
+  },
 ];
 
 const SCHEDULER_TABS: Array<{ label: string; icon: LucideIcon }> = [
@@ -140,16 +194,18 @@ function ganttGridStyle(task: ConstructionTask) {
 }
 
 function SchedulerContent() {
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [activeWindow, setActiveWindow] = useState<"week" | "three-week" | "month">("three-week");
   const [activeView, setActiveView] = useState<"table" | "gantt">("table");
-  const [sampleLoaded, setSampleLoaded] = useState(false);
+  const [schedulePhases, setSchedulePhases] = useState<SchedulePhase[]>([]);
+  const [draftProjectName, setDraftProjectName] = useState("");
+  const [localProjectName, setLocalProjectName] = useState("");
   const { user } = useAuth();
 
   const projects = useQuery(api.projects.list, user ? { companyId: user.companyId } : "skip") as Project[] | undefined;
   const events = useQuery(
     api.calendar.events,
-    user ? { companyId: user.companyId, projectId: selectedProjectId === "all" ? undefined : selectedProjectId } : "skip",
+    user && selectedProjectId && selectedProjectId !== "local" ? { companyId: user.companyId, projectId: selectedProjectId } : "skip",
   ) as ScheduleEvent[] | undefined;
 
   const today = useMemo(() => todayDate(), []);
@@ -177,7 +233,86 @@ function SchedulerContent() {
   const criticalTasks = CONSTRUCTION_TASKS.filter((task) => task.critical);
   const phaseCount = new Set(CONSTRUCTION_TASKS.map((task) => task.phase)).size;
 
-  const visibleTasks = sampleLoaded ? CONSTRUCTION_TASKS : [];
+  const selectedProject = projects?.find((project) => project._id === selectedProjectId);
+  const selectedProjectName = selectedProject?.name || (selectedProjectId === "local" ? localProjectName : "");
+  const hasProject = Boolean(selectedProjectName);
+  const visibleTasks = schedulePhases.length > 0 ? CONSTRUCTION_TASKS : [];
+
+  const createLocalProject = () => {
+    const name = draftProjectName.trim();
+    if (!name) return;
+    setLocalProjectName(name);
+    setSelectedProjectId("local");
+    setDraftProjectName("");
+  };
+
+  const addPhase = () => {
+    if (!hasProject) return;
+    const nextNumber = schedulePhases.length + 1;
+    setSchedulePhases((current) => [
+      ...current,
+      {
+        id: `phase-${Date.now()}`,
+        name: `Phase ${nextNumber}`,
+        milestones: [],
+      },
+    ]);
+  };
+
+  const addMilestone = (phaseId: string) => {
+    setSchedulePhases((current) =>
+      current.map((phase) =>
+        phase.id === phaseId
+          ? {
+              ...phase,
+              milestones: [
+                ...phase.milestones,
+                {
+                  id: `milestone-${Date.now()}`,
+                  name: `Milestone ${phase.milestones.length + 1}`,
+                  target: "TBD",
+                  tasks: [],
+                },
+              ],
+            }
+          : phase,
+      ),
+    );
+  };
+
+  const addTask = (phaseId: string, milestoneId: string) => {
+    setSchedulePhases((current) =>
+      current.map((phase) =>
+        phase.id === phaseId
+          ? {
+              ...phase,
+              milestones: phase.milestones.map((milestone) =>
+                milestone.id === milestoneId
+                  ? {
+                      ...milestone,
+                      tasks: [
+                        ...milestone.tasks,
+                        {
+                          id: `task-${Date.now()}`,
+                          name: `Task ${milestone.tasks.length + 1}`,
+                          duration: 1,
+                          crew: "Unassigned",
+                          status: "Planned",
+                        },
+                      ],
+                    }
+                  : milestone,
+              ),
+            }
+          : phase,
+      ),
+    );
+  };
+
+  const loadSampleSchedule = () => {
+    if (!hasProject) return;
+    setSchedulePhases(SAMPLE_PHASES);
+  };
 
   return (
     <div className="min-h-[calc(100vh-96px)] bg-[#07101a]">
@@ -197,7 +332,8 @@ function SchedulerContent() {
                 onChange={(event) => setSelectedProjectId(event.target.value)}
                 className="max-w-[220px] bg-transparent text-sm font-black text-white outline-none"
               >
-                <option value="all">MAz</option>
+                <option value="">Select project</option>
+                {localProjectName && <option value="local">{localProjectName}</option>}
                 {(projects || []).map((project) => (
                   <option key={project._id} value={project._id}>{project.name}</option>
                 ))}
@@ -242,11 +378,34 @@ function SchedulerContent() {
 
       <section className="px-4 py-9 lg:px-6">
         <div className="mx-auto max-w-[1540px]">
+          {!hasProject && (
+            <div className="mb-6 rounded-lg border border-blue-400/20 bg-blue-400/8 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <h2 className="text-base font-black text-white">Choose or create a project to start a schedule</h2>
+                  <p className="mt-1 text-sm text-blue-100/62">Schedules are project based. Pick an active project above, or create a project here and begin with the schedule.</p>
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+                  <input
+                    value={draftProjectName}
+                    onChange={(event) => setDraftProjectName(event.target.value)}
+                    placeholder="New project name"
+                    className="h-10 min-w-[260px] rounded-lg border border-white/10 bg-[#070d16] px-3 text-sm text-white outline-none placeholder:text-white/36 focus:border-blue-400/45"
+                  />
+                  <Button type="button" onClick={createLocalProject} className="h-10 gap-2 bg-blue-600 hover:bg-blue-500">
+                    <Plus className="size-4" />
+                    Create Project
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <Button type="button" className="h-10 gap-2 bg-emerald-600 px-6 font-black hover:bg-emerald-500">
+              <Button type="button" className="h-10 gap-2 bg-emerald-600 px-6 font-black hover:bg-emerald-500" onClick={addPhase} disabled={!hasProject}>
                 <Plus className="size-4" />
-                New Item
+                New Phase
               </Button>
               <label className="flex h-11 w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 md:w-64">
                 <Search className="size-4 text-white/45" />
@@ -277,17 +436,29 @@ function SchedulerContent() {
                 Print
               </Button>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => setSampleLoaded(true)}>
-              Load Sample Data
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={!hasProject}>
+                Import From Estimate
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={loadSampleSchedule} disabled={!hasProject}>
+                Load Sample Data
+              </Button>
+            </div>
           </div>
 
-          <button type="button" className="mt-9 text-sm font-semibold text-blue-200 transition hover:text-white">
-            + Add new group
+          <button type="button" onClick={addPhase} disabled={!hasProject} className="mt-9 text-sm font-semibold text-blue-200 transition hover:text-white disabled:cursor-not-allowed disabled:text-white/24">
+            + Add new phase
           </button>
 
           {activeView === "table" ? (
-            <TaskTableView tasks={visibleTasks} />
+            <TaskTableView
+              hasProject={hasProject}
+              projectName={selectedProjectName}
+              phases={schedulePhases}
+              onAddPhase={addPhase}
+              onAddMilestone={addMilestone}
+              onAddTask={addTask}
+            />
           ) : (
             <GanttChartView tasks={visibleTasks} criticalTasks={criticalTasks} phaseCount={phaseCount} />
           )}
@@ -381,55 +552,131 @@ function SchedulerContent() {
   );
 }
 
-function TaskTableView({ tasks }: { tasks: ConstructionTask[] }) {
-  const groupedTasks = useMemo(() => {
-    return PHASE_TEMPLATES.map((phase) => ({
-      phase,
-      tasks: tasks.filter((task) => task.phase === phase),
-    })).filter((group) => group.tasks.length > 0);
-  }, [tasks]);
-
-  if (tasks.length === 0) {
+function TaskTableView({
+  hasProject,
+  projectName,
+  phases,
+  onAddPhase,
+  onAddMilestone,
+  onAddTask,
+}: {
+  hasProject: boolean;
+  projectName: string;
+  phases: SchedulePhase[];
+  onAddPhase: () => void;
+  onAddMilestone: (phaseId: string) => void;
+  onAddTask: (phaseId: string, milestoneId: string) => void;
+}) {
+  if (!hasProject) {
     return (
       <div className="flex min-h-[430px] items-center justify-center">
         <div className="text-center">
-          <h2 className="text-xl font-medium text-blue-100/88">No groups yet</h2>
+          <h2 className="text-xl font-medium text-blue-100/88">No project selected</h2>
           <p className="mt-3 text-sm text-blue-200/72">
-            Add a group above, or click "Load Sample Data" to see a demo.
+            Choose a current project or create a new project before building the schedule.
           </p>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="mt-5 overflow-hidden rounded-lg border border-white/10 bg-[#0d1724]">
-      <div className="grid grid-cols-[minmax(260px,1.5fr)_110px_110px_140px_140px_110px] border-b border-white/10 bg-white/[0.035] px-4 py-3 text-[11px] font-black uppercase tracking-[0.14em] text-blue-100/48">
-        <span>Task</span>
-        <span>Duration</span>
-        <span>Start</span>
-        <span>Crew</span>
-        <span>Predecessor</span>
-        <span>Status</span>
+  if (phases.length === 0) {
+    return (
+      <div className="flex min-h-[430px] items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-medium text-blue-100/88">Start with a phase</h2>
+          <p className="mt-3 max-w-xl text-sm text-blue-200/72">
+            Build the schedule for {projectName} by adding phases first. Each phase can hold key milestone checkpoints and detailed task activities.
+          </p>
+          <Button type="button" onClick={onAddPhase} className="mt-5 gap-2 bg-emerald-600 hover:bg-emerald-500">
+            <Plus className="size-4" />
+            Add First Phase
+          </Button>
+        </div>
       </div>
-      {groupedTasks.map((group) => (
-        <div key={group.phase}>
-          <div className="border-b border-white/10 bg-[#111c2a] px-4 py-3 text-sm font-black text-white">
-            {group.phase}
-          </div>
-          {group.tasks.map((task) => (
-            <div key={task.id} className="grid grid-cols-[minmax(260px,1.5fr)_110px_110px_140px_140px_110px] items-center border-b border-white/[0.06] px-4 py-3 text-sm text-blue-100/76 transition hover:bg-white/[0.035]">
-              <div>
-                <div className="font-black text-white">{task.task}</div>
-                <div className="mt-1 font-mono text-xs text-blue-200/42">WBS {task.wbs}</div>
+    );
+  }
+
+  return (
+    <div className="mt-5 space-y-4">
+      <div className="rounded-lg border border-white/10 bg-[#0d1724] p-4">
+        <div className="text-xs font-black uppercase tracking-[0.16em] text-blue-100/48">Schedule workflow</div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          {[
+            ["1", "Phases", "Major chunks of project work"],
+            ["2", "Milestones", "Key checkpoints inside each phase"],
+            ["3", "Tasks", "Detailed activities that crews perform"],
+          ].map(([number, title, copy]) => (
+            <div key={title} className="rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <div className="flex items-center gap-2">
+                <span className="flex size-6 items-center justify-center rounded bg-blue-600 text-xs font-black text-white">{number}</span>
+                <span className="text-sm font-black text-white">{title}</span>
               </div>
-              <span>{task.duration} days</span>
-              <span>D{task.startOffset + 1}</span>
-              <span>{task.crew}</span>
-              <span>{task.predecessor}</span>
-              <Badge variant="outline" className={`w-fit justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
+              <p className="mt-2 text-xs text-blue-100/52">{copy}</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      {phases.map((phase, phaseIndex) => (
+        <div key={phase.id} className="overflow-hidden rounded-lg border border-white/10 bg-[#0d1724]">
+          <div className="flex flex-col gap-3 border-b border-white/10 bg-[#111c2a] px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.14em] text-blue-100/42">Phase {phaseIndex + 1}</div>
+              <h3 className="mt-1 text-lg font-black text-white">{phase.name}</h3>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => onAddMilestone(phase.id)} className="gap-2">
+              <Flag className="size-4" />
+              Add Milestone
+            </Button>
+          </div>
+
+          {phase.milestones.length === 0 ? (
+            <div className="p-4 text-sm text-blue-100/56">
+              No milestones yet. Add the first key checkpoint for this phase.
+            </div>
+          ) : (
+            phase.milestones.map((milestone) => (
+              <div key={milestone.id} className="border-b border-white/[0.06] p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="border-blue-400/25 text-blue-100">Milestone</Badge>
+                      <span className="text-xs font-bold text-blue-100/48">Target {milestone.target}</span>
+                    </div>
+                    <h4 className="mt-2 text-base font-black text-white">{milestone.name}</h4>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => onAddTask(phase.id, milestone.id)} className="gap-2">
+                    <Plus className="size-4" />
+                    Add Task
+                  </Button>
+                </div>
+
+                {milestone.tasks.length === 0 ? (
+                  <div className="mt-3 rounded-md border border-dashed border-white/10 p-3 text-sm text-blue-100/46">
+                    No tasks yet. Add detailed activities under this checkpoint.
+                  </div>
+                ) : (
+                  <div className="mt-3 overflow-hidden rounded-md border border-white/10">
+                    <div className="grid grid-cols-[minmax(240px,1.5fr)_110px_150px_120px] bg-white/[0.035] px-3 py-2 text-[11px] font-black uppercase tracking-[0.14em] text-blue-100/42">
+                      <span>Task</span>
+                      <span>Duration</span>
+                      <span>Crew</span>
+                      <span>Status</span>
+                    </div>
+                    {milestone.tasks.map((task) => (
+                      <div key={task.id} className="grid grid-cols-[minmax(240px,1.5fr)_110px_150px_120px] items-center border-t border-white/[0.06] px-3 py-2 text-sm text-blue-100/72">
+                        <span className="font-bold text-white">{task.name}</span>
+                        <span>{task.duration} days</span>
+                        <span>{task.crew}</span>
+                        <Badge variant="outline" className={`w-fit justify-center text-[10px] ${statusStyle(task.status)}`}>{task.status}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
       ))}
     </div>
