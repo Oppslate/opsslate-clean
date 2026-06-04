@@ -16,6 +16,10 @@ assert.match(page, /projectDisplayName/, "bid portfolio should show the project 
 assert.match(page, /Open Estimate/, "project portfolio rows with estimates should open the estimate");
 assert.match(page, /Start Estimate/, "project portfolio rows without estimates should prompt the estimator to start one");
 assert.match(page, /No estimate/, "project portfolio should show a clear empty estimate state");
+assert.match(page, /EstimateDetailView/, "opening a bid should render the estimate item drill-down worksheet");
+assert.match(page, /EstimatesListView/, "estimates tool should render a clean estimate list view");
+assert.match(page, /activeTool !== "cockpit" && activeTool !== "estimates" \? bidActionToolbar : null/, "bid command toolbar should render only after opening the bid workspace");
+assert.match(page, /setActiveTool\(row\.estimate\?\._id \? "estimate-detail" : "estimates"\)/, "portfolio open action should drill into estimate detail when an estimate exists");
 assert.match(page, /All projects/, "project dropdown should allow the estimator to view all projects");
 assert.match(page, /Bid Command Center/, "cockpit should use bid-first command center language");
 assert.match(page, /RFQ Desk/, "RFQ workspace should remain available as a tool");
@@ -36,6 +40,10 @@ for (const action of ["← Back", "+ Section", "+ Milestone", "+ Add Item", "+ F
 
 for (const sectionFlow of ["Add Section / Phase", "Section / Phase Type", "COMMON_CONSTRUCTION_PHASES", "Other", "Custom Phase Name", "opsslate_estimate_custom_phases"]) {
   assert.ok(page.includes(sectionFlow), `section/phase workflow should include ${sectionFlow}`);
+}
+
+for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total", "Request RFQ", "No bid items yet"]) {
+  assert.ok(page.includes(detailText), `estimate detail worksheet should include ${detailText}`);
 }
 
 for (const productionTool of ["Ops-Takeoff", "Production Breakdown", "Equipment Analyzer", "Equipment Dealers"]) {

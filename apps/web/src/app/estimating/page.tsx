@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -148,6 +148,7 @@ function bidPortfolioRows({
 
 type EstimatingToolKey =
   | "cockpit"
+  | "estimate-detail"
   | "estimates"
   | "rfq"
   | "takeoff"
@@ -337,6 +338,13 @@ function productionSummaryForRows(rows: ReturnType<typeof productionRowsForItems
   }), { equipmentHours: 0, manHours: 0, productionDays: 0, laborCost: 0, equipmentCost: 0, total: 0 });
 }
 
+function itemLineTotal(item: Record<string, unknown>) {
+  const quantity = Number(item.quantity || 0) || 0;
+  const unitCost = Number(item.unitCost || 0) || 0;
+  const taxPct = Number(item.taxPct || 0) || 0;
+  return quantity * unitCost * (1 + taxPct / 100);
+}
+
 export default function EstimatingPage() {
   return (
     <AppShell showSidebar={false}>
@@ -457,6 +465,265 @@ function SectionPhaseModal({
           <Button onClick={onContinue} disabled={selectedPhase === "Other" && !customPhase.trim()}>Continue</Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function EstimateDetailView({
+  estimate,
+  project,
+  items,
+  selectedItemIds,
+  selectedEstimateTotal,
+  rfqSummary,
+  scheduleScore,
+  predictiveSignals,
+  onToggleItem,
+  onRequestQuote,
+  rfqStatusForItem,
+}: {
+  estimate?: Record<string, unknown>;
+  project?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  selectedItemIds: string[];
+  selectedEstimateTotal: number;
+  rfqSummary: ReturnType<typeof rfqCounts>;
+  scheduleScore: number;
+  predictiveSignals: Array<{ label: string; detail: string; severity: "high" | "medium" | "low" }>;
+  onToggleItem: (id: string, checked: boolean) => void;
+  onRequestQuote: (item: Record<string, unknown>) => void;
+  rfqStatusForItem: (item: Record<string, unknown>) => string;
+}) {
+  const groupedItems: Record<string, Array<Record<string, unknown>>> = {};
+  items.forEach((item) => {
+    const key = String(item.section || item.sourceSpecSection || "Unassigned");
+    if (!groupedItems[key]) groupedItems[key] = [];
+    groupedItems[key].push(item);
+  });
+
+  const estimateName = String(estimate?.name || projectDisplayName(project, estimate));
+  const projectMeta = [
+    portfolioClientLabel(project, estimate) !== "No client" ? `Client: ${portfolioClientLabel(project, estimate)}` : "",
+    estimate?.bidDate ? `Bid Date: ${String(estimate.bidDate)}` : "",
+    projectAddressLine(project, estimate),
+  ].filter(Boolean).join(" | ");
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h1 className="max-w-3xl text-3xl font-black leading-tight tracking-tight text-white">{estimateName}</h1>
+          <p className="mt-2 max-w-4xl text-sm text-blue-100">{projectMeta}</p>
+        </div>
+        <Button variant="outline">Edit Details</Button>
+      </div>
+
+      <section className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {[
+            ["Needs Action", predictiveSignals.length],
+            ["Submittals", 0],
+            ["RFQs", rfqSummary.open],
+            ["Scope Gaps", predictiveSignals.filter((signal) => signal.label.includes("Scope")).length],
+            ["Risk / Requirements", predictiveSignals.length],
+            ["Dismissed", 0],
+          ].map(([label, value], index) => (
+            <Badge key={String(label)} className={index === 0 ? "bg-orange-500 text-white" : "bg-secondary text-blue-100"}>
+              {label} <span className="ml-1 rounded-full bg-blue-500/20 px-1.5">{String(value)}</span>
+            </Badge>
+          ))}
+        </div>
+        <h2 className="text-sm font-bold text-blue-100">Draft Actions</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Action cards include Approve, Review, and Dismiss controls.</p>
+        <p className="mt-4 text-sm text-blue-100">{predictiveSignals.length ? `${predictiveSignals.length} bid signal${predictiveSignals.length === 1 ? "" : "s"} need estimator review.` : "No actions in this lane right now."}</p>
+      </section>
+
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="outline">{statusLabel(String(estimate?.status || "draft"))}</Badge>
+            <span className="text-muted-foreground">{items.length} bid item{items.length === 1 ? "" : "s"}</span>
+            <span className="text-muted-foreground">Schedule readiness {scheduleScore}%</span>
+          </div>
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Estimate Total</div>
+            <div className="text-lg font-black text-green-400">{money(selectedEstimateTotal)}</div>
+          </div>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-background text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              <tr>
+                <th className="w-12 p-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={items.length > 0 && items.every((item) => selectedItemIds.includes(String(item._id)))}
+                    onChange={(event) => items.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
+                  />
+                </th>
+                <th className="p-3 text-left">Description</th>
+                <th className="p-3 text-right">Qty</th>
+                <th className="p-3 text-left">Unit</th>
+                <th className="p-3 text-right">Tax %</th>
+                <th className="p-3 text-right">Unit Cost</th>
+                <th className="p-3 text-right">Line Total</th>
+                <th className="p-3 text-right">Extended</th>
+                <th className="p-3 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(groupedItems).map(([section, sectionItems]) => {
+                const sectionTotal = estimateTotal(sectionItems);
+                const allSectionSelected = sectionItems.every((item) => selectedItemIds.includes(String(item._id)));
+                return (
+                  <Fragment key={`group-${section}`}>
+                    <tr key={`section-${section}`} className="border-t border-border bg-secondary/45">
+                      <td className="p-3">
+                        <input
+                          type="checkbox"
+                          checked={sectionItems.length > 0 && allSectionSelected}
+                          onChange={(event) => sectionItems.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
+                        />
+                      </td>
+                      <td className="p-3 font-black text-white">Folder {section}</td>
+                      <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>Select all</td>
+                      <td className="p-3 text-right font-black text-white">{money(sectionTotal)}</td>
+                      <td className="p-3" />
+                    </tr>
+                    {sectionItems.map((item) => {
+                      const itemId = String(item._id);
+                      const rfqStatus = rfqStatusForItem(item);
+                      return (
+                        <tr key={itemId} className="border-t border-border">
+                          <td className="p-3">
+                            <input type="checkbox" checked={selectedItemIds.includes(itemId)} onChange={(event) => onToggleItem(itemId, event.target.checked)} />
+                          </td>
+                          <td className="p-3">
+                            <div className="font-bold text-white">{String(item.description || "Estimate item")}</div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              <Badge variant="outline">Spec: {String(item.sourceSpecSection || item.specSection || "No book")}</Badge>
+                              <Badge className="bg-blue-500/15 text-blue-200">RFQ Status: {rfqStatus === "No RFQ" ? "Not Requested" : rfqStatus}</Badge>
+                            </div>
+                          </td>
+                          <td className="p-3 text-right text-white">{String(item.quantity || 0)}</td>
+                          <td className="p-3 text-muted-foreground">{String(item.unit || "LS")}</td>
+                          <td className="p-3 text-right text-muted-foreground">{String(item.taxPct || "-")}</td>
+                          <td className="p-3 text-right font-mono text-white">{money(item.unitCost)}</td>
+                          <td className="p-3 text-right font-mono text-white">{money(itemLineTotal(item))}</td>
+                          <td className="p-3 text-right font-mono text-white">{money(itemLineTotal(item))}</td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="outline">Proof</Button>
+                              <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
+                              <Button size="sm" variant="outline">Edit</Button>
+                              <Button size="sm" variant="destructive">x</Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
+              {!items.length && (
+                <tr>
+                  <td colSpan={9} className="p-10 text-center text-muted-foreground">No bid items yet. Add an item or import from takeoff/cost database to build this estimate.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function EstimatesListView({
+  rows,
+  selectedEstimateId,
+  selectedEstimateTotal,
+  selectedEstimateItemCount,
+  onOpenEstimate,
+}: {
+  rows: BidPortfolioRow[];
+  selectedEstimateId: string;
+  selectedEstimateTotal: number;
+  selectedEstimateItemCount: number;
+  onOpenEstimate: (row: BidPortfolioRow) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+        <h1 className="text-2xl font-black text-white">Estimates</h1>
+        <div className="flex flex-wrap gap-2">
+          <Button>+ New Estimate</Button>
+          <Button className="bg-purple-600 hover:bg-purple-500">AI Auto-Bid</Button>
+          <Button variant="outline">Quick Templates</Button>
+        </div>
+      </div>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <select className="min-w-48 rounded-md border border-border bg-background px-3 py-2 text-sm text-white">
+            <option>All Types</option>
+          </select>
+          <select className="min-w-48 rounded-md border border-border bg-background px-3 py-2 text-sm text-white">
+            <option>All Status</option>
+          </select>
+        </div>
+        <div className="overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-background text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              <tr>
+                <th className="p-3 text-left">Type</th>
+                <th className="p-3 text-left">Project</th>
+                <th className="p-3 text-left">Client</th>
+                <th className="p-3 text-left">Bid Date</th>
+                <th className="p-3 text-left">Status</th>
+                <th className="p-3 text-left">Items</th>
+                <th className="p-3 text-right">Total</th>
+                <th className="p-3 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const { project, estimate } = row;
+                const isSelected = Boolean(estimate?._id && String(estimate._id) === selectedEstimateId);
+                const storedTotal = portfolioStoredTotal(estimate);
+                return (
+                  <tr key={row.key} className="border-t border-border">
+                    <td className="p-3 text-muted-foreground">{estimate ? "Bid" : "Project"}</td>
+                    <td className="p-3">
+                      <button type="button" onClick={() => onOpenEstimate(row)} className="text-left">
+                        <div className="font-bold text-white hover:text-orange-300">{projectDisplayName(project, estimate)}</div>
+                        <div className="text-xs text-blue-200">{projectAddressLine(project, estimate)}</div>
+                      </button>
+                    </td>
+                    <td className="p-3 text-muted-foreground">{portfolioClientLabel(project, estimate)}</td>
+                    <td className="p-3 text-muted-foreground">{String(estimate?.bidDate || "No date")}</td>
+                    <td className="p-3"><Badge variant={estimate ? "outline" : "secondary"}>{estimate ? statusLabel(String(estimate.status || "draft")) : "No estimate"}</Badge></td>
+                    <td className="p-3 text-white">{isSelected ? selectedEstimateItemCount : estimate ? "Open" : "-"}</td>
+                    <td className="p-3 text-right font-mono font-bold text-white">{isSelected ? money(selectedEstimateTotal) : storedTotal !== undefined ? money(storedTotal) : "-"}</td>
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => onOpenEstimate(row)}>{estimate?._id ? "Edit" : "Start"}</Button>
+                        <Button size="sm" variant="outline">Dup</Button>
+                        <Button size="sm" variant="destructive">x</Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={8} className="p-10 text-center text-muted-foreground">No projects or estimates found yet.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
@@ -733,6 +1000,13 @@ function EstimatingWorkspace() {
     return rfqStatusByItemId.get(String(item._id)) || "No RFQ";
   }
 
+  function openPortfolioRow(row: BidPortfolioRow) {
+    if (row.project?._id) setSelectedProjectId(String(row.project._id));
+    setSelectedEstimateId(row.estimate?._id ? String(row.estimate._id) : "");
+    setSelectedItemIds([]);
+    setActiveTool(row.estimate?._id ? "estimate-detail" : "estimates");
+  }
+
   function buildPackageText(vendor: Record<string, unknown>, items: Array<Record<string, unknown>>) {
     const companyHeader = [
       branding?.name || "OpsSlate",
@@ -913,7 +1187,7 @@ function EstimatingWorkspace() {
   const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
   const bidActionToolbar = (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/65 p-3">
-      <button type="button" className={bidActionButtonClass} onClick={() => window.history.back()}>← Back</button>
+      <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cockpit")}>← Back</button>
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
       <button type="button" className={`${bidActionButtonClass} border-blue-500/35 bg-blue-500/80 text-white hover:bg-blue-500`} onClick={() => setActiveTool("calendar")}>+ Milestone</button>
       <button type="button" className={`${bidActionButtonClass} border-green-500/35 bg-green-500/85 text-white hover:bg-green-500`} onClick={() => setActiveTool("estimates")}>+ Add Item</button>
@@ -985,7 +1259,7 @@ function EstimatingWorkspace() {
     <div className="flex gap-5">
       <EstimatorCommandCenter activeTool={activeTool} onSelect={setActiveTool} />
       <main className="min-w-0 flex-1 space-y-5">
-        {bidActionToolbar}
+        {activeTool !== "cockpit" && activeTool !== "estimates" ? bidActionToolbar : null}
         <SectionPhaseModal
           open={sectionPhaseModalOpen}
           phaseOptions={phaseOptions}
@@ -1099,12 +1373,7 @@ function EstimatingWorkspace() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => {
-                                  if (project?._id) setSelectedProjectId(String(project._id));
-                                  setSelectedEstimateId(estimate?._id ? String(estimate._id) : "");
-                                  setSelectedItemIds([]);
-                                  setActiveTool(estimate?._id ? "rfq" : "estimates");
-                                }}
+                                onClick={() => openPortfolioRow(row)}
                               >
                                 {estimate?._id ? "Open Estimate" : "Start Estimate"}
                               </Button>
@@ -1190,7 +1459,29 @@ function EstimatingWorkspace() {
             estimate={selectedEstimate}
             rows={productionRows}
             summary={productionSummary}
-            onBack={() => setActiveTool("cockpit")}
+            onBack={() => setActiveTool("estimate-detail")}
+          />
+        ) : activeTool === "estimate-detail" ? (
+          <EstimateDetailView
+            estimate={selectedEstimate}
+            project={selectedProject}
+            items={estimateItems || []}
+            selectedItemIds={selectedItemIds}
+            selectedEstimateTotal={selectedEstimateTotal}
+            rfqSummary={rfqSummary}
+            scheduleScore={scheduleScore}
+            predictiveSignals={predictiveSignals}
+            onToggleItem={toggleItem}
+            onRequestQuote={requestQuoteForItem}
+            rfqStatusForItem={rfqStatusForItem}
+          />
+        ) : activeTool === "estimates" ? (
+          <EstimatesListView
+            rows={portfolioRows}
+            selectedEstimateId={estimateId}
+            selectedEstimateTotal={selectedEstimateTotal}
+            selectedEstimateItemCount={(estimateItems || []).length}
+            onOpenEstimate={openPortfolioRow}
           />
         ) : activeTool !== "rfq" ? stagedTool : (
     <div className="space-y-5">
