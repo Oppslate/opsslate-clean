@@ -65,6 +65,7 @@ import type * as discordWebhook from "../discordWebhook.js";
 import type * as docAnalyzer from "../docAnalyzer.js";
 import type * as docManager from "../docManager.js";
 import type * as emailAutoAssign from "../emailAutoAssign.js";
+import type * as emailConfig from "../emailConfig.js";
 import type * as emailIntel from "../emailIntel.js";
 import type * as emailIntelHelpers from "../emailIntelHelpers.js";
 import type * as emailUploadProcessor from "../emailUploadProcessor.js";
@@ -179,6 +180,7 @@ declare const fullApi: ApiFromModules<{
   docAnalyzer: typeof docAnalyzer;
   docManager: typeof docManager;
   emailAutoAssign: typeof emailAutoAssign;
+  emailConfig: typeof emailConfig;
   emailIntel: typeof emailIntel;
   emailIntelHelpers: typeof emailIntelHelpers;
   emailUploadProcessor: typeof emailUploadProcessor;
