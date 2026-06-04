@@ -1,66 +1,67 @@
 (() => {
   const SCRIPT_VERSION = "2026-05-09.2";
-  const SESSION_URL = "https://www.opsslate.app/api/auth/suite-session";
+  const sameOriginPath = (path) => new URL(path, window.location.origin).toString();
+  const SESSION_URL = sameOriginPath("/api/auth/suite-session");
   const AUTH_LOGOUT_URL = "https://opsslate-auth.vercel.app/api/auth/logout";
-  const LOGIN_URL = "https://www.opsslate.app/login";
-  const SIGNUP_URL = "https://www.opsslate.app/signup";
-  const PRICING_URL = "https://www.opsslate.app/pricing";
+  const LOGIN_URL = sameOriginPath("/login");
+  const SIGNUP_URL = sameOriginPath("/signup");
+  const PRICING_URL = sameOriginPath("/pricing");
 
   const apps = [
     {
       key: "project-management",
       short: "PM",
       label: "Project Management",
-      appHref: "https://www.opsslate.app/",
-      salesHref: "https://www.opsslate.app/project-management",
+      appHref: sameOriginPath("/"),
+      salesHref: sameOriginPath("/project-management"),
       ready: true,
     },
     {
       key: "estimating",
       short: "Bid",
       label: "Estimating",
-      appHref: "https://estimating.opsslate.app/",
-      salesHref: "https://www.opsslate.app/estimating",
+      appHref: sameOriginPath("/estimating"),
+      salesHref: sameOriginPath("/estimating"),
       ready: true,
     },
     {
       key: "scheduler",
       short: "Plan",
       label: "Scheduler",
-      appHref: "https://scheduler.opsslate.app/",
-      salesHref: "https://www.opsslate.app/scheduler",
+      appHref: sameOriginPath("/scheduler"),
+      salesHref: sameOriginPath("/scheduler"),
       ready: true,
     },
     {
       key: "books",
       short: "Books",
       label: "Books",
-      appHref: "https://books.opsslate.app/api/auth/suite?next=%2Fback-office",
-      salesHref: "https://www.opsslate.app/books",
+      appHref: sameOriginPath("/books"),
+      salesHref: sameOriginPath("/books"),
       ready: true,
     },
     {
       key: "takeoff",
       short: "Qty",
       label: "Takeoff",
-      appHref: "https://takeoff.opsslate.app/",
-      salesHref: "https://www.opsslate.app/takeoff",
+      appHref: sameOriginPath("/takeoff"),
+      salesHref: sameOriginPath("/takeoff"),
       ready: true,
     },
     {
       key: "cad",
       short: "CAD",
       label: "CAD",
-      appHref: "https://www.opsslate.app/cad",
-      salesHref: "https://www.opsslate.app/cad",
+      appHref: sameOriginPath("/cad"),
+      salesHref: sameOriginPath("/cad"),
       ready: false,
     },
     {
       key: "crm",
       short: "CRM",
       label: "CRM",
-      appHref: "https://www.opsslate.app/crm",
-      salesHref: "https://www.opsslate.app/crm",
+      appHref: sameOriginPath("/crm"),
+      salesHref: sameOriginPath("/crm"),
       ready: false,
     },
   ];
@@ -439,7 +440,7 @@
         <style>${css}</style>
         <header class="suite-toolbar" data-version="${SCRIPT_VERSION}">
           <div class="suite-frame">
-            <a href="${this.loggedIn ? "https://www.opsslate.app/" : "https://www.opsslate.app/project-management"}" class="brand" aria-label="OpsSlate home">
+            <a href="${this.loggedIn ? sameOriginPath("/") : sameOriginPath("/project-management")}" class="brand" aria-label="OpsSlate home">
               <span class="mark">OS</span>
               <span class="name">OpsSlate</span>
               <span class="suite-badge">Suite</span>
