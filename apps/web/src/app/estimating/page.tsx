@@ -800,23 +800,28 @@ function EstimatesListView({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 xl:grid-cols-[0.8fr_0.8fr_1.2fr]">
-            <div className="rounded-lg border border-border bg-card p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">1. Phase</div>
-              <select
-                value={selectedPhase}
-                onChange={(event) => onSelectedPhaseChange(event.target.value)}
-                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-              >
-                {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => <option key={phase} value={phase}>{phase}</option>)}
-              </select>
-              <div className="mt-3 space-y-2">
-                {Object.keys(ESTIMATE_PHASE_LIBRARY).slice(0, 6).map((phase) => (
+          <div className="mt-5 rounded-lg border border-border bg-card">
+            <div className="border-b border-border bg-secondary/40 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-orange-300">Phase</div>
+                  <h3 className="mt-1 text-xl font-black text-white">{selectedPhase}</h3>
+                </div>
+                <select
+                  value={selectedPhase}
+                  onChange={(event) => onSelectedPhaseChange(event.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white lg:w-80"
+                >
+                  {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => <option key={phase} value={phase}>{phase}</option>)}
+                </select>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => (
                   <button
                     key={phase}
                     type="button"
                     onClick={() => onSelectedPhaseChange(phase)}
-                    className={`w-full rounded-md border px-3 py-2 text-left text-xs font-semibold ${phase === selectedPhase ? "border-orange-500/50 bg-orange-500/15 text-orange-100" : "border-border bg-background/50 text-blue-100"}`}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${phase === selectedPhase ? "border-orange-500/50 bg-orange-500/15 text-orange-100" : "border-border bg-background/50 text-blue-100"}`}
                   >
                     {phase}
                   </button>
@@ -824,22 +829,27 @@ function EstimatesListView({
               </div>
             </div>
 
-            <div className="rounded-lg border border-border bg-card p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">2. Section</div>
-              <select
-                value={selectedSection}
-                onChange={(event) => onSelectedSectionChange(event.target.value)}
-                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-              >
-                {phaseSections.map((section) => <option key={section} value={section}>{section}</option>)}
-              </select>
-              <div className="mt-3 space-y-2">
+            <div className="border-b border-border p-4 pl-8">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-blue-300">Section Under Phase</div>
+                  <h3 className="mt-1 text-lg font-black text-white">{selectedSection}</h3>
+                </div>
+                <select
+                  value={selectedSection}
+                  onChange={(event) => onSelectedSectionChange(event.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white lg:w-80"
+                >
+                  {phaseSections.map((section) => <option key={section} value={section}>{section}</option>)}
+                </select>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
                 {phaseSections.map((section) => (
                   <button
                     key={section}
                     type="button"
                     onClick={() => onSelectedSectionChange(section)}
-                    className={`w-full rounded-md border px-3 py-2 text-left text-xs font-semibold ${section === selectedSection ? "border-blue-500/50 bg-blue-500/15 text-blue-100" : "border-border bg-background/50 text-muted-foreground"}`}
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${section === selectedSection ? "border-blue-500/50 bg-blue-500/15 text-blue-100" : "border-border bg-background/50 text-muted-foreground"}`}
                   >
                     {section}
                   </button>
@@ -847,15 +857,15 @@ function EstimatesListView({
               </div>
             </div>
 
-            <div className="rounded-lg border border-border bg-card p-4">
-              <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">3. First Bid Item</div>
-              <input
-                value={starterDescription}
-                onChange={(event) => onStarterDescriptionChange(event.target.value)}
-                className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-                placeholder="Move equipment to site"
-              />
-              <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <div className="p-4 pl-12">
+              <div className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-green-300">Item Under Section</div>
+              <div className="grid gap-3 xl:grid-cols-[1fr_110px_110px_150px]">
+                <input
+                  value={starterDescription}
+                  onChange={(event) => onStarterDescriptionChange(event.target.value)}
+                  className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+                  placeholder="Move equipment to site"
+                />
                 <input value={starterQuantity} onChange={(event) => onStarterQuantityChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Qty" />
                 <input value={starterUnit} onChange={(event) => onStarterUnitChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit" />
                 <input value={starterUnitCost} onChange={(event) => onStarterUnitCostChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit cost" />
@@ -874,12 +884,12 @@ function EstimatesListView({
                   ))}
                 </div>
               )}
-              <div className="mt-4 rounded-md border border-border bg-background/50 p-3 text-xs text-muted-foreground">
-                This will create the estimate and file the first item under <span className="font-bold text-white">{selectedPhase} / {selectedSection}</span>.
+              <div className="mt-4 flex flex-col gap-3 rounded-md border border-border bg-background/50 p-3 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
+                <span>This will create the estimate and file the first item under <span className="font-bold text-white">{selectedPhase} / {selectedSection}</span>.</span>
+                <Button disabled={!starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>
+                  {creatingStarter ? "Creating estimate..." : "Create Estimate + First Item"}
+                </Button>
               </div>
-              <Button className="mt-4 w-full" disabled={!starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>
-                {creatingStarter ? "Creating estimate..." : "Create Estimate + First Item"}
-              </Button>
             </div>
           </div>
         </section>

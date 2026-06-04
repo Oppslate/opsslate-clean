@@ -46,7 +46,7 @@ for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total
   assert.ok(page.includes(detailText), `estimate detail worksheet should include ${detailText}`);
 }
 
-for (const builderText of ["Guided Estimate Builder", "1. Phase", "2. Section", "3. First Bid Item", "Create Estimate + First Item", "ESTIMATE_PHASE_LIBRARY"]) {
+for (const builderText of ["Guided Estimate Builder", "Phase", "Section Under Phase", "Item Under Section", "Create Estimate + First Item", "ESTIMATE_PHASE_LIBRARY"]) {
   assert.ok(page.includes(builderText), `guided estimate builder should include ${builderText}`);
 }
 
