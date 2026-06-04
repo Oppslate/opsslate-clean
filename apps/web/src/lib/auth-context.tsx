@@ -7,9 +7,13 @@ import { Id } from "../../convex/_generated/dataModel";
 
 const AUTH_URL = "https://opsslate-auth.vercel.app";
 const OPSLATE_COOKIE_DOMAIN = ".opsslate.app";
-const OPSLATE_LOGIN_URL = "https://www.opsslate.app/login";
 const OPSLATE_LOGOUT_COOKIE = "opsslate_logged_out";
 const SUITE_PASSWORD_MANAGED_PREFIX = "opsslate_suite_password_managed:";
+
+function currentCookieDomain() {
+  if (typeof window === "undefined") return "";
+  return window.location.hostname.endsWith("opsslate.app") ? `; domain=${OPSLATE_COOKIE_DOMAIN}` : "";
+}
 
 function getCookie(name: string) {
   const value = document.cookie
@@ -20,24 +24,24 @@ function getCookie(name: string) {
 }
 
 function setSharedSessionCookie(token: string) {
-  document.cookie = `opsslate_token=${encodeURIComponent(token)}; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=${60 * 60 * 24 * 30}; secure; samesite=lax`;
+  document.cookie = `opsslate_token=${encodeURIComponent(token)}; path=/${currentCookieDomain()}; max-age=${60 * 60 * 24 * 30}; secure; samesite=lax`;
 }
 
 function setSuiteConvexCookie(token: string) {
-  document.cookie = `opsslate_convex_token=${encodeURIComponent(token)}; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=${60 * 60 * 24 * 30}; secure; samesite=lax`;
+  document.cookie = `opsslate_convex_token=${encodeURIComponent(token)}; path=/${currentCookieDomain()}; max-age=${60 * 60 * 24 * 30}; secure; samesite=lax`;
 }
 
 function clearSharedSessionCookie() {
-  document.cookie = `opsslate_token=; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=0; secure; samesite=lax`;
-  document.cookie = `opsslate_convex_token=; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=0; secure; samesite=lax`;
+  document.cookie = `opsslate_token=; path=/${currentCookieDomain()}; max-age=0; secure; samesite=lax`;
+  document.cookie = `opsslate_convex_token=; path=/${currentCookieDomain()}; max-age=0; secure; samesite=lax`;
 }
 
 function markSuiteLoggedOut() {
-  document.cookie = `${OPSLATE_LOGOUT_COOKIE}=1; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=${60 * 60 * 24 * 30}; secure; samesite=lax`;
+  document.cookie = `${OPSLATE_LOGOUT_COOKIE}=1; path=/${currentCookieDomain()}; max-age=${60 * 60 * 24 * 30}; secure; samesite=lax`;
 }
 
 function clearSuiteLogoutMarker() {
-  document.cookie = `${OPSLATE_LOGOUT_COOKIE}=; path=/; domain=${OPSLATE_COOKIE_DOMAIN}; max-age=0; secure; samesite=lax`;
+  document.cookie = `${OPSLATE_LOGOUT_COOKIE}=; path=/${currentCookieDomain()}; max-age=0; secure; samesite=lax`;
 }
 
 function suitePasswordManagedKey(email: string) {
@@ -295,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     markSuiteLoggedOut();
     fetch("/api/auth/suite-session", { method: "DELETE" }).catch(() => {});
     setToken("");
-    window.location.href = OPSLATE_LOGIN_URL;
+    window.location.href = "/login";
   };
 
   const verifyingSession = Boolean(token) && user === undefined;

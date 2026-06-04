@@ -4,6 +4,11 @@ const COOKIE_DOMAIN = ".opsslate.app";
 const MAX_AGE = 60 * 60 * 24 * 30;
 const ALLOWED_ORIGIN = /^https:\/\/([a-z0-9-]+\.)?opsslate\.app$/i;
 
+function cookieDomainForRequest(req: NextRequest) {
+  const hostname = req.nextUrl.hostname;
+  return hostname.endsWith("opsslate.app") ? COOKIE_DOMAIN : undefined;
+}
+
 function corsHeaders(req: NextRequest) {
   const origin = req.headers.get("origin") || "";
   const headers: Record<string, string> = {
@@ -24,9 +29,9 @@ function json(req: NextRequest, body: unknown) {
   return NextResponse.json(body, { headers: corsHeaders(req) });
 }
 
-function setSuiteCookie(res: NextResponse, name: string, value: string) {
+function setSuiteCookie(req: NextRequest, res: NextResponse, name: string, value: string) {
   res.cookies.set(name, value, {
-    domain: COOKIE_DOMAIN,
+    domain: cookieDomainForRequest(req),
     path: "/",
     maxAge: MAX_AGE,
     secure: true,
@@ -34,9 +39,9 @@ function setSuiteCookie(res: NextResponse, name: string, value: string) {
   });
 }
 
-function clearSuiteCookie(res: NextResponse, name: string) {
+function clearSuiteCookie(req: NextRequest, res: NextResponse, name: string) {
   res.cookies.set(name, "", {
-    domain: COOKIE_DOMAIN,
+    domain: cookieDomainForRequest(req),
     path: "/",
     maxAge: 0,
     secure: true,
@@ -63,21 +68,21 @@ export async function POST(req: NextRequest) {
   const res = json(req, { ok: true });
 
   if (typeof body.sharedToken === "string" && body.sharedToken) {
-    setSuiteCookie(res, "opsslate_token", body.sharedToken);
+    setSuiteCookie(req, res, "opsslate_token", body.sharedToken);
   }
 
   if (typeof body.convexToken === "string" && body.convexToken) {
-    setSuiteCookie(res, "opsslate_convex_token", body.convexToken);
+    setSuiteCookie(req, res, "opsslate_convex_token", body.convexToken);
   }
 
-  clearSuiteCookie(res, "opsslate_logged_out");
+  clearSuiteCookie(req, res, "opsslate_logged_out");
   return res;
 }
 
 export async function DELETE(req: NextRequest) {
   const res = json(req, { ok: true });
-  clearSuiteCookie(res, "opsslate_token");
-  clearSuiteCookie(res, "opsslate_convex_token");
-  setSuiteCookie(res, "opsslate_logged_out", "1");
+  clearSuiteCookie(req, res, "opsslate_token");
+  clearSuiteCookie(req, res, "opsslate_convex_token");
+  setSuiteCookie(req, res, "opsslate_logged_out", "1");
   return res;
 }
