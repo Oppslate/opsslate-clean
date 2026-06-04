@@ -28,8 +28,20 @@ for (const action of ["← Back", "+ Section", "+ Add Item", "+ From Cost DB", "
   assert.ok(page.includes(action), `estimating cockpit top toolbar should include ${action}`);
 }
 
+for (const productionTool of ["Ops-Takeoff", "Production Breakdown", "Equipment Analyzer", "Equipment Dealers"]) {
+  assert.ok(page.includes(productionTool), `production dropdown should include ${productionTool}`);
+}
+
+for (const productionText of ["Production Rate Breakdown", "Equipment Hours", "Man-Hours", "Production Days", "Labor Cost", "Equipment Cost", "Prevailing Rates", "Back to Estimate", "Print / PDF", "Recalculate"]) {
+  assert.ok(page.includes(productionText), `production rate breakdown should include ${productionText}`);
+}
+
 for (const helper of ["estimateTotal", "rfqCounts", "scheduleReadinessScore", "predictiveSignalsForEstimate"]) {
   assert.match(page, new RegExp(helper), `estimating cockpit should use ${helper}`);
+}
+
+for (const helper of ["productionRowsForItems", "productionSummaryForRows", "productionRateForItem", "ProductionRateBreakdownView"]) {
+  assert.match(page, new RegExp(helper), `production breakdown should use ${helper}`);
 }
 
 console.log("estimating cockpit checks passed");

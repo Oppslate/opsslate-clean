@@ -78,6 +78,9 @@ type EstimatingToolKey =
   | "estimates"
   | "rfq"
   | "takeoff"
+  | "production-breakdown"
+  | "equipment-analyzer"
+  | "equipment-dealers"
   | "cost"
   | "materials"
   | "labor"
@@ -94,6 +97,9 @@ const ESTIMATING_TOOLS: Array<{ key: EstimatingToolKey; label: string; icon: str
   { key: "estimates", label: "Estimates", icon: "EST", description: "Bid portfolio and estimate list" },
   { key: "rfq", label: "RFQ Desk", icon: "RFQ", description: "Draft, compare, and award quote packages" },
   { key: "takeoff", label: "Takeoff Handoff", icon: "QTY", description: "Quantities and proof entering the bid" },
+  { key: "production-breakdown", label: "Production Breakdown", icon: "PROD", description: "Convert bid quantities into labor, equipment, and production days" },
+  { key: "equipment-analyzer", label: "Equipment Analyzer", icon: "EQ", description: "Equipment hours, rates, utilization, and gaps" },
+  { key: "equipment-dealers", label: "Equipment Dealers", icon: "DLR", description: "Dealer and rental quote sourcing" },
   { key: "cost", label: "Cost Database", icon: "COST", description: "Company cost health" },
   { key: "materials", label: "Materials", icon: "MAT", description: "Shared material costs" },
   { key: "labor", label: "Labor", icon: "LAB", description: "Shared labor costs" },
@@ -175,6 +181,71 @@ function predictiveSignalsForEstimate({
   return signals.slice(0, 5);
 }
 
+function productionCategoryForItem(item: Record<string, unknown>) {
+  const text = `${item.section || ""} ${item.description || ""}`.toLowerCase();
+  if (/mobilization|setup|temporary|permit|preconstruction|survey|layout/.test(text)) return "Preconstruction";
+  if (/excavat|trench|earth|backfill|stone|aggregate|subbase/.test(text)) return "Earthwork";
+  if (/concrete|form|rebar|pad|curb|sidewalk/.test(text)) return "Concrete";
+  if (/asphalt|paving|binder|top course|milling/.test(text)) return "Paving";
+  if (/electric|conduit|wire|cable|charger|switch|panel/.test(text)) return "Electrical";
+  return "General Construction";
+}
+
+function productionRateForItem(item: Record<string, unknown>) {
+  const unit = String(item.unit || "LS").toLowerCase();
+  const category = productionCategoryForItem(item);
+  if (unit.includes("lf")) return { rate: category === "Electrical" ? 240 : 320, basis: "LF/day", crewSize: 3 };
+  if (unit.includes("cy")) return { rate: category === "Concrete" ? 28 : 110, basis: "CY/day", crewSize: 4 };
+  if (unit.includes("ton")) return { rate: 85, basis: "Ton/day", crewSize: 4 };
+  if (unit.includes("each") || unit.includes("ea")) return { rate: 8, basis: "EA/day", crewSize: 2 };
+  return { rate: category === "Preconstruction" ? 0 : 1, basis: "allowance", crewSize: category === "Preconstruction" ? 0 : 2 };
+}
+
+function productionRowsForItems(items: Array<Record<string, unknown>> = []) {
+  return items.map((item, index) => {
+    const quantity = Number(item.quantity || 0) || 0;
+    const unitCost = Number(item.unitCost || 0) || 0;
+    const baseCost = quantity * unitCost;
+    const category = productionCategoryForItem(item);
+    const rate = productionRateForItem(item);
+    const days = rate.rate > 0 ? quantity / rate.rate : 0;
+    const manHours = days * rate.crewSize * 8;
+    const equipmentHours = category === "Preconstruction" ? 0 : days * 8 * (category === "Earthwork" || category === "Paving" ? 1.5 : 0.65);
+    const laborCost = manHours * 85;
+    const equipmentCost = equipmentHours * 155;
+    return {
+      id: String(item._id || `${item.description || "item"}-${index}`),
+      section: String(item.section || "Unassigned"),
+      description: String(item.description || "Estimate item"),
+      category,
+      quantity,
+      unit: String(item.unit || "LS"),
+      baseCost,
+      percent: baseCost ? Math.max(1, Math.min(10, Math.round((laborCost + equipmentCost) / baseCost * 100))) : 0,
+      days,
+      manHours,
+      equipmentHours,
+      laborCost,
+      equipmentCost,
+      total: laborCost + equipmentCost + baseCost,
+      rateBasis: rate.basis,
+      prodRate: rate.rate,
+      crewSize: rate.crewSize,
+    };
+  });
+}
+
+function productionSummaryForRows(rows: ReturnType<typeof productionRowsForItems>) {
+  return rows.reduce((summary, row) => ({
+    equipmentHours: summary.equipmentHours + row.equipmentHours,
+    manHours: summary.manHours + row.manHours,
+    productionDays: summary.productionDays + row.days,
+    laborCost: summary.laborCost + row.laborCost,
+    equipmentCost: summary.equipmentCost + row.equipmentCost,
+    total: summary.total + row.total,
+  }), { equipmentHours: 0, manHours: 0, productionDays: 0, laborCost: 0, equipmentCost: 0, total: 0 });
+}
+
 export default function EstimatingPage() {
   return (
     <AppShell showSidebar={false}>
@@ -238,6 +309,141 @@ function CockpitMetricCard({ label, value, sub, tone = "orange" }: { label: stri
   );
 }
 
+function ProductionRateBreakdownView({
+  estimate,
+  rows,
+  summary,
+  onBack,
+}: {
+  estimate?: Record<string, unknown>;
+  rows: ReturnType<typeof productionRowsForItems>;
+  summary: ReturnType<typeof productionSummaryForRows>;
+  onBack: () => void;
+}) {
+  const groupedRows = rows.reduce((groups, row) => {
+    const key = row.section || "Unassigned";
+    groups[key] = groups[key] || [];
+    groups[key].push(row);
+    return groups;
+  }, {} as Record<string, typeof rows>);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-4 border-b border-border pb-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <Badge className="mb-2 bg-orange-500/15 text-orange-300">Production Rate Breakdown</Badge>
+          <h1 className="text-3xl font-black tracking-tight text-white">Production Rate Breakdown</h1>
+          <p className="mt-1 max-w-4xl text-sm text-muted-foreground">
+            Estimate: {String(estimate?.name || "Selected estimate")} — Converts quantity bid into manhours, equipment hours, production days, and contractor review dollars.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button>Prevailing Rates</Button>
+          <Button variant="outline" onClick={onBack}>Back to Estimate</Button>
+          <Button variant="outline">Edit Details</Button>
+          <Button onClick={() => window.print()}>Print / PDF</Button>
+          <Button variant="outline">Recalculate</Button>
+        </div>
+      </div>
+
+      <section className="grid gap-3 rounded-lg border border-border bg-card p-4 md:grid-cols-3 xl:grid-cols-6">
+        {[
+          ["Equipment Hours", summary.equipmentHours.toFixed(1)],
+          ["Man-Hours", Math.round(summary.manHours).toLocaleString()],
+          ["Production Days", summary.productionDays.toFixed(1)],
+          ["Labor Cost", money(summary.laborCost)],
+          ["Equipment Cost", money(summary.equipmentCost)],
+          ["Total (L+E+M)", money(summary.total)],
+        ].map(([label, value], index) => (
+          <div key={label} className="rounded-md border border-border bg-background/50 p-3">
+            <div className={index === 5 ? "text-lg font-black text-green-400" : "text-lg font-black text-white"}>{value}</div>
+            <div className="text-xs text-blue-100">{label}</div>
+          </div>
+        ))}
+      </section>
+
+      {Object.entries(groupedRows).map(([section, sectionRows]) => {
+        const sectionSummary = productionSummaryForRows(sectionRows);
+        return (
+          <section key={section} className="overflow-hidden rounded-lg border border-border bg-card">
+            <div className="flex items-center justify-between border-b border-border bg-secondary/55 px-4 py-3">
+              <div>
+                <h2 className="text-lg font-black text-white">Folder {section}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {sectionRows.length} task{sectionRows.length === 1 ? "" : "s"} | {sectionSummary.productionDays.toFixed(1)} production days | {Math.round(sectionSummary.manHours)} man-hours
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button className="grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-xs text-blue-100">↑</button>
+                <button className="grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-xs text-blue-100">↓</button>
+              </div>
+            </div>
+            <div className="divide-y divide-border">
+              {sectionRows.map((row) => (
+                <article key={row.id} className="grid gap-4 p-4 xl:grid-cols-[1.15fr_0.85fr]">
+                  <div>
+                    <h3 className="font-bold text-white">{row.description}</h3>
+                    <div className="mt-3 rounded-lg border border-yellow-500/25 bg-yellow-500/5 p-3">
+                      <div className="text-xs font-bold uppercase text-yellow-200">{row.category} Production Builder</div>
+                      <p className="mt-1 text-xs text-muted-foreground">Use this to validate crew assumptions, production rate, and how bid quantity turns into hours.</p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase text-muted-foreground">Qty</div>
+                          <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-white">{row.quantity} {row.unit}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase text-muted-foreground">Prod Rate</div>
+                          <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-white">{row.prodRate} {row.rateBasis}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase text-muted-foreground">Crew Size</div>
+                          <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-white">{row.crewSize.toFixed(2)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border border-border bg-background/50 p-3">
+                      <div className="text-[10px] font-bold uppercase text-muted-foreground">Broad Category</div>
+                      <div className="mt-1 text-sm font-bold text-white">{row.category}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background/50 p-3">
+                      <div className="text-[10px] font-bold uppercase text-muted-foreground">Base Cost</div>
+                      <div className="mt-1 text-sm font-bold text-white">{money(row.baseCost)}</div>
+                    </div>
+                    <div className="rounded-lg border border-orange-500/25 bg-orange-500/10 p-3">
+                      <div className="text-[10px] font-bold uppercase text-muted-foreground">Total Hours</div>
+                      <div className="mt-1 text-lg font-black text-yellow-300">{row.manHours.toFixed(1)}</div>
+                    </div>
+                    <div className="rounded-lg border border-orange-500/25 bg-orange-500/10 p-3">
+                      <div className="text-[10px] font-bold uppercase text-muted-foreground">Total $</div>
+                      <div className="mt-1 text-lg font-black text-green-400">{money(row.total)}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background/50 p-3">
+                      <div className="text-[10px] font-bold uppercase text-muted-foreground">Days</div>
+                      <div className="mt-1 text-sm font-bold text-white">{row.days.toFixed(1)}</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background/50 p-3">
+                      <div className="text-[10px] font-bold uppercase text-muted-foreground">Equipment Hours</div>
+                      <div className="mt-1 text-sm font-bold text-white">{row.equipmentHours.toFixed(1)}</div>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+
+      {!rows.length && (
+        <section className="rounded-lg border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
+          No estimate items are available yet. Add bid items first, then production rates will calculate here.
+        </section>
+      )}
+    </div>
+  );
+}
+
 function EstimatingWorkspace() {
   const { user } = useAuth();
   const estimates = useQuery(api.estimating.listEstimates, user ? { companyId: user.companyId } : "skip") as any[] | undefined;
@@ -247,6 +453,7 @@ function EstimatingWorkspace() {
   const branding = useQuery(api.companyBranding.get, user ? { companyId: user.companyId as Id<"companies"> } : "skip") as any;
 
   const [activeTool, setActiveTool] = useState<EstimatingToolKey>("cockpit");
+  const [productionMenuOpen, setProductionMenuOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const projectFilteredEstimates = useMemo(() => {
@@ -321,6 +528,8 @@ function EstimatingWorkspace() {
     rfqSummary,
     costItems: costItems || [],
   }), [selectedEstimate, estimateItems, rfqSummary, costItems]);
+  const productionRows = useMemo(() => productionRowsForItems(estimateItems || []), [estimateItems]);
+  const productionSummary = useMemo(() => productionSummaryForRows(productionRows), [productionRows]);
   const activeBids = projectFilteredEstimates.filter((estimate) => !["won", "lost", "archived"].includes(String(estimate.status || "").toLowerCase())).length;
   const draftBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "draft").length;
   const wonBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "won").length;
@@ -523,7 +732,38 @@ function EstimatingWorkspace() {
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cost")}>+ From Cost DB</button>
       <button type="button" className={bidActionButtonClass} onClick={() => window.print()}>Print Bid</button>
       <button type="button" className={`${bidActionButtonClass} border-green-500/30`} onClick={() => setActiveTool("cockpit")}>AI Tools</button>
-      <button type="button" className={`${bidActionButtonClass} border-blue-500/30`} onClick={() => setActiveTool("war-room")}>Production</button>
+      <div className="relative">
+        <button
+          type="button"
+          className={`${bidActionButtonClass} border-blue-500/30`}
+          onClick={() => setProductionMenuOpen((open) => !open)}
+          aria-expanded={productionMenuOpen}
+        >
+          Production
+        </button>
+        {productionMenuOpen && (
+          <div className="absolute left-0 top-11 z-40 w-64 rounded-xl border border-border bg-card p-2 shadow-[0_22px_60px_rgba(0,0,0,0.5)]">
+            {[
+              ["takeoff", "Ops-Takeoff"],
+              ["production-breakdown", "Production Breakdown"],
+              ["equipment-analyzer", "Equipment Analyzer"],
+              ["equipment-dealers", "Equipment Dealers"],
+            ].map(([tool, label]) => (
+              <button
+                key={tool}
+                type="button"
+                className="mb-2 flex w-full items-center rounded-lg border border-border bg-secondary/70 px-3 py-2 text-left text-sm font-bold text-white last:mb-0 hover:border-orange-500/45 hover:bg-secondary"
+                onClick={() => {
+                  setProductionMenuOpen(false);
+                  setActiveTool(tool as EstimatingToolKey);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
       <button type="button" className={`${bidActionButtonClass} border-orange-500/35`} onClick={() => setActiveTool("rfq")}>Bid Package</button>
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("settings")}>Settings</button>
     </div>
@@ -735,6 +975,13 @@ function EstimatingWorkspace() {
               </aside>
             </div>
           </div>
+        ) : activeTool === "production-breakdown" ? (
+          <ProductionRateBreakdownView
+            estimate={selectedEstimate}
+            rows={productionRows}
+            summary={productionSummary}
+            onBack={() => setActiveTool("cockpit")}
+          />
         ) : activeTool !== "rfq" ? stagedTool : (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
