@@ -24,6 +24,10 @@ for (const label of ["Materials", "Labor", "Equipment", "Historical Bid Database
   assert.ok(page.includes(label), `estimating sidebar should include ${label}`);
 }
 
+for (const action of ["← Back", "+ Section", "+ Add Item", "+ From Cost DB", "Print Bid", "AI Tools", "Production", "Bid Package", "Settings"]) {
+  assert.ok(page.includes(action), `estimating cockpit top toolbar should include ${action}`);
+}
+
 for (const helper of ["estimateTotal", "rfqCounts", "scheduleReadinessScore", "predictiveSignalsForEstimate"]) {
   assert.match(page, new RegExp(helper), `estimating cockpit should use ${helper}`);
 }

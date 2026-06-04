@@ -514,6 +514,20 @@ function EstimatingWorkspace() {
 
   if (!user) return null;
   const activeToolConfig = ESTIMATING_TOOLS.find((tool) => tool.key === activeTool) || ESTIMATING_TOOLS[0];
+  const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
+  const bidActionToolbar = (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/65 p-3">
+      <button type="button" className={bidActionButtonClass} onClick={() => window.history.back()}>← Back</button>
+      <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setActiveTool("estimates")}>+ Section</button>
+      <button type="button" className={`${bidActionButtonClass} border-green-500/35 bg-green-500/85 text-white hover:bg-green-500`} onClick={() => setActiveTool("estimates")}>+ Add Item</button>
+      <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cost")}>+ From Cost DB</button>
+      <button type="button" className={bidActionButtonClass} onClick={() => window.print()}>Print Bid</button>
+      <button type="button" className={`${bidActionButtonClass} border-green-500/30`} onClick={() => setActiveTool("cockpit")}>AI Tools</button>
+      <button type="button" className={`${bidActionButtonClass} border-blue-500/30`} onClick={() => setActiveTool("war-room")}>Production</button>
+      <button type="button" className={`${bidActionButtonClass} border-orange-500/35`} onClick={() => setActiveTool("rfq")}>Bid Package</button>
+      <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("settings")}>Settings</button>
+    </div>
+  );
   const stagedTool = (
     <div className="rounded-lg border border-border bg-card p-6">
       <Badge className="mb-3 bg-orange-500/15 text-orange-300">{activeToolConfig.label}</Badge>
@@ -543,6 +557,7 @@ function EstimatingWorkspace() {
     <div className="flex gap-5">
       <EstimatorCommandCenter activeTool={activeTool} onSelect={setActiveTool} />
       <main className="min-w-0 flex-1 space-y-5">
+        {bidActionToolbar}
         <div className="xl:hidden">
           <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimator Command Center</label>
           <select
@@ -586,9 +601,6 @@ function EstimatingWorkspace() {
                     ))}
                   </select>
                 </div>
-                <Button variant="outline" onClick={() => setActiveTool("takeoff")}>Takeoff</Button>
-                <Button variant="outline" onClick={() => setActiveTool("war-room")}>War Room</Button>
-                <Button onClick={() => setActiveTool("estimates")}>+ New Estimate</Button>
               </div>
             </div>
 
