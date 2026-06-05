@@ -55,6 +55,10 @@ for (const bidItemFlow of ["BidItemModal", "Add Item Under Milestone", "Quantity
   assert.ok(page.includes(bidItemFlow), `add item workflow should include ${bidItemFlow}`);
 }
 
+for (const moonshotFlow of ["MoveControls", "ORDER_NOTE_PREFIX", "OPSSLATE_ORDER", "RFQ required", "Request submittal", "RFQ_INTENT_NOTE", "SUBMITTAL_INTENT_NOTE", "TBD supplier", "Submittal Intent"]) {
+  assert.ok(page.includes(moonshotFlow), `hierarchy moonshot workflow should include ${moonshotFlow}`);
+}
+
 for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total", "Request RFQ", "No bid items yet"]) {
   assert.ok(page.includes(detailText), `estimate detail worksheet should include ${detailText}`);
 }

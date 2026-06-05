@@ -76,6 +76,9 @@ function itemLabel(item: Record<string, unknown>) {
 const SECTION_PARENT_NOTE = "OPSSLATE_SECTION_PARENT";
 const MILESTONE_PARENT_NOTE = "OPSSLATE_MILESTONE_PARENT";
 const MILESTONE_ITEM_NOTE_PREFIX = "OPSSLATE_MILESTONE:";
+const ORDER_NOTE_PREFIX = "OPSSLATE_ORDER:";
+const RFQ_INTENT_NOTE = "OPSSLATE_RFQ_INTENT";
+const SUBMITTAL_INTENT_NOTE = "OPSSLATE_SUBMITTAL_INTENT";
 
 const COMMON_MILESTONES = [
   "Pre-bid review",
@@ -100,6 +103,29 @@ function milestoneNameForItem(item: Record<string, unknown>) {
   const notes = String(item.notes || "");
   const line = notes.split("\n").find((entry) => entry.startsWith(MILESTONE_ITEM_NOTE_PREFIX));
   return line ? line.replace(MILESTONE_ITEM_NOTE_PREFIX, "").trim() : "";
+}
+
+function orderForItem(item: Record<string, unknown>, fallback = 0) {
+  const notes = String(item.notes || "");
+  const line = notes.split("\n").find((entry) => entry.startsWith(ORDER_NOTE_PREFIX));
+  const parsed = Number(line?.replace(ORDER_NOTE_PREFIX, "").trim());
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function notesWithOrder(notes: unknown, order: number) {
+  const lines = String(notes || "").split("\n").filter((line) => line.trim() && !line.startsWith(ORDER_NOTE_PREFIX));
+  return [...lines, `${ORDER_NOTE_PREFIX} ${order}`].join("\n");
+}
+
+function itemHasIntent(item: Record<string, unknown>, intent: string) {
+  return String(item.notes || "").includes(intent);
+}
+
+function sortByEstimateOrder(items: Array<Record<string, unknown>>) {
+  return [...items].sort((a, b) => {
+    const orderDelta = orderForItem(a, Number(a._creationTime || 0)) - orderForItem(b, Number(b._creationTime || 0));
+    return orderDelta || Number(a._creationTime || 0) - Number(b._creationTime || 0);
+  });
 }
 
 type BidPortfolioRow = {
@@ -606,12 +632,16 @@ function BidItemModal({
   unit,
   taxPct,
   unitCost,
+  requestRfq,
+  requestSubmittal,
   onMilestoneChange,
   onDescriptionChange,
   onQuantityChange,
   onUnitChange,
   onTaxPctChange,
   onUnitCostChange,
+  onRequestRfqChange,
+  onRequestSubmittalChange,
   onCancel,
   onContinue,
 }: {
@@ -623,12 +653,16 @@ function BidItemModal({
   unit: string;
   taxPct: string;
   unitCost: string;
+  requestRfq: boolean;
+  requestSubmittal: boolean;
   onMilestoneChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
   onQuantityChange: (value: string) => void;
   onUnitChange: (value: string) => void;
   onTaxPctChange: (value: string) => void;
   onUnitCostChange: (value: string) => void;
+  onRequestRfqChange: (value: boolean) => void;
+  onRequestSubmittalChange: (value: boolean) => void;
   onCancel: () => void;
   onContinue: () => void;
 }) {
@@ -695,11 +729,68 @@ function BidItemModal({
             <div className="mt-2 font-mono text-lg font-black text-green-400">{money(extended)}</div>
           </div>
         </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="flex items-start gap-3 rounded-lg border border-blue-500/25 bg-blue-500/10 p-3 text-sm text-blue-100">
+            <input
+              type="checkbox"
+              checked={requestRfq}
+              onChange={(event) => onRequestRfqChange(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-bold text-white">RFQ required</span>
+              Create a draft RFQ intent for this item so the estimator can send vendor pricing without re-entering scope.
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded-lg border border-orange-500/25 bg-orange-500/10 p-3 text-sm text-orange-100">
+            <input
+              type="checkbox"
+              checked={requestSubmittal}
+              onChange={(event) => onRequestSubmittalChange(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-bold text-white">Request submittal</span>
+              Flag product data, shop drawing, and approval tracking at item creation so the handoff does not miss it.
+            </span>
+          </label>
+        </div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
           <Button onClick={onContinue} disabled={!selectedMilestone || !description.trim()}>Add Item</Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MoveControls({
+  label,
+  onMoveUp,
+  onMoveDown,
+}: {
+  label: string;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <button
+        type="button"
+        title={`Move ${label} up`}
+        onClick={onMoveUp}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-xs font-black text-blue-100 hover:border-orange-500/40 hover:text-white"
+      >
+        ↑
+      </button>
+      <button
+        type="button"
+        title={`Move ${label} down`}
+        onClick={onMoveDown}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-xs font-black text-blue-100 hover:border-orange-500/40 hover:text-white"
+      >
+        ↓
+      </button>
     </div>
   );
 }
@@ -715,6 +806,7 @@ function EstimateDetailView({
   predictiveSignals,
   onToggleItem,
   onRequestQuote,
+  onMoveLine,
   rfqStatusForItem,
 }: {
   estimate?: Record<string, unknown>;
@@ -727,6 +819,7 @@ function EstimateDetailView({
   predictiveSignals: Array<{ label: string; detail: string; severity: "high" | "medium" | "low" }>;
   onToggleItem: (id: string, checked: boolean) => void;
   onRequestQuote: (item: Record<string, unknown>) => void;
+  onMoveLine: (item: Record<string, unknown>, siblings: Array<Record<string, unknown>>, direction: "up" | "down") => void;
   rfqStatusForItem: (item: Record<string, unknown>) => string;
 }) {
   const groupedItems: Record<string, Array<Record<string, unknown>>> = {};
@@ -735,6 +828,7 @@ function EstimateDetailView({
     if (!groupedItems[key]) groupedItems[key] = [];
     groupedItems[key].push(item);
   });
+  const sectionParentItems = sortByEstimateOrder(items.filter((item) => isSectionParentItem(item)));
 
   const estimateName = String(estimate?.name || projectDisplayName(project, estimate));
   const projectMeta = [
@@ -808,11 +902,16 @@ function EstimateDetailView({
               </tr>
             </thead>
             <tbody>
-              {Object.entries(groupedItems).map(([section, sectionItems]) => {
+              {Object.entries(groupedItems).sort(([sectionA, itemsA], [sectionB, itemsB]) => {
+                const parentA = itemsA.find((item) => isSectionParentItem(item));
+                const parentB = itemsB.find((item) => isSectionParentItem(item));
+                return orderForItem(parentA || itemsA[0] || {}, Number((parentA || itemsA[0])?._creationTime || 0)) - orderForItem(parentB || itemsB[0] || {}, Number((parentB || itemsB[0])?._creationTime || 0)) || sectionA.localeCompare(sectionB);
+              }).map(([section, sectionItems]) => {
+                const sectionParent = sectionItems.find((item) => isSectionParentItem(item));
                 const childItems = sectionItems.filter((item) => !isSectionParentItem(item));
-                const milestoneParents = childItems.filter((item) => isMilestoneParentItem(item));
-                const pricedItems = childItems.filter((item) => !isMilestoneParentItem(item));
-                const unassignedItems = pricedItems.filter((item) => !milestoneNameForItem(item));
+                const milestoneParents = sortByEstimateOrder(childItems.filter((item) => isMilestoneParentItem(item)));
+                const pricedItems = sortByEstimateOrder(childItems.filter((item) => !isMilestoneParentItem(item)));
+                const unassignedItems = sortByEstimateOrder(pricedItems.filter((item) => !milestoneNameForItem(item)));
                 const sectionTotal = estimateTotal(pricedItems);
                 const allSectionSelected = pricedItems.length > 0 && pricedItems.every((item) => selectedItemIds.includes(String(item._id)));
                 return (
@@ -829,7 +928,15 @@ function EstimateDetailView({
                       <td className="p-3 font-black text-white">Folder {section}</td>
                       <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{pricedItems.length ? "Select all" : "Parent line"}</td>
                       <td className="p-3 text-right font-black text-white">{money(sectionTotal)}</td>
-                      <td className="p-3" />
+                      <td className="p-3">
+                        {sectionParent ? (
+                          <MoveControls
+                            label="section"
+                            onMoveUp={() => onMoveLine(sectionParent, sectionParentItems, "up")}
+                            onMoveDown={() => onMoveLine(sectionParent, sectionParentItems, "down")}
+                          />
+                        ) : null}
+                      </td>
                     </tr>
                     {!pricedItems.length && !milestoneParents.length && (
                       <tr className="border-t border-border">
@@ -839,12 +946,18 @@ function EstimateDetailView({
                     )}
                     {milestoneParents.map((milestone) => {
                       const milestoneName = String(milestone.description || "Milestone");
-                      const milestoneItems = pricedItems.filter((item) => milestoneNameForItem(item) === milestoneName);
+                      const milestoneItems = sortByEstimateOrder(pricedItems.filter((item) => milestoneNameForItem(item) === milestoneName));
                       const milestoneTotal = estimateTotal(milestoneItems);
                       return (
                         <Fragment key={`milestone-${section}-${milestoneName}`}>
                           <tr className="border-t border-border bg-background/45">
-                            <td className="p-3" />
+                            <td className="p-3">
+                              <MoveControls
+                                label="milestone"
+                                onMoveUp={() => onMoveLine(milestone, milestoneParents, "up")}
+                                onMoveDown={() => onMoveLine(milestone, milestoneParents, "down")}
+                              />
+                            </td>
                             <td className="p-3 pl-8 font-bold text-orange-100">Milestone {milestoneName}</td>
                             <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{milestoneItems.length ? `${milestoneItems.length} child item${milestoneItems.length === 1 ? "" : "s"}` : "No child items yet"}</td>
                             <td className="p-3 text-right font-black text-white">{money(milestoneTotal)}</td>
@@ -864,6 +977,8 @@ function EstimateDetailView({
                                     <Badge variant="outline">Spec: {String(item.sourceSpecSection || item.specSection || "No book")}</Badge>
                                     <Badge className="bg-orange-500/15 text-orange-100">Milestone: {milestoneName}</Badge>
                                     <Badge className="bg-blue-500/15 text-blue-200">RFQ Status: {rfqStatus === "No RFQ" ? "Not Requested" : rfqStatus}</Badge>
+                                    {itemHasIntent(item, RFQ_INTENT_NOTE) ? <Badge className="bg-cyan-500/15 text-cyan-200">RFQ Intent</Badge> : null}
+                                    {itemHasIntent(item, SUBMITTAL_INTENT_NOTE) ? <Badge className="bg-purple-500/15 text-purple-200">Submittal Intent</Badge> : null}
                                   </div>
                                 </td>
                                 <td className="p-3 text-right text-white">{String(item.quantity || 0)}</td>
@@ -874,6 +989,11 @@ function EstimateDetailView({
                                 <td className="p-3 text-right font-mono font-bold text-white">{money(estimateTotal([item]))}</td>
                                 <td className="p-3">
                                   <div className="flex flex-wrap justify-end gap-2">
+                                    <MoveControls
+                                      label="task"
+                                      onMoveUp={() => onMoveLine(item, milestoneItems, "up")}
+                                      onMoveDown={() => onMoveLine(item, milestoneItems, "down")}
+                                    />
                                     <Button size="sm" variant="outline">Proof</Button>
                                     <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
                                     <Button size="sm" variant="outline">Edit</Button>
@@ -899,6 +1019,8 @@ function EstimateDetailView({
                             <div className="mt-1 flex flex-wrap gap-2">
                               <Badge variant="outline">Spec: {String(item.sourceSpecSection || item.specSection || "No book")}</Badge>
                               <Badge className="bg-blue-500/15 text-blue-200">RFQ Status: {rfqStatus === "No RFQ" ? "Not Requested" : rfqStatus}</Badge>
+                              {itemHasIntent(item, RFQ_INTENT_NOTE) ? <Badge className="bg-cyan-500/15 text-cyan-200">RFQ Intent</Badge> : null}
+                              {itemHasIntent(item, SUBMITTAL_INTENT_NOTE) ? <Badge className="bg-purple-500/15 text-purple-200">Submittal Intent</Badge> : null}
                             </div>
                           </td>
                           <td className="p-3 text-right text-white">{String(item.quantity || 0)}</td>
@@ -909,6 +1031,11 @@ function EstimateDetailView({
                           <td className="p-3 text-right font-mono text-white">{money(itemLineTotal(item))}</td>
                           <td className="p-3">
                             <div className="flex flex-wrap gap-2">
+                              <MoveControls
+                                label="task"
+                                onMoveUp={() => onMoveLine(item, unassignedItems, "up")}
+                                onMoveDown={() => onMoveLine(item, unassignedItems, "down")}
+                              />
                               <Button size="sm" variant="outline">Proof</Button>
                               <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
                               <Button size="sm" variant="outline">Edit</Button>
@@ -1344,6 +1471,8 @@ function EstimatingWorkspace() {
   const [newItemUnit, setNewItemUnit] = useState("LS");
   const [newItemTaxPct, setNewItemTaxPct] = useState("0");
   const [newItemUnitCost, setNewItemUnitCost] = useState("0");
+  const [newItemRequestRfq, setNewItemRequestRfq] = useState(false);
+  const [newItemRequestSubmittal, setNewItemRequestSubmittal] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const projectFilteredEstimates = useMemo(() => {
@@ -1719,7 +1848,10 @@ function EstimatingWorkspace() {
         unit: "SECTION",
         unitCost: 0,
         taxPct: 0,
-        notes: `${SECTION_PARENT_NOTE}: Parent phase line created from + Section.`,
+        notes: [
+          `${SECTION_PARENT_NOTE}: Parent phase line created from + Section.`,
+          `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => isSectionParentItem(item)).length + 1}`,
+        ].join("\n"),
       });
     }
     setSectionPhaseModalOpen(false);
@@ -1741,7 +1873,10 @@ function EstimatingWorkspace() {
         unit: "SECTION",
         unitCost: 0,
         taxPct: 0,
-        notes: `${SECTION_PARENT_NOTE}: Parent phase line created automatically for milestone.`,
+        notes: [
+          `${SECTION_PARENT_NOTE}: Parent phase line created automatically for milestone.`,
+          `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => isSectionParentItem(item)).length + 1}`,
+        ].join("\n"),
       });
     }
     const existingMilestone = (estimateItems || []).some((item) => isMilestoneParentItem(item) && String(item.section || "") === sectionName && String(item.description || "") === milestoneName);
@@ -1755,7 +1890,10 @@ function EstimatingWorkspace() {
         unit: "MILESTONE",
         unitCost: 0,
         taxPct: 0,
-        notes: `${MILESTONE_PARENT_NOTE}: Milestone child line under ${sectionName}.`,
+        notes: [
+          `${MILESTONE_PARENT_NOTE}: Milestone child line under ${sectionName}.`,
+          `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => isMilestoneParentItem(item) && String(item.section || "") === sectionName).length + 1}`,
+        ].join("\n"),
       });
     }
     setMilestoneModalOpen(false);
@@ -1767,7 +1905,7 @@ function EstimatingWorkspace() {
     const [sectionName, milestoneName] = selectedItemMilestone.split("::");
     const description = newItemDescription.trim();
     if (!user || !selectedEstimate?._id || !sectionName || !milestoneName || !description) return;
-    await createEstimateItem({
+    const itemIdCreated = await createEstimateItem({
       companyId: user.companyId,
       estimateId: selectedEstimate._id as Id<"estimates">,
       section: sectionName,
@@ -1776,15 +1914,65 @@ function EstimatingWorkspace() {
       unit: newItemUnit.trim() || "LS",
       unitCost: Number(newItemUnitCost || 0) || 0,
       taxPct: Number(newItemTaxPct || 0) || 0,
-      notes: `${MILESTONE_ITEM_NOTE_PREFIX} ${milestoneName}`,
+      notes: [
+        `${MILESTONE_ITEM_NOTE_PREFIX} ${milestoneName}`,
+        `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item) && String(item.section || "") === sectionName && milestoneNameForItem(item) === milestoneName).length + 1}`,
+        newItemRequestRfq ? `${RFQ_INTENT_NOTE}: Draft RFQ requested at item creation.` : "",
+        newItemRequestSubmittal ? `${SUBMITTAL_INTENT_NOTE}: Submittal draft requested at item creation.` : "",
+      ].filter(Boolean).join("\n"),
     });
+    if (newItemRequestRfq) {
+      await createRfq({
+        companyId: user.companyId,
+        estimateId: selectedEstimate._id as Id<"estimates">,
+        vendorName: "TBD supplier",
+        status: "draft",
+        notes: JSON.stringify({
+          specNotes: `RFQ requested at item creation for ${description}.`,
+          itemIds: [String(itemIdCreated)],
+          itemSnapshots: [{
+            _id: String(itemIdCreated),
+            description,
+            quantity: Number(newItemQuantity || 0) || 0,
+            unit: newItemUnit.trim() || "LS",
+            unitCost: Number(newItemUnitCost || 0) || 0,
+            section: sectionName,
+            milestone: milestoneName,
+          }],
+          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nMilestone: ${milestoneName}\nQty: ${newItemQuantity || 0} ${newItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
+        }),
+      });
+    }
     setBidItemModalOpen(false);
     setNewItemDescription("");
     setNewItemQuantity("1");
     setNewItemUnit("LS");
     setNewItemTaxPct("0");
     setNewItemUnitCost("0");
+    setNewItemRequestRfq(false);
+    setNewItemRequestSubmittal(false);
     setActiveTool("estimate-detail");
+  }
+
+  async function moveEstimateLine(item: Record<string, unknown>, siblings: Array<Record<string, unknown>>, direction: "up" | "down") {
+    const ordered = sortByEstimateOrder(siblings);
+    const index = ordered.findIndex((entry) => String(entry._id) === String(item._id));
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return;
+    const current = ordered[index];
+    const target = ordered[targetIndex];
+    const currentOrder = orderForItem(current, index + 1);
+    const targetOrder = orderForItem(target, targetIndex + 1);
+    await Promise.all([
+      updateEstimateItem({
+        id: current._id as Id<"estimateItems">,
+        notes: notesWithOrder(current.notes, targetOrder),
+      }),
+      updateEstimateItem({
+        id: target._id as Id<"estimateItems">,
+        notes: notesWithOrder(target.notes, currentOrder),
+      }),
+    ]);
   }
 
   if (!user) return null;
@@ -1915,12 +2103,16 @@ function EstimatingWorkspace() {
           unit={newItemUnit}
           taxPct={newItemTaxPct}
           unitCost={newItemUnitCost}
+          requestRfq={newItemRequestRfq}
+          requestSubmittal={newItemRequestSubmittal}
           onMilestoneChange={setSelectedItemMilestone}
           onDescriptionChange={setNewItemDescription}
           onQuantityChange={setNewItemQuantity}
           onUnitChange={setNewItemUnit}
           onTaxPctChange={setNewItemTaxPct}
           onUnitCostChange={setNewItemUnitCost}
+          onRequestRfqChange={setNewItemRequestRfq}
+          onRequestSubmittalChange={setNewItemRequestSubmittal}
           onCancel={() => setBidItemModalOpen(false)}
           onContinue={() => void saveBidItemLine()}
         />
@@ -2127,6 +2319,7 @@ function EstimatingWorkspace() {
             predictiveSignals={predictiveSignals}
             onToggleItem={toggleItem}
             onRequestQuote={requestQuoteForItem}
+            onMoveLine={(item, siblings, direction) => void moveEstimateLine(item, siblings, direction)}
             rfqStatusForItem={rfqStatusForItem}
           />
         ) : activeTool === "estimates" ? (
