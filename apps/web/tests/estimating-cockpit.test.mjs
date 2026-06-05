@@ -146,10 +146,11 @@ assert.ok(page.includes("items.filter((item) => !isSectionParentItem(item) && !i
 for (const printFlow of ['data-print-document="estimate"', 'data-print-document="production-rate-breakdown"', 'data-print-hide="true"']) {
   assert.ok(page.includes(printFlow), `estimating print should separate report content from app chrome: ${printFlow}`);
 }
-for (const professionalPrintFlow of ["openPrintHtml", "buildEstimatePrintBody", "buildProductionPrintBody", "OpsSlate Bid Estimate", "OpsSlate Production Rate Breakdown", "Please allow popups"]) {
+for (const professionalPrintFlow of ["openPrintHtml", "buildEstimatePrintBody", "buildProductionPrintBody", "OpsSlate Bid Estimate", "OpsSlate Production Rate Breakdown", "opsslate-print-frame", "contentWindow"]) {
   assert.ok(page.includes(professionalPrintFlow), `print buttons should generate a professional report package: ${professionalPrintFlow}`);
 }
 assert.ok(!page.includes("onClick={() => window.print()}"), "estimating print buttons should not print the live app screen directly");
+assert.ok(!page.includes("Please allow popups"), "estimating print should not depend on popup permissions");
 for (const printCss of ["@media print", "[data-print-hide=\"true\"]", "[data-print-document] button", "size: letter landscape"]) {
   assert.ok(globals.includes(printCss), `global print stylesheet should clean bid PDFs: ${printCss}`);
 }

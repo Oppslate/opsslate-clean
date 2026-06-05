@@ -378,16 +378,35 @@ function printDocumentShell(title: string, body: string) {
 
 function openPrintHtml(title: string, body: string) {
   if (typeof window === "undefined") return;
-  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=900");
-  if (!printWindow) {
-    window.alert("Please allow popups so OpsSlate can open the clean print package.");
+  document.getElementById("opsslate-print-frame")?.remove();
+  const printFrame = document.createElement("iframe");
+  printFrame.id = "opsslate-print-frame";
+  printFrame.title = title;
+  printFrame.style.position = "fixed";
+  printFrame.style.right = "0";
+  printFrame.style.bottom = "0";
+  printFrame.style.width = "0";
+  printFrame.style.height = "0";
+  printFrame.style.border = "0";
+  printFrame.style.opacity = "0";
+  document.body.appendChild(printFrame);
+
+  const printWindow = printFrame.contentWindow;
+  const printDocument = printFrame.contentDocument || printWindow?.document;
+  if (!printWindow || !printDocument) {
+    printFrame.remove();
+    window.alert("OpsSlate could not create the print package. Please try again.");
     return;
   }
-  printWindow.document.open();
-  printWindow.document.write(printDocumentShell(title, body));
-  printWindow.document.close();
-  printWindow.focus();
-  window.setTimeout(() => printWindow.print(), 250);
+
+  printDocument.open();
+  printDocument.write(printDocumentShell(title, body));
+  printDocument.close();
+  window.setTimeout(() => {
+    printWindow.focus();
+    printWindow.print();
+    window.setTimeout(() => printFrame.remove(), 3_000);
+  }, 250);
 }
 
 function buildEstimatePrintBody({
