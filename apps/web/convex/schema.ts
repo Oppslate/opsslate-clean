@@ -1257,6 +1257,101 @@ export default defineSchema({
   }).index("by_estimate", ["estimateId"])
     .index("by_company", ["companyId"]),
 
+  estimatePredictionRuns: defineTable({
+    companyId: v.id("companies"),
+    estimateId: v.id("estimates"),
+    projectId: v.optional(v.id("projects")),
+    modelVersion: v.string(),
+    predictionType: v.string(),
+    predictionKey: v.string(),
+    predictionValue: v.any(),
+    confidence: v.optional(v.number()),
+    status: v.optional(v.string()),
+    explanation: v.optional(v.string()),
+    sourceDataSummary: v.optional(v.string()),
+    createdBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+  }).index("by_estimate", ["estimateId"])
+    .index("by_company", ["companyId"])
+    .index("by_project", ["companyId", "projectId"])
+    .index("by_prediction_key", ["companyId", "predictionKey"]),
+
+  estimatePredictionFeatures: defineTable({
+    companyId: v.id("companies"),
+    estimateId: v.id("estimates"),
+    projectId: v.optional(v.id("projects")),
+    predictionRunId: v.id("estimatePredictionRuns"),
+    featureKey: v.string(),
+    featureValue: v.any(),
+    featureType: v.optional(v.string()),
+    featureWeight: v.optional(v.number()),
+    sourceTable: v.optional(v.string()),
+    sourceRecordId: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_prediction_run", ["predictionRunId"])
+    .index("by_estimate", ["estimateId"])
+    .index("by_company", ["companyId"]),
+
+  estimateOutcomeMemory: defineTable({
+    companyId: v.id("companies"),
+    estimateId: v.id("estimates"),
+    projectId: v.optional(v.id("projects")),
+    predictionRunId: v.optional(v.id("estimatePredictionRuns")),
+    outcomeType: v.string(),
+    outcomeKey: v.optional(v.string()),
+    expectedValue: v.optional(v.any()),
+    actualValue: v.optional(v.any()),
+    variance: v.optional(v.number()),
+    wonLost: v.optional(v.string()),
+    finalMargin: v.optional(v.number()),
+    actualCost: v.optional(v.number()),
+    awardedAmount: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  }).index("by_estimate", ["estimateId"])
+    .index("by_company", ["companyId"])
+    .index("by_project", ["companyId", "projectId"])
+    .index("by_prediction_run", ["predictionRunId"]),
+
+  estimatorFeedback: defineTable({
+    companyId: v.id("companies"),
+    estimateId: v.id("estimates"),
+    projectId: v.optional(v.id("projects")),
+    predictionRunId: v.optional(v.id("estimatePredictionRuns")),
+    sourceUserId: v.optional(v.id("users")),
+    feedbackType: v.string(),
+    targetType: v.optional(v.string()),
+    targetId: v.optional(v.string()),
+    action: v.optional(v.string()),
+    accepted: v.optional(v.boolean()),
+    reason: v.optional(v.string()),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_estimate", ["estimateId"])
+    .index("by_company", ["companyId"])
+    .index("by_source_user", ["companyId", "sourceUserId"]),
+
+  predictionFeedback: defineTable({
+    companyId: v.id("companies"),
+    estimateId: v.id("estimates"),
+    projectId: v.optional(v.id("projects")),
+    predictionRunId: v.id("estimatePredictionRuns"),
+    sourceUserId: v.optional(v.id("users")),
+    predictionKey: v.string(),
+    feedbackType: v.string(),
+    expectedValue: v.optional(v.any()),
+    actualValue: v.optional(v.any()),
+    accuracyScore: v.optional(v.number()),
+    wasUseful: v.optional(v.boolean()),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_prediction_run", ["predictionRunId"])
+    .index("by_estimate", ["estimateId"])
+    .index("by_company", ["companyId"])
+    .index("by_prediction_key", ["companyId", "predictionKey"])
+    .index("by_source_user", ["companyId", "sourceUserId"]),
+
   udigTickets: defineTable({
     companyId: v.string(),
     projectId: v.optional(v.string()),

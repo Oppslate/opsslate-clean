@@ -71,6 +71,7 @@ import type * as emailIntelHelpers from "../emailIntelHelpers.js";
 import type * as emailUploadProcessor from "../emailUploadProcessor.js";
 import type * as emails from "../emails.js";
 import type * as equipment from "../equipment.js";
+import type * as estimatePredictionMemory from "../estimatePredictionMemory.js";
 import type * as estimating from "../estimating.js";
 import type * as feedback from "../feedback.js";
 import type * as fieldNotes from "../fieldNotes.js";
@@ -186,6 +187,7 @@ declare const fullApi: ApiFromModules<{
   emailUploadProcessor: typeof emailUploadProcessor;
   emails: typeof emails;
   equipment: typeof equipment;
+  estimatePredictionMemory: typeof estimatePredictionMemory;
   estimating: typeof estimating;
   feedback: typeof feedback;
   fieldNotes: typeof fieldNotes;
