@@ -689,7 +689,7 @@ function itemLineTotal(item: Record<string, unknown>) {
 
 export default function EstimatingPage() {
   return (
-    <AppShell showSidebar={false}>
+    <AppShell showSidebar={false} showTopBar={false}>
       <EstimatingWorkspace />
     </AppShell>
   );
@@ -703,7 +703,7 @@ function EstimatorCommandCenter({
   onSelect: (tool: EstimatingToolKey) => void;
 }) {
   return (
-    <aside className="sticky top-20 hidden h-[calc(100vh-7rem)] w-64 shrink-0 overflow-y-auto rounded-lg border border-border bg-card/85 p-3 xl:block">
+    <aside className="sticky top-4 hidden h-[calc(100vh-5.5rem)] w-64 shrink-0 overflow-y-auto rounded-lg border border-border bg-card/85 p-3 xl:block">
       <div className="mb-4 border-b border-border pb-4">
         <div className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">Estimator Command Center</div>
         <div className="mt-2 text-lg font-black text-white">Bid Control</div>

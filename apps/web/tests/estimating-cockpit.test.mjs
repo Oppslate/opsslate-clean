@@ -5,7 +5,7 @@ import { join } from "node:path";
 const page = readFileSync(join(process.cwd(), "src", "app", "estimating", "page.tsx"), "utf8");
 
 assert.match(page, /Estimating Cockpit/, "estimating route should render the cockpit");
-assert.match(page, /<AppShell showSidebar={false}>/, "estimating cockpit should not render the Project Management sidebar shell");
+assert.match(page, /<AppShell showSidebar={false} showTopBar={false}>/, "estimating cockpit should not render the Project Management sidebar or extra utility bar");
 assert.match(page, /Estimator Command Center/, "estimating route should include an estimating-specific sidebar");
 assert.match(page, /Project Selection/, "estimating cockpit should include a project selection dropdown");
 assert.match(page, /setSelectedProjectId/, "project selection should update cockpit project context");

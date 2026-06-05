@@ -71,7 +71,15 @@ function OpsSlateFooter({ sidebarCollapsed, showSidebar }: { sidebarCollapsed: b
   );
 }
 
-export function AppShell({ children, showSidebar = true }: { children: React.ReactNode; showSidebar?: boolean }) {
+export function AppShell({
+  children,
+  showSidebar = true,
+  showTopBar = true,
+}: {
+  children: React.ReactNode;
+  showSidebar?: boolean;
+  showTopBar?: boolean;
+}) {
   const { user, loading, logout } = useAuth();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -114,9 +122,9 @@ export function AppShell({ children, showSidebar = true }: { children: React.Rea
       <SuiteToolbar />
       <div className="flex flex-1">
         {showSidebar && <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={handleSidebarCollapsedChange} />}
-        <main className="flex-1 min-w-0 overflow-auto p-4 pb-8 lg:p-6 lg:pb-8">
+        <main className={`flex-1 min-w-0 overflow-auto p-4 pb-8 ${showTopBar ? "lg:p-6 lg:pb-8" : "lg:px-6 lg:pb-8 lg:pt-4"}`}>
         {/* Top bar */}
-        <div className="mb-5 flex items-center justify-end gap-3">
+        {showTopBar && <div className="mb-5 flex items-center justify-end gap-3">
           <button onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }))} className="hidden sm:flex min-w-[260px] items-center gap-2 rounded-xl border border-border bg-card/75 px-3 py-2 text-sm text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:border-orange-500/40 hover:text-foreground">
             <span>⌕</span>
             <span className="flex-1 text-left">Search</span>
@@ -153,7 +161,7 @@ export function AppShell({ children, showSidebar = true }: { children: React.Rea
               </div>
             )}
           </div>
-        </div>
+        </div>}
         {children}
         </main>
       </div>
