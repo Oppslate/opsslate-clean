@@ -18,7 +18,7 @@ assert.match(page, /Start Estimate/, "project portfolio rows without estimates s
 assert.match(page, /No estimate/, "project portfolio should show a clear empty estimate state");
 assert.match(page, /EstimateDetailView/, "opening a bid should render the estimate item drill-down worksheet");
 assert.match(page, /EstimatesListView/, "estimates tool should render a clean estimate list view");
-assert.match(page, /activeTool !== "cockpit" && activeTool !== "estimates" \? bidActionToolbar : null/, "bid command toolbar should render only after opening the bid workspace");
+assert.match(page, /showBidActionToolbar \? \(/, "bid command toolbar should render only after opening the bid workspace");
 assert.match(page, /setActiveTool\(row\.estimate\?\._id \? "estimate-detail" : "estimates"\)/, "portfolio open action should drill into estimate detail when an estimate exists");
 assert.match(page, /All projects/, "project dropdown should allow the estimator to view all projects");
 assert.match(page, /Bid Command Center/, "cockpit should use bid-first command center language");
@@ -47,7 +47,7 @@ for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", 
   assert.ok(page.includes(parentLineFlow), `section button should create and render parent bid lines: ${parentLineFlow}`);
 }
 
-for (const polishedEstimateUi of ["SectionGlyph", "sticky top-0 z-[70]", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidDateValue", "project?.contractDate", "bidCountdownLabel", "HierarchyRenameModal", "Edit Section", "deleteSectionGroup", "saveSectionRename"]) {
+for (const polishedEstimateUi of ["SectionGlyph", "fixed left-4 right-4 top-[76px] z-[90]", "h-[72px] shrink-0", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidDateValue", "project?.contractDate", "bidCountdownLabel", "HierarchyRenameModal", "Edit Section", "deleteSectionGroup", "saveSectionRename"]) {
   assert.ok(page.includes(polishedEstimateUi), `estimate detail should include polished bid command UI: ${polishedEstimateUi}`);
 }
 

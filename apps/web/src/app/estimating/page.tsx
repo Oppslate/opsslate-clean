@@ -3065,9 +3065,10 @@ function EstimatingWorkspace() {
 
   if (!user) return null;
   const activeToolConfig = ESTIMATING_TOOLS.find((tool) => tool.key === activeTool) || ESTIMATING_TOOLS[0];
+  const showBidActionToolbar = activeTool !== "cockpit" && activeTool !== "estimates";
   const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
   const bidActionToolbar = (
-    <div className="sticky top-0 z-[70] flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur supports-[backdrop-filter]:bg-background/85">
+    <div className="fixed left-4 right-4 top-[76px] z-[90] flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur supports-[backdrop-filter]:bg-background/85 xl:left-[calc(16rem+1.25rem)]">
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cockpit")}>← Back</button>
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
       <button
@@ -3192,7 +3193,12 @@ function EstimatingWorkspace() {
     <div className="flex gap-5">
       <EstimatorCommandCenter activeTool={activeTool} onSelect={setActiveTool} />
       <main className="min-w-0 flex-1 space-y-5">
-        {activeTool !== "cockpit" && activeTool !== "estimates" ? bidActionToolbar : null}
+        {showBidActionToolbar ? (
+          <>
+            {bidActionToolbar}
+            <div className="h-[72px] shrink-0" aria-hidden="true" />
+          </>
+        ) : null}
         <SectionPhaseModal
           open={sectionPhaseModalOpen}
           phaseOptions={phaseOptions}
