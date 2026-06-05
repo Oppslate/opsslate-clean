@@ -74,9 +74,32 @@ function itemLabel(item: Record<string, unknown>) {
 }
 
 const SECTION_PARENT_NOTE = "OPSSLATE_SECTION_PARENT";
+const MILESTONE_PARENT_NOTE = "OPSSLATE_MILESTONE_PARENT";
+const MILESTONE_ITEM_NOTE_PREFIX = "OPSSLATE_MILESTONE:";
+
+const COMMON_MILESTONES = [
+  "Pre-bid review",
+  "Submittal checkpoint",
+  "Material release",
+  "Utility coordination",
+  "Crew mobilization",
+  "Inspection ready",
+  "Substantial completion",
+  "Closeout",
+];
 
 function isSectionParentItem(item: Record<string, unknown>) {
   return String(item.notes || "").includes(SECTION_PARENT_NOTE) || String(item.unit || "").toUpperCase() === "SECTION";
+}
+
+function isMilestoneParentItem(item: Record<string, unknown>) {
+  return String(item.notes || "").includes(MILESTONE_PARENT_NOTE) || String(item.unit || "").toUpperCase() === "MILESTONE";
+}
+
+function milestoneNameForItem(item: Record<string, unknown>) {
+  const notes = String(item.notes || "");
+  const line = notes.split("\n").find((entry) => entry.startsWith(MILESTONE_ITEM_NOTE_PREFIX));
+  return line ? line.replace(MILESTONE_ITEM_NOTE_PREFIX, "").trim() : "";
 }
 
 type BidPortfolioRow = {
@@ -500,6 +523,187 @@ function SectionPhaseModal({
   );
 }
 
+function MilestoneModal({
+  open,
+  sectionOptions,
+  selectedSection,
+  selectedMilestone,
+  customMilestone,
+  onSectionChange,
+  onMilestoneChange,
+  onCustomMilestoneChange,
+  onCancel,
+  onContinue,
+}: {
+  open: boolean;
+  sectionOptions: string[];
+  selectedSection: string;
+  selectedMilestone: string;
+  customMilestone: string;
+  onSectionChange: (value: string) => void;
+  onMilestoneChange: (value: string) => void;
+  onCustomMilestoneChange: (value: string) => void;
+  onCancel: () => void;
+  onContinue: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-3xl rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <h2 className="text-2xl font-black text-white">Add Milestone</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Select the section parent, then add a milestone child line beneath it.</p>
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Section</label>
+            <select
+              value={selectedSection}
+              onChange={(event) => onSectionChange(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+            >
+              <option value="">Select section...</option>
+              {sectionOptions.map((section) => <option key={section} value={section}>{section}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Milestone</label>
+            <select
+              value={selectedMilestone}
+              onChange={(event) => onMilestoneChange(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+            >
+              <option value="">Select milestone...</option>
+              {COMMON_MILESTONES.map((milestone) => <option key={milestone} value={milestone}>{milestone}</option>)}
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        {selectedMilestone === "Other" && (
+          <div className="mt-4">
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Custom Milestone</label>
+            <input
+              value={customMilestone}
+              onChange={(event) => onCustomMilestoneChange(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              placeholder="Type milestone name..."
+            />
+          </div>
+        )}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={onContinue} disabled={!selectedSection || !selectedMilestone || (selectedMilestone === "Other" && !customMilestone.trim())}>Add Milestone</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BidItemModal({
+  open,
+  milestoneOptions,
+  selectedMilestone,
+  description,
+  quantity,
+  unit,
+  taxPct,
+  unitCost,
+  onMilestoneChange,
+  onDescriptionChange,
+  onQuantityChange,
+  onUnitChange,
+  onTaxPctChange,
+  onUnitCostChange,
+  onCancel,
+  onContinue,
+}: {
+  open: boolean;
+  milestoneOptions: Array<{ section: string; milestone: string }>;
+  selectedMilestone: string;
+  description: string;
+  quantity: string;
+  unit: string;
+  taxPct: string;
+  unitCost: string;
+  onMilestoneChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onQuantityChange: (value: string) => void;
+  onUnitChange: (value: string) => void;
+  onTaxPctChange: (value: string) => void;
+  onUnitCostChange: (value: string) => void;
+  onCancel: () => void;
+  onContinue: () => void;
+}) {
+  const quantityNumber = Number(quantity || 0) || 0;
+  const unitCostNumber = Number(unitCost || 0) || 0;
+  const taxNumber = Number(taxPct || 0) || 0;
+  const lineTotal = quantityNumber * unitCostNumber;
+  const extended = lineTotal * (1 + taxNumber / 100);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-5xl rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <h2 className="text-2xl font-black text-white">Add Item Under Milestone</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Choose the milestone home first, then enter the priced bid item.</p>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Milestone</label>
+            <select
+              value={selectedMilestone}
+              onChange={(event) => onMilestoneChange(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+            >
+              <option value="">Select milestone...</option>
+              {milestoneOptions.map((option) => (
+                <option key={`${option.section}::${option.milestone}`} value={`${option.section}::${option.milestone}`}>
+                  {option.section} / {option.milestone}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Item Description</label>
+            <input
+              value={description}
+              onChange={(event) => onDescriptionChange(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              placeholder="Type item description..."
+            />
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Quantity</label>
+            <input value={quantity} onChange={(event) => onQuantityChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Unit of Measure</label>
+            <input value={unit} onChange={(event) => onUnitChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Tax %</label>
+            <input value={taxPct} onChange={(event) => onTaxPctChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Unit Cost</label>
+            <input value={unitCost} onChange={(event) => onUnitCostChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" />
+          </div>
+          <div className="rounded-md border border-border bg-background/60 p-3">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Line Total</div>
+            <div className="mt-2 font-mono text-lg font-black text-white">{money(lineTotal)}</div>
+          </div>
+          <div className="rounded-md border border-orange-500/30 bg-orange-500/10 p-3">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-orange-200">Extended</div>
+            <div className="mt-2 font-mono text-lg font-black text-green-400">{money(extended)}</div>
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={onContinue} disabled={!selectedMilestone || !description.trim()}>Add Item</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EstimateDetailView({
   estimate,
   project,
@@ -606,8 +810,11 @@ function EstimateDetailView({
             <tbody>
               {Object.entries(groupedItems).map(([section, sectionItems]) => {
                 const childItems = sectionItems.filter((item) => !isSectionParentItem(item));
-                const sectionTotal = estimateTotal(childItems);
-                const allSectionSelected = childItems.length > 0 && childItems.every((item) => selectedItemIds.includes(String(item._id)));
+                const milestoneParents = childItems.filter((item) => isMilestoneParentItem(item));
+                const pricedItems = childItems.filter((item) => !isMilestoneParentItem(item));
+                const unassignedItems = pricedItems.filter((item) => !milestoneNameForItem(item));
+                const sectionTotal = estimateTotal(pricedItems);
+                const allSectionSelected = pricedItems.length > 0 && pricedItems.every((item) => selectedItemIds.includes(String(item._id)));
                 return (
                   <Fragment key={`group-${section}`}>
                     <tr key={`section-${section}`} className="border-t border-border bg-secondary/45">
@@ -615,22 +822,71 @@ function EstimateDetailView({
                         <input
                           type="checkbox"
                           checked={allSectionSelected}
-                          disabled={!childItems.length}
-                          onChange={(event) => childItems.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
+                          disabled={!pricedItems.length}
+                          onChange={(event) => pricedItems.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
                         />
                       </td>
                       <td className="p-3 font-black text-white">Folder {section}</td>
-                      <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{childItems.length ? "Select all" : "Parent line"}</td>
+                      <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{pricedItems.length ? "Select all" : "Parent line"}</td>
                       <td className="p-3 text-right font-black text-white">{money(sectionTotal)}</td>
                       <td className="p-3" />
                     </tr>
-                    {!childItems.length && (
+                    {!pricedItems.length && !milestoneParents.length && (
                       <tr className="border-t border-border">
                         <td className="p-3" />
                         <td colSpan={8} className="p-4 pl-10 text-sm text-muted-foreground">No estimate items yet. Add a child item under this phase when scope is ready.</td>
                       </tr>
                     )}
-                    {childItems.map((item) => {
+                    {milestoneParents.map((milestone) => {
+                      const milestoneName = String(milestone.description || "Milestone");
+                      const milestoneItems = pricedItems.filter((item) => milestoneNameForItem(item) === milestoneName);
+                      const milestoneTotal = estimateTotal(milestoneItems);
+                      return (
+                        <Fragment key={`milestone-${section}-${milestoneName}`}>
+                          <tr className="border-t border-border bg-background/45">
+                            <td className="p-3" />
+                            <td className="p-3 pl-8 font-bold text-orange-100">Milestone {milestoneName}</td>
+                            <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{milestoneItems.length ? `${milestoneItems.length} child item${milestoneItems.length === 1 ? "" : "s"}` : "No child items yet"}</td>
+                            <td className="p-3 text-right font-black text-white">{money(milestoneTotal)}</td>
+                            <td className="p-3" />
+                          </tr>
+                          {milestoneItems.map((item) => {
+                            const itemId = String(item._id);
+                            const rfqStatus = rfqStatusForItem(item);
+                            return (
+                              <tr key={itemId} className="border-t border-border">
+                                <td className="p-3">
+                                  <input type="checkbox" checked={selectedItemIds.includes(itemId)} onChange={(event) => onToggleItem(itemId, event.target.checked)} />
+                                </td>
+                                <td className="p-3 pl-12">
+                                  <div className="font-bold text-white">{String(item.description || "Estimate item")}</div>
+                                  <div className="mt-1 flex flex-wrap gap-2">
+                                    <Badge variant="outline">Spec: {String(item.sourceSpecSection || item.specSection || "No book")}</Badge>
+                                    <Badge className="bg-orange-500/15 text-orange-100">Milestone: {milestoneName}</Badge>
+                                    <Badge className="bg-blue-500/15 text-blue-200">RFQ Status: {rfqStatus === "No RFQ" ? "Not Requested" : rfqStatus}</Badge>
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right text-white">{String(item.quantity || 0)}</td>
+                                <td className="p-3 text-muted-foreground">{String(item.unit || "LS")}</td>
+                                <td className="p-3 text-right text-muted-foreground">{String(item.taxPct || 0)}</td>
+                                <td className="p-3 text-right font-mono text-white">{money(item.unitCost)}</td>
+                                <td className="p-3 text-right font-mono text-white">{money(Number(item.quantity || 0) * Number(item.unitCost || 0))}</td>
+                                <td className="p-3 text-right font-mono font-bold text-white">{money(estimateTotal([item]))}</td>
+                                <td className="p-3">
+                                  <div className="flex flex-wrap justify-end gap-2">
+                                    <Button size="sm" variant="outline">Proof</Button>
+                                    <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
+                                    <Button size="sm" variant="outline">Edit</Button>
+                                    <Button size="sm" variant="destructive">x</Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </Fragment>
+                      );
+                    })}
+                    {unassignedItems.map((item) => {
                       const itemId = String(item._id);
                       const rfqStatus = rfqStatusForItem(item);
                       return (
@@ -1074,9 +1330,20 @@ function EstimatingWorkspace() {
   const [activeTool, setActiveTool] = useState<EstimatingToolKey>("cockpit");
   const [productionMenuOpen, setProductionMenuOpen] = useState(false);
   const [sectionPhaseModalOpen, setSectionPhaseModalOpen] = useState(false);
+  const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
+  const [bidItemModalOpen, setBidItemModalOpen] = useState(false);
   const [customPhaseOptions, setCustomPhaseOptions] = useState<string[]>([]);
   const [selectedPhaseType, setSelectedPhaseType] = useState(COMMON_CONSTRUCTION_PHASES[0]);
   const [customPhaseName, setCustomPhaseName] = useState("");
+  const [selectedMilestoneSection, setSelectedMilestoneSection] = useState("");
+  const [selectedMilestoneType, setSelectedMilestoneType] = useState(COMMON_MILESTONES[0]);
+  const [customMilestoneName, setCustomMilestoneName] = useState("");
+  const [selectedItemMilestone, setSelectedItemMilestone] = useState("");
+  const [newItemDescription, setNewItemDescription] = useState("");
+  const [newItemQuantity, setNewItemQuantity] = useState("1");
+  const [newItemUnit, setNewItemUnit] = useState("LS");
+  const [newItemTaxPct, setNewItemTaxPct] = useState("0");
+  const [newItemUnitCost, setNewItemUnitCost] = useState("0");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const projectFilteredEstimates = useMemo(() => {
@@ -1177,6 +1444,16 @@ function EstimatingWorkspace() {
   const phaseOptions = useMemo(() => {
     return [...new Set([...COMMON_CONSTRUCTION_PHASES, ...customPhaseOptions])].sort((a, b) => a.localeCompare(b));
   }, [customPhaseOptions]);
+  const estimateSectionOptions = useMemo(() => {
+    const sections = (estimateItems || []).map((item) => String(item.section || "").split(" / ")[0]).filter(Boolean);
+    return [...new Set([...sections, ...phaseOptions])].sort((a, b) => a.localeCompare(b));
+  }, [estimateItems, phaseOptions]);
+  const estimateMilestoneOptions = useMemo(() => {
+    return (estimateItems || [])
+      .filter((item) => isMilestoneParentItem(item))
+      .map((item) => ({ section: String(item.section || "Unassigned"), milestone: String(item.description || "Milestone") }))
+      .sort((a, b) => `${a.section} ${a.milestone}`.localeCompare(`${b.section} ${b.milestone}`));
+  }, [estimateItems]);
 
   useEffect(() => {
     setSignatureProfile(loadSignatureProfile(user));
@@ -1449,6 +1726,67 @@ function EstimatingWorkspace() {
     setActiveTool("estimate-detail");
   }
 
+  async function saveMilestoneLine() {
+    const sectionName = selectedMilestoneSection.trim();
+    const milestoneName = selectedMilestoneType === "Other" ? customMilestoneName.trim() : selectedMilestoneType;
+    if (!user || !selectedEstimate?._id || !sectionName || !milestoneName) return;
+    const existingSectionParent = (estimateItems || []).some((item) => isSectionParentItem(item) && String(item.section || "") === sectionName);
+    if (!existingSectionParent) {
+      await createEstimateItem({
+        companyId: user.companyId,
+        estimateId: selectedEstimate._id as Id<"estimates">,
+        section: sectionName,
+        description: sectionName,
+        quantity: 0,
+        unit: "SECTION",
+        unitCost: 0,
+        taxPct: 0,
+        notes: `${SECTION_PARENT_NOTE}: Parent phase line created automatically for milestone.`,
+      });
+    }
+    const existingMilestone = (estimateItems || []).some((item) => isMilestoneParentItem(item) && String(item.section || "") === sectionName && String(item.description || "") === milestoneName);
+    if (!existingMilestone) {
+      await createEstimateItem({
+        companyId: user.companyId,
+        estimateId: selectedEstimate._id as Id<"estimates">,
+        section: sectionName,
+        description: milestoneName,
+        quantity: 0,
+        unit: "MILESTONE",
+        unitCost: 0,
+        taxPct: 0,
+        notes: `${MILESTONE_PARENT_NOTE}: Milestone child line under ${sectionName}.`,
+      });
+    }
+    setMilestoneModalOpen(false);
+    setCustomMilestoneName("");
+    setActiveTool("estimate-detail");
+  }
+
+  async function saveBidItemLine() {
+    const [sectionName, milestoneName] = selectedItemMilestone.split("::");
+    const description = newItemDescription.trim();
+    if (!user || !selectedEstimate?._id || !sectionName || !milestoneName || !description) return;
+    await createEstimateItem({
+      companyId: user.companyId,
+      estimateId: selectedEstimate._id as Id<"estimates">,
+      section: sectionName,
+      description,
+      quantity: Number(newItemQuantity || 0) || 0,
+      unit: newItemUnit.trim() || "LS",
+      unitCost: Number(newItemUnitCost || 0) || 0,
+      taxPct: Number(newItemTaxPct || 0) || 0,
+      notes: `${MILESTONE_ITEM_NOTE_PREFIX} ${milestoneName}`,
+    });
+    setBidItemModalOpen(false);
+    setNewItemDescription("");
+    setNewItemQuantity("1");
+    setNewItemUnit("LS");
+    setNewItemTaxPct("0");
+    setNewItemUnitCost("0");
+    setActiveTool("estimate-detail");
+  }
+
   if (!user) return null;
   const activeToolConfig = ESTIMATING_TOOLS.find((tool) => tool.key === activeTool) || ESTIMATING_TOOLS[0];
   const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
@@ -1456,8 +1794,27 @@ function EstimatingWorkspace() {
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/65 p-3">
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cockpit")}>← Back</button>
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
-      <button type="button" className={`${bidActionButtonClass} border-orange-500/35 bg-orange-500/85 text-white hover:bg-orange-500`} onClick={() => setActiveTool("calendar")}>+ Milestone</button>
-      <button type="button" className={`${bidActionButtonClass} border-green-500/35 bg-green-500/85 text-white hover:bg-green-500`} onClick={() => setActiveTool("estimates")}>+ Add Item</button>
+      <button
+        type="button"
+        className={`${bidActionButtonClass} border-orange-500/35 bg-orange-500/85 text-white hover:bg-orange-500`}
+        onClick={() => {
+          setSelectedMilestoneSection(selectedMilestoneSection || estimateSectionOptions[0] || "");
+          setMilestoneModalOpen(true);
+        }}
+      >
+        + Milestone
+      </button>
+      <button
+        type="button"
+        className={`${bidActionButtonClass} border-green-500/35 bg-green-500/85 text-white hover:bg-green-500`}
+        onClick={() => {
+          const firstMilestone = estimateMilestoneOptions[0];
+          setSelectedItemMilestone(selectedItemMilestone || (firstMilestone ? `${firstMilestone.section}::${firstMilestone.milestone}` : ""));
+          setBidItemModalOpen(true);
+        }}
+      >
+        + Add Item
+      </button>
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cost")}>+ From Cost DB</button>
       <button type="button" className={bidActionButtonClass} onClick={() => window.print()}>Print Bid</button>
       <button type="button" className={`${bidActionButtonClass} border-green-500/30`} onClick={() => setActiveTool("cockpit")}>AI Tools</button>
@@ -1536,6 +1893,36 @@ function EstimatingWorkspace() {
           onCustomPhaseChange={setCustomPhaseName}
           onCancel={() => setSectionPhaseModalOpen(false)}
           onContinue={saveSectionPhase}
+        />
+        <MilestoneModal
+          open={milestoneModalOpen}
+          sectionOptions={estimateSectionOptions}
+          selectedSection={selectedMilestoneSection}
+          selectedMilestone={selectedMilestoneType}
+          customMilestone={customMilestoneName}
+          onSectionChange={setSelectedMilestoneSection}
+          onMilestoneChange={setSelectedMilestoneType}
+          onCustomMilestoneChange={setCustomMilestoneName}
+          onCancel={() => setMilestoneModalOpen(false)}
+          onContinue={() => void saveMilestoneLine()}
+        />
+        <BidItemModal
+          open={bidItemModalOpen}
+          milestoneOptions={estimateMilestoneOptions}
+          selectedMilestone={selectedItemMilestone}
+          description={newItemDescription}
+          quantity={newItemQuantity}
+          unit={newItemUnit}
+          taxPct={newItemTaxPct}
+          unitCost={newItemUnitCost}
+          onMilestoneChange={setSelectedItemMilestone}
+          onDescriptionChange={setNewItemDescription}
+          onQuantityChange={setNewItemQuantity}
+          onUnitChange={setNewItemUnit}
+          onTaxPctChange={setNewItemTaxPct}
+          onUnitCostChange={setNewItemUnitCost}
+          onCancel={() => setBidItemModalOpen(false)}
+          onContinue={() => void saveBidItemLine()}
         />
         <div className="xl:hidden">
           <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimator Command Center</label>

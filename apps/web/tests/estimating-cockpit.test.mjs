@@ -37,7 +37,7 @@ for (const label of ["Materials", "Labor", "Equipment", "Historical Bid Database
 for (const action of ["← Back", "+ Section", "+ Milestone", "+ Add Item", "+ From Cost DB", "Print Bid", "AI Tools", "Production", "Bid Package", "Settings"]) {
   assert.ok(page.includes(action), `estimating cockpit top toolbar should include ${action}`);
 }
-assert.match(page, /border-orange-500\/35 bg-orange-500\/85 text-white hover:bg-orange-500`\} onClick=\{\(\) => setActiveTool\("calendar"\)\}>\+ Milestone/, "milestone action should be orange and sit in the bid action toolbar");
+assert.match(page, /border-orange-500\/35 bg-orange-500\/85 text-white hover:bg-orange-500/, "milestone action should be orange and sit in the bid action toolbar");
 
 for (const sectionFlow of ["Add Section / Phase", "Parent Phase", "COMMON_CONSTRUCTION_PHASES", "Other", "Custom Phase Name", "opsslate_estimate_custom_phases"]) {
   assert.ok(page.includes(sectionFlow), `section/phase workflow should include ${sectionFlow}`);
@@ -45,6 +45,14 @@ for (const sectionFlow of ["Add Section / Phase", "Parent Phase", "COMMON_CONSTR
 
 for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", "Parent phase line created from + Section", "Parent line", "No estimate items yet. Add a child item under this phase when scope is ready."]) {
   assert.ok(page.includes(parentLineFlow), `section button should create and render parent bid lines: ${parentLineFlow}`);
+}
+
+for (const milestoneFlow of ["MilestoneModal", "Add Milestone", "Select the section parent", "MILESTONE_PARENT_NOTE", "OPSSLATE_MILESTONE_PARENT", "Milestone child line under", "estimateMilestoneOptions"]) {
+  assert.ok(page.includes(milestoneFlow), `milestone workflow should include ${milestoneFlow}`);
+}
+
+for (const bidItemFlow of ["BidItemModal", "Add Item Under Milestone", "Quantity", "Unit of Measure", "Tax %", "Unit Cost", "Line Total", "Extended", "MILESTONE_ITEM_NOTE_PREFIX"]) {
+  assert.ok(page.includes(bidItemFlow), `add item workflow should include ${bidItemFlow}`);
 }
 
 for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total", "Request RFQ", "No bid items yet"]) {
