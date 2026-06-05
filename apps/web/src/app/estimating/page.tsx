@@ -415,6 +415,120 @@ function predictiveSignalsForEstimate({
   return signals.slice(0, 5);
 }
 
+function textTokens(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 2);
+}
+
+function similarityScore(a: unknown, b: unknown) {
+  const left = new Set(textTokens(a));
+  const right = new Set(textTokens(b));
+  if (!left.size || !right.size) return 0;
+  let shared = 0;
+  left.forEach((token) => { if (right.has(token)) shared += 1; });
+  return shared / Math.max(left.size, right.size);
+}
+
+function riskBand(score: number) {
+  if (score >= 70) return "High";
+  if (score >= 40) return "Medium";
+  return "Low";
+}
+
+function confidenceBand(score: number) {
+  if (score >= 75) return "Strong";
+  if (score >= 50) return "Likely";
+  return "Needs Review";
+}
+
+function buildPredictiveEstimatorModel({
+  estimate,
+  items,
+  rfqSummary,
+  productionRows,
+  historicalEstimates,
+  historicalItems,
+}: {
+  estimate?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  rfqSummary: ReturnType<typeof rfqCounts>;
+  productionRows: ReturnType<typeof productionRowsForItems>;
+  historicalEstimates: Array<Record<string, unknown>>;
+  historicalItems: Array<Record<string, unknown>>;
+}) {
+  const pricedItems = items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item));
+  const currentText = [
+    estimate?.name,
+    estimate?.client,
+    estimate?.bidType,
+    estimate?.description,
+    pricedItems.map((item) => `${item.section || ""} ${item.description || ""}`).join(" "),
+  ].filter(Boolean).join(" ");
+  const historicalWinRate = (() => {
+    const decided = historicalEstimates.filter((entry) => ["won", "lost"].includes(String(entry.status || "").toLowerCase()));
+    const won = decided.filter((entry) => String(entry.status || "").toLowerCase() === "won").length;
+    return decided.length ? Math.round((won / decided.length) * 100) : 50;
+  })();
+  const similarEstimateMatches = historicalEstimates
+    .filter((entry) => recordId(entry) !== recordId(estimate))
+    .map((entry) => ({
+      id: recordId(entry),
+      name: String(entry.name || "Historical estimate"),
+      status: String(entry.status || "draft"),
+      score: Math.round(similarityScore(currentText, [entry.name, entry.client, entry.bidType, entry.description].filter(Boolean).join(" ")) * 100),
+      total: portfolioStoredTotal(entry),
+    }))
+    .filter((entry) => entry.score >= 12)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const unpriced = pricedItems.filter((item) => Number(item.unitCost || 0) <= 0).length;
+  const unmilestoned = pricedItems.filter((item) => !milestoneNameForItem(item)).length;
+  const noSnippet = pricedItems.filter((item) => !snippetsForItem(item).length).length;
+  const materialHeavy = pricedItems.filter((item) => /(material|concrete|asphalt|pipe|steel|wire|conduit|stone|aggregate|equipment|subcontract)/i.test(`${item.description || ""} ${item.section || ""}`)).length;
+  const scopeGapRisk = pricedItems.length ? Math.round(((unmilestoned / pricedItems.length) * 45) + ((noSnippet / pricedItems.length) * 20) + (!estimate?.projectId ? 25 : 0) + (!estimate?.bidDate ? 10 : 0)) : 80;
+  const marginRisk = pricedItems.length ? Math.round(((unpriced / pricedItems.length) * 55) + (rfqSummary.overdue ? 20 : 0) + (historicalWinRate < 35 ? 15 : 0) + (similarEstimateMatches.some((match) => match.status.toLowerCase() === "lost") ? 10 : 0)) : 85;
+  const rfqExposure = materialHeavy ? Math.round(Math.min(100, ((rfqSummary.open || (rfqSummary.total ? 0 : materialHeavy)) / Math.max(1, materialHeavy)) * 100)) : 0;
+  const productionConfidence = productionRows.length ? Math.round(Math.max(0, Math.min(100, 100 - (productionRows.filter((row) => !row.prodRate || row.rateBasis === "allowance").length / productionRows.length) * 55 - (unmilestoned / Math.max(1, pricedItems.length)) * 25))) : 25;
+  const historicalSimilarity = similarEstimateMatches.length ? Math.round(similarEstimateMatches.reduce((sum, match) => sum + match.score, 0) / similarEstimateMatches.length) : 0;
+  const survivalScore = Math.max(0, Math.min(100, Math.round(
+    100 -
+    scopeGapRisk * 0.25 -
+    marginRisk * 0.3 -
+    rfqExposure * 0.15 +
+    productionConfidence * 0.18 +
+    historicalWinRate * 0.08 +
+    historicalSimilarity * 0.04
+  )));
+  const predictedOutcome = survivalScore >= 78 ? "Bid is tracking strong" : survivalScore >= 55 ? "Bid can survive with cleanup" : "Bid is exposed";
+  const recommendedDraftActions = [
+    marginRisk >= 55 ? "Lock down placeholder pricing or create RFQs before bid review." : "",
+    scopeGapRisk >= 55 ? "Tie loose items to phase, milestone, proof, and project context." : "",
+    rfqExposure >= 45 ? "Build vendor quote coverage for material-heavy and subcontract-heavy lines." : "",
+    productionConfidence < 60 ? "Review production rates, crew assumptions, and scheduler handoff durations." : "",
+    historicalSimilarity < 20 && historicalEstimates.length ? "No strong historical match. Treat this as a fresh-risk bid and increase review pressure." : "",
+    historicalItems.length ? "Compare repeated item language against historical costs before final markup." : "",
+  ].filter(Boolean);
+  return {
+    historicalEstimates,
+    historicalItems,
+    historicalWinRate,
+    similarEstimateMatches,
+    scopeGapRisk,
+    marginRisk,
+    rfqExposure,
+    productionConfidence,
+    historicalSimilarity,
+    bidSurvivalScore: survivalScore,
+    survivalScore,
+    predictedOutcome,
+    recommendedDraftActions,
+    learnedFrom: `${historicalEstimates.length} historical estimate${historicalEstimates.length === 1 ? "" : "s"}, ${historicalItems.length} historical/active bid line${historicalItems.length === 1 ? "" : "s"}, ${rfqSummary.total} RFQ record${rfqSummary.total === 1 ? "" : "s"}`,
+    modelVersion: "Cicero Predictive Estimator v1",
+  };
+}
+
 function productionCategoryForItem(item: Record<string, unknown>) {
   const text = `${item.section || ""} ${item.description || ""}`.toLowerCase();
   if (/mobilization|setup|temporary|permit|preconstruction|survey|layout/.test(text)) return "Preconstruction";
@@ -1055,6 +1169,9 @@ function CiceroCommandPanel({
   items,
   rfqSummary,
   scheduleScore,
+  productionRows,
+  historicalEstimates,
+  historicalItems,
   onGoToRfq,
   onGoToProduction,
   onCreateAction,
@@ -1063,11 +1180,22 @@ function CiceroCommandPanel({
   items: Array<Record<string, unknown>>;
   rfqSummary: ReturnType<typeof rfqCounts>;
   scheduleScore: number;
+  productionRows: ReturnType<typeof productionRowsForItems>;
+  historicalEstimates: Array<Record<string, unknown>>;
+  historicalItems: Array<Record<string, unknown>>;
   onGoToRfq: () => void;
   onGoToProduction: () => void;
   onCreateAction: (action: string) => void;
 }) {
   const metrics = estimatorCoverageMetrics({ estimate, items, rfqSummary });
+  const predictiveModel = buildPredictiveEstimatorModel({
+    estimate,
+    items,
+    rfqSummary,
+    productionRows,
+    historicalEstimates,
+    historicalItems,
+  });
   const zeroCost = metrics.pricedItems.filter((item) => Number(item.unitCost || 0) <= 0).length;
   const noMilestone = metrics.pricedItems.length - metrics.withMilestone;
   const actions = [
@@ -1075,6 +1203,12 @@ function CiceroCommandPanel({
     rfqSummary.open ? { label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", run: onGoToRfq } : null,
     noMilestone ? { label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
     scheduleScore < 80 ? { label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", run: onGoToProduction } : null,
+    ...predictiveModel.recommendedDraftActions.slice(0, 3).map((action) => ({
+      label: "Cicero recommendation",
+      detail: action,
+      cta: "Create draft action",
+      run: () => onCreateAction(action),
+    })),
   ].filter(Boolean) as Array<{ label: string; detail: string; cta: string; run: () => void }>;
 
   return (
@@ -1087,7 +1221,8 @@ function CiceroCommandPanel({
         </div>
         <div className="rounded-lg border border-border bg-background/60 px-4 py-3 text-right">
           <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Bid Survival Score</div>
-          <div className="text-2xl font-black text-green-400">{metrics.coverageScore}%</div>
+          <div className="text-2xl font-black text-green-400">{predictiveModel.bidSurvivalScore}%</div>
+          <div className="text-xs text-blue-100">{predictiveModel.predictedOutcome}</div>
         </div>
       </div>
       <div className="mt-4 grid gap-3 md:grid-cols-4">
@@ -1102,6 +1237,44 @@ function CiceroCommandPanel({
             <div className="text-xs text-blue-100">{label}</div>
           </div>
         ))}
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {[
+          ["Margin Risk", `${predictiveModel.marginRisk}%`, riskBand(predictiveModel.marginRisk)],
+          ["Scope Gap Risk", `${predictiveModel.scopeGapRisk}%`, riskBand(predictiveModel.scopeGapRisk)],
+          ["RFQ Exposure", `${predictiveModel.rfqExposure}%`, riskBand(predictiveModel.rfqExposure)],
+          ["Production Confidence", `${predictiveModel.productionConfidence}%`, confidenceBand(predictiveModel.productionConfidence)],
+          ["Historical Similarity", `${predictiveModel.historicalSimilarity}%`, predictiveModel.similarEstimateMatches.length ? "Learned" : "Thin Data"],
+        ].map(([label, value, detail]) => (
+          <div key={String(label)} className="rounded-md border border-border bg-background/50 p-3">
+            <div className="text-lg font-black text-white">{String(value)}</div>
+            <div className="text-xs font-bold text-blue-100">{label}</div>
+            <div className="mt-1 text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{detail}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-lg border border-orange-500/25 bg-orange-500/10 p-3">
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-sm font-black text-white">Recommended Draft Actions</div>
+            <p className="mt-1 text-xs text-orange-100">{predictiveModel.modelVersion} learned from {predictiveModel.learnedFrom}. Historical win rate: {predictiveModel.historicalWinRate}%.</p>
+          </div>
+          <Badge className="w-fit bg-orange-500/20 text-orange-100">{predictiveModel.similarEstimateMatches.length} similar bids</Badge>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {predictiveModel.recommendedDraftActions.length ? predictiveModel.recommendedDraftActions.map((action) => (
+            <button
+              key={action}
+              type="button"
+              onClick={() => onCreateAction(action)}
+              className="rounded-md border border-orange-500/20 bg-background/50 px-3 py-2 text-left text-xs font-bold text-blue-100 hover:border-orange-400 hover:text-white"
+            >
+              {action}
+            </button>
+          )) : (
+            <div className="rounded-md border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs font-bold text-green-200">No predictive cleanup action is required yet.</div>
+          )}
+        </div>
       </div>
       <div className="mt-4 grid gap-3 xl:grid-cols-2">
         {actions.length ? actions.map((action) => (
@@ -1204,6 +1377,9 @@ function EstimateDetailView({
   rfqSummary,
   scheduleScore,
   predictiveSignals,
+  productionRows,
+  historicalEstimates,
+  historicalItems,
   onToggleItem,
   onRequestQuote,
   onOpenProof,
@@ -1230,6 +1406,9 @@ function EstimateDetailView({
   rfqSummary: ReturnType<typeof rfqCounts>;
   scheduleScore: number;
   predictiveSignals: Array<{ label: string; detail: string; severity: "high" | "medium" | "low" }>;
+  productionRows: ReturnType<typeof productionRowsForItems>;
+  historicalEstimates: Array<Record<string, unknown>>;
+  historicalItems: Array<Record<string, unknown>>;
   onToggleItem: (id: string, checked: boolean) => void;
   onRequestQuote: (item: Record<string, unknown>) => void;
   onOpenProof: (item: Record<string, unknown>) => void;
@@ -1299,6 +1478,9 @@ function EstimateDetailView({
         items={items}
         rfqSummary={rfqSummary}
         scheduleScore={scheduleScore}
+        productionRows={productionRows}
+        historicalEstimates={historicalEstimates}
+        historicalItems={historicalItems}
         onGoToRfq={onGoToRfq}
         onGoToProduction={onGoToProduction}
         onCreateAction={onCreateCiceroAction}
@@ -2050,6 +2232,14 @@ function EstimatingWorkspace() {
   }), [selectedEstimate, estimateItems, rfqSummary, costItems]);
   const productionRows = useMemo(() => productionRowsForItems(estimateItems || []), [estimateItems]);
   const productionSummary = useMemo(() => productionSummaryForRows(productionRows), [productionRows]);
+  const predictiveEstimatorModel = useMemo(() => buildPredictiveEstimatorModel({
+    estimate: selectedEstimate,
+    items: estimateItems || [],
+    rfqSummary,
+    productionRows,
+    historicalEstimates: estimates || [],
+    historicalItems: estimateItems || [],
+  }), [selectedEstimate, estimateItems, rfqSummary, productionRows, estimates]);
   const activeBids = projectFilteredEstimates.filter((estimate) => !["won", "lost", "archived"].includes(String(estimate.status || "").toLowerCase())).length;
   const draftBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "draft").length;
   const wonBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "won").length;
@@ -3074,7 +3264,27 @@ function EstimatingWorkspace() {
 
                 <section className="rounded-lg border border-border bg-card p-4">
                   <h2 className="font-bold text-white">Predictive Bid Engine</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">What could move the number, hurt the margin, or break the handoff?</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Company-history model for survival, margin, scope, RFQ, production, and historical fit.</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {[
+                      ["Bid Survival Score", predictiveEstimatorModel.bidSurvivalScore, "text-green-300"],
+                      ["Margin Risk", predictiveEstimatorModel.marginRisk, predictiveEstimatorModel.marginRisk > 60 ? "text-red-300" : "text-orange-300"],
+                      ["Scope Gap Risk", predictiveEstimatorModel.scopeGapRisk, predictiveEstimatorModel.scopeGapRisk > 60 ? "text-red-300" : "text-orange-300"],
+                      ["RFQ Exposure", predictiveEstimatorModel.rfqExposure, predictiveEstimatorModel.rfqExposure > 60 ? "text-red-300" : "text-blue-200"],
+                      ["Production Confidence", predictiveEstimatorModel.productionConfidence, "text-blue-200"],
+                      ["Historical Similarity", predictiveEstimatorModel.historicalSimilarity, "text-purple-200"],
+                    ].map(([label, value, color]) => (
+                      <div key={String(label)} className="rounded-md border border-border bg-background/50 p-3">
+                        <div className={`text-lg font-black ${color}`}>{String(value)}%</div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{String(label)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background/50 p-3">
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Learning Inputs</div>
+                    <div className="mt-1 text-xs text-blue-100">{predictiveEstimatorModel.learnedFrom}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">Historical win rate baseline: {predictiveEstimatorModel.historicalWinRate}%</div>
+                  </div>
                   <div className="mt-3 space-y-2">
                     {predictiveSignals.map((signal) => (
                       <div key={signal.label} className="rounded-md border border-border bg-background/50 p-3">
@@ -3085,6 +3295,30 @@ function EstimatingWorkspace() {
                     {!predictiveSignals.length && (
                       <div className="rounded-md border border-green-500/25 bg-green-500/10 p-3 text-sm text-green-200">No major predictive warnings on the selected estimate.</div>
                     )}
+                  </div>
+                  <div className="mt-3 rounded-md border border-orange-500/25 bg-orange-500/5 p-3">
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-orange-200">Recommended Draft Actions</div>
+                    <div className="mt-2 space-y-1">
+                      {predictiveEstimatorModel.recommendedDraftActions.map((action) => (
+                        <button key={action} type="button" className="block w-full rounded-md border border-border bg-background/50 px-3 py-2 text-left text-xs font-semibold text-blue-100 hover:border-orange-500/40" onClick={() => setActiveTool(action.includes("RFQ") ? "rfq" : action.includes("schedule") || action.includes("production") ? "production-breakdown" : "estimate-detail")}>
+                          {action}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-md border border-border bg-background/50 p-3">
+                    <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Historical Similarity Matches</div>
+                    <div className="mt-2 space-y-1">
+                      {predictiveEstimatorModel.similarEstimateMatches.map((match) => (
+                        <div key={String(match.id || match.name)} className="flex items-center justify-between gap-2 text-xs">
+                          <span className="truncate text-blue-100">{String(match.name || "Historical estimate")}</span>
+                          <span className="font-bold text-white">{match.score}%</span>
+                        </div>
+                      ))}
+                      {!predictiveEstimatorModel.similarEstimateMatches.length && (
+                        <div className="text-xs text-muted-foreground">No prior company estimates are available for similarity scoring yet.</div>
+                      )}
+                    </div>
                   </div>
                 </section>
 
@@ -3133,6 +3367,9 @@ function EstimatingWorkspace() {
             rfqSummary={rfqSummary}
             scheduleScore={scheduleScore}
             predictiveSignals={predictiveSignals}
+            productionRows={productionRows}
+            historicalEstimates={estimates || []}
+            historicalItems={estimateItems || []}
             onToggleItem={toggleItem}
             onRequestQuote={requestQuoteForItem}
             onOpenProof={setProofItem}

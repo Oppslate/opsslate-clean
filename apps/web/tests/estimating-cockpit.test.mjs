@@ -99,6 +99,14 @@ for (const helper of ["estimateTotal", "rfqCounts", "scheduleReadinessScore", "p
   assert.match(page, new RegExp(helper), `estimating cockpit should use ${helper}`);
 }
 
+for (const predictiveModel of ["buildPredictiveEstimatorModel", "Bid Survival Score", "Margin Risk", "Scope Gap Risk", "RFQ Exposure", "Production Confidence", "Historical Similarity", "Recommended Draft Actions"]) {
+  assert.ok(page.includes(predictiveModel), `estimating cockpit should include predictive estimator model output: ${predictiveModel}`);
+}
+
+for (const predictiveInput of ["historicalEstimates", "historicalItems", "historicalWinRate", "similarEstimateMatches", "scopeGapRisk", "marginRisk", "rfqExposure", "productionConfidence"]) {
+  assert.ok(page.includes(predictiveInput), `predictive estimator should learn from bidding history and score ${predictiveInput}`);
+}
+
 for (const helper of ["productionRowsForItems", "productionSummaryForRows", "productionRateForItem", "ProductionRateBreakdownView"]) {
   assert.match(page, new RegExp(helper), `production breakdown should use ${helper}`);
 }
