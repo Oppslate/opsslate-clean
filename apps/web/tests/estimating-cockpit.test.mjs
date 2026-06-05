@@ -67,6 +67,9 @@ for (const bidItemFlow of ["BidItemModal", "Add Estimate Item", "Section", "Quan
 for (const itemDescriptionDropdownFlow of ["COMMON_ESTIMATE_ITEM_DESCRIPTIONS", "Survey Operations", "Duct Bank Excavation", "Select item description", "Type custom item description", "opsslate_estimate_custom_item_descriptions"]) {
   assert.ok(page.includes(itemDescriptionDropdownFlow), `item description should use saved dropdown options with custom Other entries: ${itemDescriptionDropdownFlow}`);
 }
+for (const unitDropdownFlow of ["COMMON_UNIT_OF_MEASURE_OPTIONS", "Ton", "LF", "CF", "YD", "SF", "YRD", "Acre", "Select unit", "Type custom unit", "opsslate_estimate_custom_units"]) {
+  assert.ok(page.includes(unitDropdownFlow), `unit of measure should use saved dropdown options with custom Other entries: ${unitDropdownFlow}`);
+}
 
 for (const itemEntryFlow of ["Scope / Proof Notes", "RFQ Vendor / Supplier", "RFQ Due Date", "Submittal Requirement", "Production Days", "Crew Size", "Lead Time / Constraint", "ITEM_SCOPE_NOTE_PREFIX", "ITEM_RFQ_DETAIL_PREFIX", "ITEM_SUBMITTAL_DETAIL_PREFIX", "ITEM_SCHEDULE_DETAIL_PREFIX"]) {
   assert.ok(page.includes(itemEntryFlow), `bid item modal should capture estimator detail at item creation/edit: ${itemEntryFlow}`);

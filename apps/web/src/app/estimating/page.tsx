@@ -440,6 +440,17 @@ const COMMON_ESTIMATE_ITEM_DESCRIPTIONS = [
   "Other",
 ];
 
+const COMMON_UNIT_OF_MEASURE_OPTIONS = [
+  "Ton",
+  "LF",
+  "CF",
+  "YD",
+  "SF",
+  "YRD",
+  "Acre",
+  "Other",
+];
+
 function statusLabel(status?: string) {
   const clean = String(status || "draft").trim();
   if (!clean) return "Draft";
@@ -862,10 +873,13 @@ function BidItemModal({
   submitLabel = "Add Item",
   sectionOptions,
   descriptionOptions,
+  unitOptions,
   selectedSection,
   selectedDescription,
   customDescription,
   description,
+  selectedUnit,
+  customUnit,
   quantity,
   unit,
   taxPct,
@@ -889,6 +903,8 @@ function BidItemModal({
   onSelectedDescriptionChange,
   onCustomDescriptionChange,
   onDescriptionChange,
+  onSelectedUnitChange,
+  onCustomUnitChange,
   onQuantityChange,
   onUnitChange,
   onTaxPctChange,
@@ -917,10 +933,13 @@ function BidItemModal({
   submitLabel?: string;
   sectionOptions: string[];
   descriptionOptions: string[];
+  unitOptions: string[];
   selectedSection: string;
   selectedDescription: string;
   customDescription: string;
   description: string;
+  selectedUnit: string;
+  customUnit: string;
   quantity: string;
   unit: string;
   taxPct: string;
@@ -944,6 +963,8 @@ function BidItemModal({
   onSelectedDescriptionChange: (value: string) => void;
   onCustomDescriptionChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
+  onSelectedUnitChange: (value: string) => void;
+  onCustomUnitChange: (value: string) => void;
   onQuantityChange: (value: string) => void;
   onUnitChange: (value: string) => void;
   onTaxPctChange: (value: string) => void;
@@ -972,6 +993,7 @@ function BidItemModal({
   const lineTotal = quantityNumber * unitCostNumber;
   const extended = lineTotal * (1 + taxNumber / 100);
   const isCustomDescription = selectedDescription === "Other";
+  const isCustomUnit = selectedUnit === "Other";
   const handleSnippetFile = (file?: File) => {
     if (!file) {
       onSnippetImageChange("");
@@ -1037,7 +1059,29 @@ function BidItemModal({
           </div>
           <div>
             <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Unit of Measure</label>
-            <input value={unit} onChange={(event) => onUnitChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" />
+            <select
+              value={selectedUnit}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                onSelectedUnitChange(nextValue);
+                onUnitChange(nextValue === "Other" ? customUnit : nextValue);
+              }}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+            >
+              <option value="">Select unit...</option>
+              {unitOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            {isCustomUnit ? (
+              <input
+                value={customUnit}
+                onChange={(event) => {
+                  onCustomUnitChange(event.target.value);
+                  onUnitChange(event.target.value);
+                }}
+                className="mt-2 w-full rounded-md border border-orange-500/35 bg-background px-3 py-2 text-sm text-white"
+                placeholder="Type custom unit..."
+              />
+            ) : null}
           </div>
           <div>
             <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Tax %</label>
@@ -2141,6 +2185,7 @@ function EstimatingWorkspace() {
   const [bidItemModalOpen, setBidItemModalOpen] = useState(false);
   const [customPhaseOptions, setCustomPhaseOptions] = useState<string[]>([]);
   const [customItemDescriptionOptions, setCustomItemDescriptionOptions] = useState<string[]>([]);
+  const [customUnitOptions, setCustomUnitOptions] = useState<string[]>([]);
   const [selectedPhaseType, setSelectedPhaseType] = useState(COMMON_CONSTRUCTION_PHASES[0]);
   const [customPhaseName, setCustomPhaseName] = useState("");
   const [editingSectionGroup, setEditingSectionGroup] = useState<{ section: string; items: Array<Record<string, unknown>> } | null>(null);
@@ -2149,8 +2194,10 @@ function EstimatingWorkspace() {
   const [selectedItemDescriptionType, setSelectedItemDescriptionType] = useState(COMMON_ESTIMATE_ITEM_DESCRIPTIONS[0]);
   const [customItemDescription, setCustomItemDescription] = useState("");
   const [newItemDescription, setNewItemDescription] = useState("");
+  const [selectedItemUnitType, setSelectedItemUnitType] = useState("LF");
+  const [customItemUnit, setCustomItemUnit] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("1");
-  const [newItemUnit, setNewItemUnit] = useState("LS");
+  const [newItemUnit, setNewItemUnit] = useState("LF");
   const [newItemTaxPct, setNewItemTaxPct] = useState("0");
   const [newItemUnitCost, setNewItemUnitCost] = useState("0");
   const [newItemRequestRfq, setNewItemRequestRfq] = useState(false);
@@ -2212,6 +2259,8 @@ function EstimatingWorkspace() {
   const [editItemDescriptionType, setEditItemDescriptionType] = useState(COMMON_ESTIMATE_ITEM_DESCRIPTIONS[0]);
   const [editItemCustomDescription, setEditItemCustomDescription] = useState("");
   const [editItemDescription, setEditItemDescription] = useState("");
+  const [editItemUnitType, setEditItemUnitType] = useState("LF");
+  const [editItemCustomUnit, setEditItemCustomUnit] = useState("");
   const [editItemQuantity, setEditItemQuantity] = useState("1");
   const [editItemUnit, setEditItemUnit] = useState("LS");
   const [editItemTaxPct, setEditItemTaxPct] = useState("0");
@@ -2321,6 +2370,18 @@ function EstimatingWorkspace() {
     ])].sort((a, b) => a.localeCompare(b));
     return [...nonOther, "Other"];
   }, [customItemDescriptionOptions, estimateItems]);
+  const unitOfMeasureOptions = useMemo(() => {
+    const existingUnits = (estimateItems || [])
+      .filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item))
+      .map((item) => String(item.unit || "").trim())
+      .filter(Boolean);
+    const nonOther = [...new Set([
+      ...COMMON_UNIT_OF_MEASURE_OPTIONS.filter((unit) => unit !== "Other"),
+      ...customUnitOptions,
+      ...existingUnits,
+    ])].sort((a, b) => a.localeCompare(b));
+    return [...nonOther, "Other"];
+  }, [customUnitOptions, estimateItems]);
   useEffect(() => {
     setSignatureProfile(loadSignatureProfile(user));
   }, [user?._id, user?.email, user?.name]);
@@ -2339,6 +2400,12 @@ function EstimatingWorkspace() {
     } catch {
       setCustomItemDescriptionOptions([]);
     }
+    try {
+      const saved = JSON.parse(localStorage.getItem("opsslate_estimate_custom_units") || "[]");
+      if (Array.isArray(saved)) setCustomUnitOptions(saved.filter((unit) => typeof unit === "string" && unit.trim()));
+    } catch {
+      setCustomUnitOptions([]);
+    }
   }, []);
 
   function toggleItem(id: string, checked: boolean) {
@@ -2355,6 +2422,14 @@ function EstimatingWorkspace() {
     const nextOptions = [...new Set([...customItemDescriptionOptions, clean])].sort((a, b) => a.localeCompare(b));
     setCustomItemDescriptionOptions(nextOptions);
     if (typeof window !== "undefined") localStorage.setItem("opsslate_estimate_custom_item_descriptions", JSON.stringify(nextOptions));
+  }
+
+  function rememberCustomUnit(unit: string) {
+    const clean = unit.trim();
+    if (!clean || COMMON_UNIT_OF_MEASURE_OPTIONS.includes(clean)) return;
+    const nextOptions = [...new Set([...customUnitOptions, clean])].sort((a, b) => a.localeCompare(b));
+    setCustomUnitOptions(nextOptions);
+    if (typeof window !== "undefined") localStorage.setItem("opsslate_estimate_custom_units", JSON.stringify(nextOptions));
   }
 
   function requestQuoteForItem(item: Record<string, unknown>) {
@@ -2382,7 +2457,15 @@ function EstimatingWorkspace() {
       setEditItemCustomDescription(description);
     }
     setEditItemQuantity(String(item.quantity ?? "1"));
-    setEditItemUnit(String(item.unit || "LS"));
+    const unit = String(item.unit || "LF");
+    setEditItemUnit(unit);
+    if (unitOfMeasureOptions.includes(unit)) {
+      setEditItemUnitType(unit);
+      setEditItemCustomUnit("");
+    } else {
+      setEditItemUnitType("Other");
+      setEditItemCustomUnit(unit);
+    }
     setEditItemTaxPct(String(item.taxPct ?? "0"));
     setEditItemUnitCost(String(item.unitCost ?? "0"));
     setEditItemRequestRfq(itemHasIntent(item, RFQ_INTENT_NOTE));
@@ -2420,8 +2503,10 @@ function EstimatingWorkspace() {
     if (!editingItem?._id) return;
     const sectionName = editItemSection.trim();
     const description = (editItemDescriptionType === "Other" ? editItemCustomDescription : editItemDescription).trim();
+    const unit = (editItemUnitType === "Other" ? editItemCustomUnit : editItemUnit).trim() || "LF";
     if (!sectionName || !description) return;
     if (editItemDescriptionType === "Other") rememberCustomItemDescription(description);
+    if (editItemUnitType === "Other") rememberCustomUnit(unit);
     const notes = [
       ...removeManagedItemDetailNotes(cleanItemNotesForEdit(editingItem).join("\n")),
       editItemRequestRfq ? `${RFQ_INTENT_NOTE}: Draft RFQ requested during item edit.` : "",
@@ -2448,7 +2533,7 @@ function EstimatingWorkspace() {
       section: sectionName,
       description,
       quantity: Number(editItemQuantity || 0) || 0,
-      unit: editItemUnit.trim() || "LS",
+      unit,
       unitCost: Number(editItemUnitCost || 0) || 0,
       taxPct: Number(editItemTaxPct || 0) || 0,
       notes,
@@ -2467,13 +2552,13 @@ function EstimatingWorkspace() {
             id: String(editingItem._id),
             description,
             quantity: Number(editItemQuantity || 0) || 0,
-            unit: editItemUnit.trim() || "LS",
+            unit,
             unitCost: Number(editItemUnitCost || 0) || 0,
             section: sectionName,
             scopeNote: editItemScopeNote,
             leadTime: editItemLeadTime,
           }],
-          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nQty: ${editItemQuantity || 0} ${editItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
+          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nQty: ${editItemQuantity || 0} ${unit}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
         }),
       });
     }
@@ -2513,7 +2598,7 @@ function EstimatingWorkspace() {
           specSection: sectionName,
           description: [
             editItemSubmittalRequirement.trim() || `Submittal draft requested for estimate item: ${description}`,
-            `Quantity: ${editItemQuantity || 0} ${editItemUnit || "LS"}`,
+            `Quantity: ${editItemQuantity || 0} ${unit}`,
           ].filter(Boolean).join("\n"),
           submittedBy: user.name || user.email,
           priority: "High",
@@ -2986,15 +3071,17 @@ function EstimatingWorkspace() {
   async function saveBidItemLine() {
     const sectionName = selectedItemSection.trim();
     const description = (selectedItemDescriptionType === "Other" ? customItemDescription : newItemDescription).trim();
+    const unit = (selectedItemUnitType === "Other" ? customItemUnit : newItemUnit).trim() || "LF";
     if (!user || !selectedEstimate?._id || !sectionName || !description) return;
     if (selectedItemDescriptionType === "Other") rememberCustomItemDescription(description);
+    if (selectedItemUnitType === "Other") rememberCustomUnit(unit);
     const itemIdCreated = await createEstimateItem({
       companyId: user.companyId,
       estimateId: selectedEstimate._id as Id<"estimates">,
       section: sectionName,
       description,
       quantity: Number(newItemQuantity || 0) || 0,
-      unit: newItemUnit.trim() || "LS",
+      unit,
       unitCost: Number(newItemUnitCost || 0) || 0,
       taxPct: Number(newItemTaxPct || 0) || 0,
       notes: [
@@ -3033,13 +3120,13 @@ function EstimatingWorkspace() {
             id: String(itemIdCreated),
             description,
             quantity: Number(newItemQuantity || 0) || 0,
-            unit: newItemUnit.trim() || "LS",
+            unit,
             unitCost: Number(newItemUnitCost || 0) || 0,
             section: sectionName,
             scopeNote: newItemScopeNote,
             leadTime: newItemLeadTime,
           }],
-          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nQty: ${newItemQuantity || 0} ${newItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
+          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nQty: ${newItemQuantity || 0} ${unit}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
         }),
       });
     }
@@ -3079,7 +3166,7 @@ function EstimatingWorkspace() {
           specSection: sectionName,
           description: [
             newItemSubmittalRequirement.trim() || `Submittal draft requested for estimate item: ${description}`,
-            `Quantity: ${newItemQuantity || 0} ${newItemUnit || "LS"}`,
+            `Quantity: ${newItemQuantity || 0} ${unit}`,
           ].filter(Boolean).join("\n"),
           submittedBy: user.name || user.email,
           priority: "High",
@@ -3101,7 +3188,9 @@ function EstimatingWorkspace() {
     setCustomItemDescription("");
     setNewItemDescription("");
     setNewItemQuantity("1");
-    setNewItemUnit("LS");
+    setSelectedItemUnitType("LF");
+    setCustomItemUnit("");
+    setNewItemUnit("LF");
     setNewItemTaxPct("0");
     setNewItemUnitCost("0");
     setNewItemRequestRfq(false);
@@ -3308,10 +3397,13 @@ function EstimatingWorkspace() {
           open={bidItemModalOpen}
           sectionOptions={estimateSectionOptions}
           descriptionOptions={itemDescriptionOptions}
+          unitOptions={unitOfMeasureOptions}
           selectedSection={selectedItemSection}
           selectedDescription={selectedItemDescriptionType}
           customDescription={customItemDescription}
           description={newItemDescription}
+          selectedUnit={selectedItemUnitType}
+          customUnit={customItemUnit}
           quantity={newItemQuantity}
           unit={newItemUnit}
           taxPct={newItemTaxPct}
@@ -3335,6 +3427,8 @@ function EstimatingWorkspace() {
           onSelectedDescriptionChange={setSelectedItemDescriptionType}
           onCustomDescriptionChange={setCustomItemDescription}
           onDescriptionChange={setNewItemDescription}
+          onSelectedUnitChange={setSelectedItemUnitType}
+          onCustomUnitChange={setCustomItemUnit}
           onQuantityChange={setNewItemQuantity}
           onUnitChange={setNewItemUnit}
           onTaxPctChange={setNewItemTaxPct}
@@ -3364,10 +3458,13 @@ function EstimatingWorkspace() {
           submitLabel="Save Item Changes"
           sectionOptions={estimateSectionOptions}
           descriptionOptions={itemDescriptionOptions}
+          unitOptions={unitOfMeasureOptions}
           selectedSection={editItemSection}
           selectedDescription={editItemDescriptionType}
           customDescription={editItemCustomDescription}
           description={editItemDescription}
+          selectedUnit={editItemUnitType}
+          customUnit={editItemCustomUnit}
           quantity={editItemQuantity}
           unit={editItemUnit}
           taxPct={editItemTaxPct}
@@ -3391,6 +3488,8 @@ function EstimatingWorkspace() {
           onSelectedDescriptionChange={setEditItemDescriptionType}
           onCustomDescriptionChange={setEditItemCustomDescription}
           onDescriptionChange={setEditItemDescription}
+          onSelectedUnitChange={setEditItemUnitType}
+          onCustomUnitChange={setEditItemCustomUnit}
           onQuantityChange={setEditItemQuantity}
           onUnitChange={setEditItemUnit}
           onTaxPctChange={setEditItemTaxPct}
