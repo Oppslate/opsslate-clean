@@ -625,6 +625,9 @@ function MilestoneModal({
 
 function BidItemModal({
   open,
+  title = "Add Item Under Milestone",
+  intro = "Choose the milestone home first, then enter the priced bid item.",
+  submitLabel = "Add Item",
   milestoneOptions,
   selectedMilestone,
   description,
@@ -646,6 +649,9 @@ function BidItemModal({
   onContinue,
 }: {
   open: boolean;
+  title?: string;
+  intro?: string;
+  submitLabel?: string;
   milestoneOptions: Array<{ section: string; milestone: string }>;
   selectedMilestone: string;
   description: string;
@@ -675,8 +681,8 @@ function BidItemModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-5xl rounded-xl border border-border bg-card p-6 shadow-2xl">
-        <h2 className="text-2xl font-black text-white">Add Item Under Milestone</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Choose the milestone home first, then enter the priced bid item.</p>
+        <h2 className="text-2xl font-black text-white">{title}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{intro}</p>
         <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
           <div>
             <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Milestone</label>
@@ -757,7 +763,111 @@ function BidItemModal({
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button onClick={onContinue} disabled={!selectedMilestone || !description.trim()}>Add Item</Button>
+          <Button onClick={onContinue} disabled={!selectedMilestone || !description.trim()}>{submitLabel}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProofModal({
+  item,
+  rfqStatus,
+  onClose,
+  onEdit,
+  onRequestQuote,
+}: {
+  item: Record<string, unknown> | null;
+  rfqStatus: string;
+  onClose: () => void;
+  onEdit: (item: Record<string, unknown>) => void;
+  onRequestQuote: (item: Record<string, unknown>) => void;
+}) {
+  if (!item) return null;
+  const section = String(item.section || item.sourceSpecSection || "Unassigned");
+  const milestone = milestoneNameForItem(item);
+  const quantity = Number(item.quantity || 0) || 0;
+  const unitCost = Number(item.unitCost || 0) || 0;
+  const taxPct = Number(item.taxPct || 0) || 0;
+  const lineTotal = quantity * unitCost;
+  const extended = itemLineTotal(item);
+  const notes = String(item.notes || "").split("\n").filter((line) => line.trim());
+  const costWarnings = [
+    !quantity ? "Quantity is zero or missing." : "",
+    !unitCost ? "Unit cost is zero or missing." : "",
+    !milestone ? "Item is not tied to a milestone." : "",
+    rfqStatus === "No RFQ" && itemHasIntent(item, RFQ_INTENT_NOTE) ? "RFQ intent exists but no vendor RFQ has been drafted yet." : "",
+  ].filter(Boolean);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="max-h-[88vh] w-full max-w-4xl overflow-auto rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <div className="flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <Badge className="mb-2 bg-blue-500/15 text-blue-200">Estimate Proof</Badge>
+            <h2 className="text-2xl font-black text-white">{String(item.description || "Estimate item")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{section}{milestone ? ` / ${milestone}` : ""}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Extended</div>
+            <div className="font-mono text-2xl font-black text-green-400">{money(extended)}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="rounded-lg border border-border bg-background/60 p-3">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Quantity</div>
+            <div className="mt-1 font-mono text-lg text-white">{quantity} {String(item.unit || "LS")}</div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/60 p-3">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Unit Cost</div>
+            <div className="mt-1 font-mono text-lg text-white">{money(unitCost)}</div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/60 p-3">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Tax</div>
+            <div className="mt-1 font-mono text-lg text-white">{taxPct}%</div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/60 p-3">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">RFQ</div>
+            <div className="mt-1 text-lg font-bold text-white">{rfqStatus === "No RFQ" ? "Not Requested" : statusLabel(rfqStatus)}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <section className="rounded-lg border border-border bg-background/40 p-4">
+            <h3 className="font-bold text-white">Estimator Checks</h3>
+            <ul className="mt-3 space-y-2 text-sm text-blue-100">
+              <li>Line total: {money(lineTotal)}</li>
+              <li>Milestone home: {milestone || "Missing"}</li>
+              <li>Spec/source: {String(item.sourceSpecSection || item.specSection || "No spec book linked")}</li>
+              <li>RFQ intent: {itemHasIntent(item, RFQ_INTENT_NOTE) ? "Yes" : "No"}</li>
+              <li>Submittal intent: {itemHasIntent(item, SUBMITTAL_INTENT_NOTE) ? "Yes" : "No"}</li>
+            </ul>
+          </section>
+          <section className={`rounded-lg border p-4 ${costWarnings.length ? "border-orange-500/35 bg-orange-500/10" : "border-green-500/30 bg-green-500/10"}`}>
+            <h3 className="font-bold text-white">AI Estimator Watch</h3>
+            {costWarnings.length ? (
+              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-orange-100">
+                {costWarnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-green-200">This line has a home, quantity, cost, and no immediate RFQ/price warning.</p>
+            )}
+          </section>
+        </div>
+
+        <section className="mt-4 rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="font-bold text-white">Notes / Source Trail</h3>
+          {notes.length ? (
+            <pre className="mt-3 whitespace-pre-wrap rounded-md border border-border bg-background p-3 text-xs text-blue-100">{notes.join("\n")}</pre>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">No notes have been recorded for this line.</p>
+          )}
+        </section>
+
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
+          <Button onClick={() => onEdit(item)}>Edit Item</Button>
         </div>
       </div>
     </div>
@@ -806,6 +916,10 @@ function EstimateDetailView({
   predictiveSignals,
   onToggleItem,
   onRequestQuote,
+  onOpenProof,
+  onEditItem,
+  onDeleteItem,
+  onEditDetails,
   onMoveLine,
   rfqStatusForItem,
 }: {
@@ -819,6 +933,10 @@ function EstimateDetailView({
   predictiveSignals: Array<{ label: string; detail: string; severity: "high" | "medium" | "low" }>;
   onToggleItem: (id: string, checked: boolean) => void;
   onRequestQuote: (item: Record<string, unknown>) => void;
+  onOpenProof: (item: Record<string, unknown>) => void;
+  onEditItem: (item: Record<string, unknown>) => void;
+  onDeleteItem: (item: Record<string, unknown>) => void;
+  onEditDetails: () => void;
   onMoveLine: (item: Record<string, unknown>, siblings: Array<Record<string, unknown>>, direction: "up" | "down") => void;
   rfqStatusForItem: (item: Record<string, unknown>) => string;
 }) {
@@ -836,6 +954,7 @@ function EstimateDetailView({
     estimate?.bidDate ? `Bid Date: ${String(estimate.bidDate)}` : "",
     projectAddressLine(project, estimate),
   ].filter(Boolean).join(" | ");
+  const selectableItems = items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item));
 
   return (
     <div className="space-y-5">
@@ -844,7 +963,7 @@ function EstimateDetailView({
           <h1 className="max-w-3xl text-3xl font-black leading-tight tracking-tight text-white">{estimateName}</h1>
           <p className="mt-2 max-w-4xl text-sm text-blue-100">{projectMeta}</p>
         </div>
-        <Button variant="outline">Edit Details</Button>
+        <Button variant="outline" onClick={onEditDetails}>Edit Details</Button>
       </div>
 
       <section className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
@@ -887,8 +1006,9 @@ function EstimateDetailView({
                 <th className="w-12 p-3 text-left">
                   <input
                     type="checkbox"
-                    checked={items.length > 0 && items.every((item) => selectedItemIds.includes(String(item._id)))}
-                    onChange={(event) => items.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
+                    checked={selectableItems.length > 0 && selectableItems.every((item) => selectedItemIds.includes(String(item._id)))}
+                    disabled={!selectableItems.length}
+                    onChange={(event) => selectableItems.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
                   />
                 </th>
                 <th className="p-3 text-left">Description</th>
@@ -994,10 +1114,10 @@ function EstimateDetailView({
                                       onMoveUp={() => onMoveLine(item, milestoneItems, "up")}
                                       onMoveDown={() => onMoveLine(item, milestoneItems, "down")}
                                     />
-                                    <Button size="sm" variant="outline">Proof</Button>
+                                    <Button size="sm" variant="outline" onClick={() => onOpenProof(item)}>Proof</Button>
                                     <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
-                                    <Button size="sm" variant="outline">Edit</Button>
-                                    <Button size="sm" variant="destructive">x</Button>
+                                    <Button size="sm" variant="outline" onClick={() => onEditItem(item)}>Edit</Button>
+                                    <Button size="sm" variant="destructive" onClick={() => onDeleteItem(item)}>x</Button>
                                   </div>
                                 </td>
                               </tr>
@@ -1036,10 +1156,10 @@ function EstimateDetailView({
                                 onMoveUp={() => onMoveLine(item, unassignedItems, "up")}
                                 onMoveDown={() => onMoveLine(item, unassignedItems, "down")}
                               />
-                              <Button size="sm" variant="outline">Proof</Button>
+                              <Button size="sm" variant="outline" onClick={() => onOpenProof(item)}>Proof</Button>
                               <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
-                              <Button size="sm" variant="outline">Edit</Button>
-                              <Button size="sm" variant="destructive">x</Button>
+                              <Button size="sm" variant="outline" onClick={() => onEditItem(item)}>Edit</Button>
+                              <Button size="sm" variant="destructive" onClick={() => onDeleteItem(item)}>x</Button>
                             </div>
                           </td>
                         </tr>
@@ -1082,6 +1202,11 @@ function EstimatesListView({
   onStarterUnitChange,
   onStarterUnitCostChange,
   onCreateStarter,
+  onDuplicateEstimate,
+  onDeleteEstimate,
+  onNewEstimate,
+  onAutoBid,
+  onQuickTemplates,
 }: {
   rows: BidPortfolioRow[];
   selectedProject?: Record<string, unknown>;
@@ -1103,6 +1228,11 @@ function EstimatesListView({
   onStarterUnitChange: (value: string) => void;
   onStarterUnitCostChange: (value: string) => void;
   onCreateStarter: () => void;
+  onDuplicateEstimate: (estimate: Record<string, unknown>) => void;
+  onDeleteEstimate: (estimate: Record<string, unknown>) => void;
+  onNewEstimate: () => void;
+  onAutoBid: () => void;
+  onQuickTemplates: () => void;
 }) {
   const phaseSections = ESTIMATE_PHASE_LIBRARY[selectedPhase] || [];
   const sectionSuggestions = phaseSections.length ? phaseSections : [...new Set(Object.values(ESTIMATE_PHASE_LIBRARY).flat())].slice(0, 24);
@@ -1114,9 +1244,9 @@ function EstimatesListView({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
         <h1 className="text-2xl font-black text-white">Estimates</h1>
         <div className="flex flex-wrap gap-2">
-          <Button>+ New Estimate</Button>
-          <Button className="bg-purple-600 hover:bg-purple-500">AI Auto-Bid</Button>
-          <Button variant="outline">Quick Templates</Button>
+          <Button onClick={onNewEstimate}>+ New Estimate</Button>
+          <Button className="bg-purple-600 hover:bg-purple-500" onClick={onAutoBid}>AI Auto-Bid</Button>
+          <Button variant="outline" onClick={onQuickTemplates}>Quick Templates</Button>
         </div>
       </div>
 
@@ -1165,8 +1295,8 @@ function EstimatesListView({
                     <td className="p-3">
                       <div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" onClick={() => onOpenEstimate(row)}>{estimate?._id ? "Edit" : "Start"}</Button>
-                        <Button size="sm" variant="outline">Dup</Button>
-                        <Button size="sm" variant="destructive">x</Button>
+                        <Button size="sm" variant="outline" disabled={!estimate?._id} onClick={() => estimate?._id && onDuplicateEstimate(estimate)}>Dup</Button>
+                        <Button size="sm" variant="destructive" disabled={!estimate?._id} onClick={() => estimate?._id && onDeleteEstimate(estimate)}>x</Button>
                       </div>
                     </td>
                   </tr>
@@ -1316,11 +1446,13 @@ function ProductionRateBreakdownView({
   rows,
   summary,
   onBack,
+  onEditDetails,
 }: {
   estimate?: Record<string, unknown>;
   rows: ReturnType<typeof productionRowsForItems>;
   summary: ReturnType<typeof productionSummaryForRows>;
   onBack: () => void;
+  onEditDetails: () => void;
 }) {
   const groupedRows = rows.reduce((groups, row) => {
     const key = row.section || "Unassigned";
@@ -1340,11 +1472,11 @@ function ProductionRateBreakdownView({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button>Prevailing Rates</Button>
+          <Button onClick={() => window.alert("Prevailing rate editor is next in the production buildout. Current production math stays tied to the estimate rows shown below.")}>Prevailing Rates</Button>
           <Button variant="outline" onClick={onBack}>Back to Estimate</Button>
-          <Button variant="outline">Edit Details</Button>
+          <Button variant="outline" onClick={onEditDetails}>Edit Details</Button>
           <Button onClick={() => window.print()}>Print / PDF</Button>
-          <Button variant="outline">Recalculate</Button>
+          <Button variant="outline" onClick={() => window.alert("Production totals recalculate automatically from the current estimate lines.")}>Recalculate</Button>
         </div>
       </div>
 
@@ -1500,11 +1632,24 @@ function EstimatingWorkspace() {
   const updateRfq = useMutation(api.estimating.updateRfq);
   const createEstimate = useMutation(api.estimating.createEstimate);
   const updateEstimate = useMutation(api.estimating.updateEstimate);
+  const duplicateEstimate = useMutation(api.estimating.duplicateEstimate);
+  const deleteEstimate = useMutation(api.estimating.deleteEstimate);
   const createEstimateItem = useMutation(api.estimating.createEstimateItem);
   const updateEstimateItem = useMutation(api.estimating.updateEstimateItem);
+  const deleteEstimateItem = useMutation(api.estimating.deleteEstimateItem);
   const createVendor = useMutation(api.vendors.create);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [proofItem, setProofItem] = useState<Record<string, unknown> | null>(null);
+  const [editingItem, setEditingItem] = useState<Record<string, unknown> | null>(null);
+  const [editItemMilestone, setEditItemMilestone] = useState("");
+  const [editItemDescription, setEditItemDescription] = useState("");
+  const [editItemQuantity, setEditItemQuantity] = useState("1");
+  const [editItemUnit, setEditItemUnit] = useState("LS");
+  const [editItemTaxPct, setEditItemTaxPct] = useState("0");
+  const [editItemUnitCost, setEditItemUnitCost] = useState("0");
+  const [editItemRequestRfq, setEditItemRequestRfq] = useState(false);
+  const [editItemRequestSubmittal, setEditItemRequestSubmittal] = useState(false);
   const [inlineRfqItemId, setInlineRfqItemId] = useState("");
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const [pricingDueDate, setPricingDueDate] = useState("");
@@ -1610,10 +1755,131 @@ function EstimatingWorkspace() {
     const itemId = String(item._id);
     setInlineRfqItemId(itemId);
     setSelectedItemIds([itemId]);
+    setActiveTool("rfq");
   }
 
   function rfqStatusForItem(item: Record<string, unknown>) {
     return rfqStatusByItemId.get(String(item._id)) || "No RFQ";
+  }
+
+  function openItemEditor(item: Record<string, unknown>) {
+    const section = String(item.section || "");
+    const milestone = milestoneNameForItem(item);
+    const fallbackMilestone = estimateMilestoneOptions.find((option) => option.section === section) || estimateMilestoneOptions[0];
+    setEditingItem(item);
+    setEditItemMilestone(milestone ? `${section}::${milestone}` : fallbackMilestone ? `${fallbackMilestone.section}::${fallbackMilestone.milestone}` : "");
+    setEditItemDescription(String(item.description || ""));
+    setEditItemQuantity(String(item.quantity ?? "1"));
+    setEditItemUnit(String(item.unit || "LS"));
+    setEditItemTaxPct(String(item.taxPct ?? "0"));
+    setEditItemUnitCost(String(item.unitCost ?? "0"));
+    setEditItemRequestRfq(itemHasIntent(item, RFQ_INTENT_NOTE));
+    setEditItemRequestSubmittal(itemHasIntent(item, SUBMITTAL_INTENT_NOTE));
+  }
+
+  function cleanItemNotesForEdit(item: Record<string, unknown>) {
+    return String(item.notes || "")
+      .split("\n")
+      .filter((line) => {
+        const trimmed = line.trim();
+        return trimmed &&
+          !trimmed.startsWith(MILESTONE_ITEM_NOTE_PREFIX) &&
+          !trimmed.startsWith(RFQ_INTENT_NOTE) &&
+          !trimmed.startsWith(SUBMITTAL_INTENT_NOTE);
+      });
+  }
+
+  async function saveEditedItemLine() {
+    if (!editingItem?._id) return;
+    const [sectionName, milestoneName] = editItemMilestone.split("::");
+    const description = editItemDescription.trim();
+    if (!sectionName || !milestoneName || !description) return;
+    const notes = [
+      `${MILESTONE_ITEM_NOTE_PREFIX} ${milestoneName}`,
+      ...cleanItemNotesForEdit(editingItem),
+      editItemRequestRfq ? `${RFQ_INTENT_NOTE}: Draft RFQ requested during item edit.` : "",
+      editItemRequestSubmittal ? `${SUBMITTAL_INTENT_NOTE}: Submittal draft requested during item edit.` : "",
+    ].filter(Boolean).join("\n");
+    await updateEstimateItem({
+      id: editingItem._id as Id<"estimateItems">,
+      section: sectionName,
+      description,
+      quantity: Number(editItemQuantity || 0) || 0,
+      unit: editItemUnit.trim() || "LS",
+      unitCost: Number(editItemUnitCost || 0) || 0,
+      taxPct: Number(editItemTaxPct || 0) || 0,
+      notes,
+    });
+    if (editItemRequestRfq && selectedEstimate?._id && user && rfqStatusForItem(editingItem) === "No RFQ") {
+      await createRfq({
+        companyId: user.companyId,
+        estimateId: selectedEstimate._id as Id<"estimates">,
+        vendorName: "TBD supplier",
+        status: "draft",
+        notes: JSON.stringify({
+          specNotes: `RFQ requested during item edit for ${description}.`,
+          itemIds: [String(editingItem._id)],
+          itemSnapshots: [{
+            id: String(editingItem._id),
+            description,
+            quantity: Number(editItemQuantity || 0) || 0,
+            unit: editItemUnit.trim() || "LS",
+            unitCost: Number(editItemUnitCost || 0) || 0,
+            section: sectionName,
+            milestone: milestoneName,
+          }],
+          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nMilestone: ${milestoneName}\nQty: ${editItemQuantity || 0} ${editItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
+        }),
+      });
+    }
+    setEditingItem(null);
+  }
+
+  async function deleteBidItem(item: Record<string, unknown>) {
+    if (!item?._id) return;
+    const label = String(item.description || item.section || "this estimate line");
+    if (typeof window !== "undefined" && !window.confirm(`Delete ${label}?`)) return;
+    await deleteEstimateItem({ id: item._id as Id<"estimateItems"> });
+    setSelectedItemIds((current) => current.filter((itemId) => itemId !== String(item._id)));
+    if (String(proofItem?._id || "") === String(item._id)) setProofItem(null);
+  }
+
+  async function duplicateEstimateRow(estimate: Record<string, unknown>) {
+    if (!estimate?._id) return;
+    const newId = await duplicateEstimate({ id: estimate._id as Id<"estimates"> });
+    setSelectedEstimateId(String(newId));
+    setActiveTool("estimate-detail");
+  }
+
+  async function deleteEstimateRow(estimate: Record<string, unknown>) {
+    if (!estimate?._id) return;
+    const label = String(estimate.name || "this estimate");
+    if (typeof window !== "undefined" && !window.confirm(`Delete ${label} and all bid items/RFQs?`)) return;
+    await deleteEstimate({ id: estimate._id as Id<"estimates"> });
+    if (String(selectedEstimate?._id || "") === String(estimate._id)) setSelectedEstimateId("");
+    setSelectedItemIds([]);
+    setActiveTool("estimates");
+  }
+
+  function startNewEstimateFlow() {
+    if (!selectedProject) {
+      if (typeof window !== "undefined") window.alert("Choose a project in the Estimating Cockpit first, then click + New Estimate.");
+      setActiveTool("cockpit");
+      return;
+    }
+    setSelectedBuilderPhase("");
+    setSelectedBuilderSection("");
+    setStarterDescription("");
+    setActiveTool("estimates");
+  }
+
+  function openAutoBidQueue() {
+    if (typeof window !== "undefined") window.alert("AI Auto-Bid is staged as a review-first tool. Use AI Tools from an open estimate to review scope, RFQs, submittals, and risks before creating draft actions.");
+    setActiveTool("war-room");
+  }
+
+  function openQuickTemplates() {
+    if (typeof window !== "undefined") window.alert("Quick Templates are being tied to the cost database and historical bid database. For now, use + Section, + Milestone, and + Add Item to keep this estimate structured.");
   }
 
   function openPortfolioRow(row: BidPortfolioRow) {
@@ -1931,7 +2197,7 @@ function EstimatingWorkspace() {
           specNotes: `RFQ requested at item creation for ${description}.`,
           itemIds: [String(itemIdCreated)],
           itemSnapshots: [{
-            _id: String(itemIdCreated),
+            id: String(itemIdCreated),
             description,
             quantity: Number(newItemQuantity || 0) || 0,
             unit: newItemUnit.trim() || "LS",
@@ -2115,6 +2381,44 @@ function EstimatingWorkspace() {
           onRequestSubmittalChange={setNewItemRequestSubmittal}
           onCancel={() => setBidItemModalOpen(false)}
           onContinue={() => void saveBidItemLine()}
+        />
+        <BidItemModal
+          open={Boolean(editingItem)}
+          title="Edit Estimate Item"
+          intro="Keep the bid item tied to a milestone while updating quantity, unit, cost, RFQ intent, and submittal intent."
+          submitLabel="Save Item Changes"
+          milestoneOptions={estimateMilestoneOptions}
+          selectedMilestone={editItemMilestone}
+          description={editItemDescription}
+          quantity={editItemQuantity}
+          unit={editItemUnit}
+          taxPct={editItemTaxPct}
+          unitCost={editItemUnitCost}
+          requestRfq={editItemRequestRfq}
+          requestSubmittal={editItemRequestSubmittal}
+          onMilestoneChange={setEditItemMilestone}
+          onDescriptionChange={setEditItemDescription}
+          onQuantityChange={setEditItemQuantity}
+          onUnitChange={setEditItemUnit}
+          onTaxPctChange={setEditItemTaxPct}
+          onUnitCostChange={setEditItemUnitCost}
+          onRequestRfqChange={setEditItemRequestRfq}
+          onRequestSubmittalChange={setEditItemRequestSubmittal}
+          onCancel={() => setEditingItem(null)}
+          onContinue={() => void saveEditedItemLine()}
+        />
+        <ProofModal
+          item={proofItem}
+          rfqStatus={proofItem ? rfqStatusForItem(proofItem) : "No RFQ"}
+          onClose={() => setProofItem(null)}
+          onEdit={(item) => {
+            setProofItem(null);
+            openItemEditor(item);
+          }}
+          onRequestQuote={(item) => {
+            setProofItem(null);
+            requestQuoteForItem(item);
+          }}
         />
         <div className="xl:hidden">
           <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimator Command Center</label>
@@ -2306,6 +2610,7 @@ function EstimatingWorkspace() {
             rows={productionRows}
             summary={productionSummary}
             onBack={() => setActiveTool("estimate-detail")}
+            onEditDetails={() => setActiveTool("estimates")}
           />
         ) : activeTool === "estimate-detail" ? (
           <EstimateDetailView
@@ -2319,6 +2624,10 @@ function EstimatingWorkspace() {
             predictiveSignals={predictiveSignals}
             onToggleItem={toggleItem}
             onRequestQuote={requestQuoteForItem}
+            onOpenProof={setProofItem}
+            onEditItem={openItemEditor}
+            onDeleteItem={(item) => void deleteBidItem(item)}
+            onEditDetails={() => setActiveTool("estimates")}
             onMoveLine={(item, siblings, direction) => void moveEstimateLine(item, siblings, direction)}
             rfqStatusForItem={rfqStatusForItem}
           />
@@ -2344,6 +2653,11 @@ function EstimatingWorkspace() {
             onStarterUnitChange={setStarterUnit}
             onStarterUnitCostChange={setStarterUnitCost}
             onCreateStarter={() => void createStarterEstimate()}
+            onDuplicateEstimate={(estimate) => void duplicateEstimateRow(estimate)}
+            onDeleteEstimate={(estimate) => void deleteEstimateRow(estimate)}
+            onNewEstimate={startNewEstimateFlow}
+            onAutoBid={openAutoBidQueue}
+            onQuickTemplates={openQuickTemplates}
           />
         ) : activeTool !== "rfq" ? stagedTool : (
     <div className="space-y-5">

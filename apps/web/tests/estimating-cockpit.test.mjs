@@ -59,6 +59,14 @@ for (const moonshotFlow of ["MoveControls", "ORDER_NOTE_PREFIX", "OPSSLATE_ORDER
   assert.ok(page.includes(moonshotFlow), `hierarchy moonshot workflow should include ${moonshotFlow}`);
 }
 
+for (const actionWiring of ["ProofModal", "onOpenProof", "openItemEditor", "saveEditedItemLine", "deleteBidItem", "deleteEstimateItem", "duplicateEstimateRow", "deleteEstimateRow", "onDuplicateEstimate", "onDeleteEstimate", "Save Item Changes"]) {
+  assert.ok(page.includes(actionWiring), `estimating page should wire visible action buttons: ${actionWiring}`);
+}
+
+assert.match(page, /setActiveTool\("rfq"\)/, "request RFQ from a bid line should open the RFQ workspace");
+assert.match(page, /itemSnapshots:\s*\[\{\s*id:/, "RFQ drafts created from item actions should store item snapshot ids consistently");
+assert.doesNotMatch(page, /itemSnapshots:\s*\[\{\s*_id:/, "RFQ item snapshots should not use _id when comparison reads snapshot.id");
+
 for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total", "Request RFQ", "No bid items yet"]) {
   assert.ok(page.includes(detailText), `estimate detail worksheet should include ${detailText}`);
 }
