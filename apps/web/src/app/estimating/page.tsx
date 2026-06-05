@@ -708,6 +708,7 @@ function EstimatesListView({
   onCreateStarter: () => void;
 }) {
   const phaseSections = ESTIMATE_PHASE_LIBRARY[selectedPhase] || [];
+  const sectionSuggestions = phaseSections.length ? phaseSections : [...new Set(Object.values(ESTIMATE_PHASE_LIBRARY).flat())].slice(0, 24);
   const starterItems = ESTIMATE_ITEM_STARTERS[selectedSection] || ESTIMATE_ITEM_STARTERS[selectedPhase] || [];
   const selectedProjectHasEstimate = selectedProject ? rows.some((row) => row.project && recordId(row.project) === recordId(selectedProject) && row.estimate) : false;
 
@@ -788,10 +789,10 @@ function EstimatesListView({
         <section className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-5">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <Badge className="mb-2 bg-orange-500/20 text-orange-200">Guided Estimate Builder</Badge>
-              <h2 className="text-2xl font-black text-white">Start the estimate structure</h2>
+              <Badge className="mb-2 bg-orange-500/20 text-orange-200">Blank Estimate Slate</Badge>
+              <h2 className="text-2xl font-black text-white">Build the estimate structure</h2>
               <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Build the job the way the field will see it: phase, section, then priced bid item.
+                Type the phase, section, milestone, and item freely. OpsSlate keeps every item attached to a home before it can enter the estimate.
               </p>
             </div>
             <div className="rounded-lg border border-border bg-background/60 px-4 py-3 text-sm text-blue-100">
@@ -801,21 +802,32 @@ function EstimatesListView({
           </div>
 
           <div className="mt-5 rounded-lg border border-border bg-card">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background/55 p-3">
+              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-yellow-500/35 bg-yellow-500/85 px-3 text-xs font-bold text-black hover:bg-yellow-400" onClick={() => { onSelectedPhaseChange(""); onSelectedSectionChange(""); onStarterDescriptionChange(""); }}>+ Phase</button>
+              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-blue-500/35 bg-blue-500/80 px-3 text-xs font-bold text-white hover:bg-blue-500" onClick={() => { onSelectedSectionChange(""); onStarterDescriptionChange(""); }}>+ Section</button>
+              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-orange-500/35 bg-orange-500/85 px-3 text-xs font-bold text-white hover:bg-orange-500" onClick={() => onStarterDescriptionChange(starterDescription || "Milestone - ")}>+ Milestone</button>
+              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-green-500/35 bg-green-500/85 px-3 text-xs font-bold text-white hover:bg-green-500" disabled={!selectedPhase.trim() || !selectedSection.trim() || !starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>+ Add Item</button>
+            </div>
+
             <div className="border-b border-border bg-secondary/40 p-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div className="text-xs font-bold uppercase tracking-[0.14em] text-orange-300">Phase</div>
-                  <h3 className="mt-1 text-xl font-black text-white">{selectedPhase}</h3>
+                  <h3 className="mt-1 text-xl font-black text-white">{selectedPhase || "No phase named yet"}</h3>
                 </div>
-                <select
+                <input
+                  list="estimate-phase-suggestions"
                   value={selectedPhase}
                   onChange={(event) => onSelectedPhaseChange(event.target.value)}
+                  placeholder="Type phase name, e.g. Preconstruction"
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white lg:w-80"
-                >
-                  {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => <option key={phase} value={phase}>{phase}</option>)}
-                </select>
+                />
+                <datalist id="estimate-phase-suggestions">
+                  {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => <option key={phase} value={phase} />)}
+                </datalist>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
+                <span className="self-center text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Optional suggestions</span>
                 {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => (
                   <button
                     key={phase}
@@ -833,18 +845,22 @@ function EstimatesListView({
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <div className="text-xs font-bold uppercase tracking-[0.14em] text-blue-300">Section Under Phase</div>
-                  <h3 className="mt-1 text-lg font-black text-white">{selectedSection}</h3>
+                  <h3 className="mt-1 text-lg font-black text-white">{selectedSection || "No section named yet"}</h3>
                 </div>
-                <select
+                <input
+                  list="estimate-section-suggestions"
                   value={selectedSection}
                   onChange={(event) => onSelectedSectionChange(event.target.value)}
+                  placeholder="Type section name, e.g. Mobilization"
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white lg:w-80"
-                >
-                  {phaseSections.map((section) => <option key={section} value={section}>{section}</option>)}
-                </select>
+                />
+                <datalist id="estimate-section-suggestions">
+                  {sectionSuggestions.map((section) => <option key={section} value={section} />)}
+                </datalist>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {phaseSections.map((section) => (
+              {!!sectionSuggestions.length && <div className="mt-3 flex flex-wrap gap-2">
+                <span className="self-center text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Optional suggestions</span>
+                {sectionSuggestions.map((section) => (
                   <button
                     key={section}
                     type="button"
@@ -854,7 +870,7 @@ function EstimatesListView({
                     {section}
                   </button>
                 ))}
-              </div>
+              </div>}
             </div>
 
             <div className="p-4 pl-12">
@@ -864,7 +880,7 @@ function EstimatesListView({
                   value={starterDescription}
                   onChange={(event) => onStarterDescriptionChange(event.target.value)}
                   className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-                  placeholder="Move equipment to site"
+                  placeholder="Type item or milestone name..."
                 />
                 <input value={starterQuantity} onChange={(event) => onStarterQuantityChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Qty" />
                 <input value={starterUnit} onChange={(event) => onStarterUnitChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit" />
@@ -885,9 +901,9 @@ function EstimatesListView({
                 </div>
               )}
               <div className="mt-4 flex flex-col gap-3 rounded-md border border-border bg-background/50 p-3 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
-                <span>This will create the estimate and file the first item under <span className="font-bold text-white">{selectedPhase} / {selectedSection}</span>.</span>
-                <Button disabled={!starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>
-                  {creatingStarter ? "Creating estimate..." : "Create Estimate + First Item"}
+                <span>{selectedPhase.trim() && selectedSection.trim() ? <>This will create the estimate and file the first item under <span className="font-bold text-white">{selectedPhase} / {selectedSection}</span>.</> : "Guardrail: an item cannot be created until Phase, Section, and Item are filled in."}</span>
+                <Button disabled={!selectedPhase.trim() || !selectedSection.trim() || !starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>
+                  {creatingStarter ? "Creating estimate..." : "Create Estimate + Add Item"}
                 </Button>
               </div>
             </div>
@@ -1086,9 +1102,9 @@ function EstimatingWorkspace() {
   const [signatureProfile, setSignatureProfile] = useState<CorrespondenceSignatureProfile>(() => defaultSignatureProfile(user));
   const [creatingDrafts, setCreatingDrafts] = useState(false);
   const [newVendor, setNewVendor] = useState({ name: "", contactName: "", email: "", phone: "", category: "Material Supplier" });
-  const [selectedBuilderPhase, setSelectedBuilderPhase] = useState("Preconstruction");
-  const [selectedBuilderSection, setSelectedBuilderSection] = useState("Mobilization");
-  const [starterDescription, setStarterDescription] = useState("Move equipment to site");
+  const [selectedBuilderPhase, setSelectedBuilderPhase] = useState("");
+  const [selectedBuilderSection, setSelectedBuilderSection] = useState("");
+  const [starterDescription, setStarterDescription] = useState("");
   const [starterQuantity, setStarterQuantity] = useState("1");
   const [starterUnit, setStarterUnit] = useState("LS");
   const [starterUnitCost, setStarterUnitCost] = useState("0");
@@ -1162,13 +1178,6 @@ function EstimatingWorkspace() {
     }
   }, []);
 
-  useEffect(() => {
-    const sections = ESTIMATE_PHASE_LIBRARY[selectedBuilderPhase] || [];
-    if (sections.length && !sections.includes(selectedBuilderSection)) {
-      setSelectedBuilderSection(sections[0]);
-    }
-  }, [selectedBuilderPhase, selectedBuilderSection]);
-
   function toggleItem(id: string, checked: boolean) {
     setSelectedItemIds((current) => checked ? [...new Set([...current, id])] : current.filter((itemId) => itemId !== id));
   }
@@ -1195,7 +1204,10 @@ function EstimatingWorkspace() {
   }
 
   async function createStarterEstimate() {
-    if (!user || !selectedProject || !starterDescription.trim()) return;
+    const phaseName = selectedBuilderPhase.trim();
+    const sectionName = selectedBuilderSection.trim();
+    const itemName = starterDescription.trim();
+    if (!user || !selectedProject || !phaseName || !sectionName || !itemName) return;
     setCreatingStarterEstimate(true);
     try {
       const projectName = projectDisplayName(selectedProject);
@@ -1208,7 +1220,7 @@ function EstimatingWorkspace() {
         location,
         status: "draft",
         bidType: portfolioTypeLabel(selectedProject),
-        description: `Estimate started from ${selectedBuilderPhase} / ${selectedBuilderSection}`,
+        description: `Estimate started from blank slate guardrail: ${phaseName} / ${sectionName}`,
       });
       await updateEstimate({
         id: estimateIdCreated as Id<"estimates">,
@@ -1217,13 +1229,13 @@ function EstimatingWorkspace() {
       await createEstimateItem({
         companyId: user.companyId,
         estimateId: estimateIdCreated as Id<"estimates">,
-        section: `${selectedBuilderPhase} / ${selectedBuilderSection}`,
-        description: starterDescription.trim(),
+        section: `${phaseName} / ${sectionName}`,
+        description: itemName,
         quantity: Number(starterQuantity || 0) || 0,
         unit: starterUnit.trim() || "LS",
         unitCost: Number(starterUnitCost || 0) || 0,
         taxPct: 0,
-        notes: "Created from guided Phase / Section / Item estimate builder.",
+        notes: "Created from blank estimate slate with Phase / Section / Item guardrails.",
       });
       setSelectedEstimateId(String(estimateIdCreated));
       setSelectedItemIds([]);

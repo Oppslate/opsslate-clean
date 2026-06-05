@@ -47,8 +47,8 @@ for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total
   assert.ok(page.includes(detailText), `estimate detail worksheet should include ${detailText}`);
 }
 
-for (const builderText of ["Guided Estimate Builder", "Phase", "Section Under Phase", "Item Under Section", "Create Estimate + First Item", "ESTIMATE_PHASE_LIBRARY"]) {
-  assert.ok(page.includes(builderText), `guided estimate builder should include ${builderText}`);
+for (const builderText of ["Blank Estimate Slate", "Build the estimate structure", "Phase", "Section Under Phase", "Item Under Section", "Guardrail: an item cannot be created until Phase, Section, and Item are filled in.", "Create Estimate + Add Item", "ESTIMATE_PHASE_LIBRARY"]) {
+  assert.ok(page.includes(builderText), `blank estimate slate should include ${builderText}`);
 }
 
 for (const productionTool of ["Ops-Takeoff", "Production Breakdown", "Equipment Analyzer", "Equipment Dealers"]) {
