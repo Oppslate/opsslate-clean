@@ -79,6 +79,9 @@ const MILESTONE_ITEM_NOTE_PREFIX = "OPSSLATE_MILESTONE:";
 const ORDER_NOTE_PREFIX = "OPSSLATE_ORDER:";
 const RFQ_INTENT_NOTE = "OPSSLATE_RFQ_INTENT";
 const SUBMITTAL_INTENT_NOTE = "OPSSLATE_SUBMITTAL_INTENT";
+const SNIPPET_NOTE_PREFIX = "OPSSLATE_SNIPPET:";
+const ESTIMATE_HANDOFF_PREFIX = "OPSSLATE_HANDOFF:";
+const ESTIMATOR_ACTION_PREFIX = "OPSSLATE_CICERO_ACTION:";
 
 const COMMON_MILESTONES = [
   "Pre-bid review",
@@ -119,6 +122,65 @@ function notesWithOrder(notes: unknown, order: number) {
 
 function itemHasIntent(item: Record<string, unknown>, intent: string) {
   return String(item.notes || "").includes(intent);
+}
+
+function parseJsonNoteLines(notes: unknown, prefix: string) {
+  return String(notes || "")
+    .split("\n")
+    .filter((line) => line.startsWith(prefix))
+    .map((line) => {
+      try {
+        return JSON.parse(line.replace(prefix, "").trim());
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean) as Array<Record<string, unknown>>;
+}
+
+function snippetsForItem(item: Record<string, unknown>) {
+  return parseJsonNoteLines(item.notes, SNIPPET_NOTE_PREFIX);
+}
+
+function handoffsForEstimate(estimate?: Record<string, unknown>) {
+  return parseJsonNoteLines(estimate?.notes, ESTIMATE_HANDOFF_PREFIX);
+}
+
+function ciceroActionsForEstimate(estimate?: Record<string, unknown>) {
+  return parseJsonNoteLines(estimate?.notes, ESTIMATOR_ACTION_PREFIX);
+}
+
+function appendNoteLine(notes: unknown, line: string) {
+  return [String(notes || "").trim(), line].filter(Boolean).join("\n");
+}
+
+function estimatorCoverageMetrics({
+  estimate,
+  items,
+  rfqSummary,
+}: {
+  estimate?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  rfqSummary: ReturnType<typeof rfqCounts>;
+}) {
+  const pricedItems = items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item));
+  const withMilestone = pricedItems.filter((item) => milestoneNameForItem(item)).length;
+  const priced = pricedItems.filter((item) => Number(item.unitCost || 0) > 0).length;
+  const snippetCount = pricedItems.reduce((sum, item) => sum + snippetsForItem(item).length, 0);
+  const handoffs = handoffsForEstimate(estimate);
+  const pmReady = Boolean(estimate?.projectId) && pricedItems.length > 0 && priced === pricedItems.length;
+  const schedulerReady = pricedItems.length > 0 && withMilestone === pricedItems.length;
+  return {
+    pricedItems,
+    pricedCount: priced,
+    withMilestone,
+    snippetCount,
+    rfqOpen: rfqSummary.open,
+    handoffs,
+    pmReady,
+    schedulerReady,
+    coverageScore: pricedItems.length ? Math.round(((priced / pricedItems.length) * 0.45 + (withMilestone / pricedItems.length) * 0.35 + (snippetCount ? 0.1 : 0) + (handoffs.length ? 0.1 : 0)) * 100) : 0,
+  };
 }
 
 function sortByEstimateOrder(items: Array<Record<string, unknown>>) {
@@ -792,6 +854,7 @@ function ProofModal({
   const lineTotal = quantity * unitCost;
   const extended = itemLineTotal(item);
   const notes = String(item.notes || "").split("\n").filter((line) => line.trim());
+  const snippets = snippetsForItem(item);
   const costWarnings = [
     !quantity ? "Quantity is zero or missing." : "",
     !unitCost ? "Unit cost is zero or missing." : "",
@@ -864,6 +927,23 @@ function ProofModal({
           )}
         </section>
 
+        <section className="mt-4 rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="font-bold text-white">Snippets</h3>
+          {snippets.length ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {snippets.map((snippet) => (
+                <div key={String(snippet.id || snippet.title)} className="rounded-lg border border-border bg-card p-3">
+                  <div className="text-sm font-bold text-white">{String(snippet.title || "Snippet")}</div>
+                  <div className="text-xs text-muted-foreground">{String(snippet.purpose || "Proof")}</div>
+                  {snippet.image ? <img src={String(snippet.image)} alt={String(snippet.title || "Snippet")} className="mt-3 max-h-48 w-full rounded-md border border-border object-contain" /> : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted-foreground">No snippets attached yet. Add one from the line item actions.</p>
+          )}
+        </section>
+
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Close</Button>
           <Button variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
@@ -871,6 +951,216 @@ function ProofModal({
         </div>
       </div>
     </div>
+  );
+}
+
+function SnippetModal({
+  item,
+  snippetTitle,
+  snippetPurpose,
+  snippetImage,
+  onTitleChange,
+  onPurposeChange,
+  onImageChange,
+  onCancel,
+  onSave,
+}: {
+  item: Record<string, unknown> | null;
+  snippetTitle: string;
+  snippetPurpose: string;
+  snippetImage: string;
+  onTitleChange: (value: string) => void;
+  onPurposeChange: (value: string) => void;
+  onImageChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  if (!item) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-3xl rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <Badge className="mb-3 bg-purple-500/15 text-purple-200">Snippet Tool</Badge>
+        <h2 className="text-2xl font-black text-white">Attach Field / Plan Snippet</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Attach a quick image to {String(item.description || "this line")} for RFQ, RFI, proof, or PM handoff context.
+        </p>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_240px]">
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Snippet title</label>
+              <input
+                value={snippetTitle}
+                onChange={(event) => onTitleChange(event.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+                placeholder="Example: Bollard detail, feeder route conflict, asphalt note"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Use for</label>
+              <select
+                value={snippetPurpose}
+                onChange={(event) => onPurposeChange(event.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              >
+                <option>RFQ Backup</option>
+                <option>RFI Question</option>
+                <option>Plan Proof</option>
+                <option>PM Handoff</option>
+                <option>Scheduler Constraint</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Image</label>
+              <input
+                type="file"
+                accept="image/*"
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-blue-100"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 450000) {
+                    window.alert("Snippet image is too large for this quick line-note tool. Use a smaller screenshot for now.");
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => onImageChange(String(reader.result || ""));
+                  reader.readAsDataURL(file);
+                }}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">Small screenshots are saved on the line item so they can travel with RFQs, RFIs, and handoff review.</p>
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-background/50 p-3">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Preview</div>
+            {snippetImage ? (
+              <img src={snippetImage} alt="Snippet preview" className="mt-3 max-h-56 w-full rounded-md border border-border object-contain" />
+            ) : (
+              <div className="mt-3 grid h-56 place-items-center rounded-md border border-dashed border-border text-center text-xs text-muted-foreground">
+                Upload a plan, field, or spec screenshot.
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button disabled={!snippetTitle.trim() || !snippetImage} onClick={onSave}>Save Snippet</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CiceroCommandPanel({
+  estimate,
+  items,
+  rfqSummary,
+  scheduleScore,
+  onGoToRfq,
+  onGoToProduction,
+  onCreateAction,
+}: {
+  estimate?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  rfqSummary: ReturnType<typeof rfqCounts>;
+  scheduleScore: number;
+  onGoToRfq: () => void;
+  onGoToProduction: () => void;
+  onCreateAction: (action: string) => void;
+}) {
+  const metrics = estimatorCoverageMetrics({ estimate, items, rfqSummary });
+  const zeroCost = metrics.pricedItems.filter((item) => Number(item.unitCost || 0) <= 0).length;
+  const noMilestone = metrics.pricedItems.length - metrics.withMilestone;
+  const actions = [
+    zeroCost ? { label: "Price placeholders", detail: `${zeroCost} item${zeroCost === 1 ? "" : "s"} need real cost or RFQ coverage.`, cta: "Create pricing action", run: () => onCreateAction("Review zero-cost placeholders and either price them or send RFQs.") } : null,
+    rfqSummary.open ? { label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", run: onGoToRfq } : null,
+    noMilestone ? { label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
+    scheduleScore < 80 ? { label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", run: onGoToProduction } : null,
+  ].filter(Boolean) as Array<{ label: string; detail: string; cta: string; run: () => void }>;
+
+  return (
+    <section className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Badge className="mb-2 bg-cyan-500/15 text-cyan-200">Cicero Estimator</Badge>
+          <h2 className="text-xl font-black text-white">Master estimate command</h2>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Cicero is watching price coverage, milestone structure, RFQs, snippets, and handoff readiness before this bid leaves estimating.</p>
+        </div>
+        <div className="rounded-lg border border-border bg-background/60 px-4 py-3 text-right">
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Bid Survival Score</div>
+          <div className="text-2xl font-black text-green-400">{metrics.coverageScore}%</div>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        {[
+          ["Priced", `${metrics.pricedCount}/${metrics.pricedItems.length}`],
+          ["Milestoned", `${metrics.withMilestone}/${metrics.pricedItems.length}`],
+          ["Snippets", metrics.snippetCount],
+          ["Handoffs", metrics.handoffs.length],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="rounded-md border border-border bg-background/50 p-3">
+            <div className="text-lg font-black text-white">{String(value)}</div>
+            <div className="text-xs text-blue-100">{label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+        {actions.length ? actions.map((action) => (
+          <div key={action.label} className="flex flex-col gap-3 rounded-lg border border-border bg-background/55 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-bold text-white">{action.label}</div>
+              <div className="text-xs text-muted-foreground">{action.detail}</div>
+            </div>
+            <Button size="sm" variant="outline" onClick={action.run}>{action.cta}</Button>
+          </div>
+        )) : (
+          <div className="rounded-lg border border-green-500/25 bg-green-500/10 p-3 text-sm text-green-200">No critical estimator actions right now. Keep building the bid, then run production and RFQ review before submission.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function HandoffPipelinePanel({
+  estimate,
+  items,
+  rfqSummary,
+  onSendToPm,
+  onSendToScheduler,
+}: {
+  estimate?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  rfqSummary: ReturnType<typeof rfqCounts>;
+  onSendToPm: () => void;
+  onSendToScheduler: () => void;
+}) {
+  const metrics = estimatorCoverageMetrics({ estimate, items, rfqSummary });
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-lg font-black text-white">Estimating Pipeline</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Move the bid intelligence forward only when the estimating evidence is ready.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={onSendToPm}>Send to PM</Button>
+          <Button variant="outline" onClick={onSendToScheduler}>Send to Scheduler</Button>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className={`rounded-lg border p-3 ${metrics.pmReady ? "border-green-500/30 bg-green-500/10" : "border-orange-500/30 bg-orange-500/10"}`}>
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">PM handoff</div>
+          <div className="mt-1 font-bold text-white">{metrics.pmReady ? "Ready to brief PM" : "Needs price/project context"}</div>
+        </div>
+        <div className={`rounded-lg border p-3 ${metrics.schedulerReady ? "border-green-500/30 bg-green-500/10" : "border-orange-500/30 bg-orange-500/10"}`}>
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Scheduler handoff</div>
+          <div className="mt-1 font-bold text-white">{metrics.schedulerReady ? "Milestones aligned" : "Tie items to milestones"}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-background/50 p-3">
+          <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Last handoff</div>
+          <div className="mt-1 font-bold text-white">{String(metrics.handoffs.at(-1)?.destination || "None yet")}</div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -919,7 +1209,16 @@ function EstimateDetailView({
   onOpenProof,
   onEditItem,
   onDeleteItem,
+  onAttachSnippet,
+  onCreateRfi,
+  onCreateSubmittal,
+  onPushToSchedule,
   onEditDetails,
+  onGoToRfq,
+  onGoToProduction,
+  onCreateCiceroAction,
+  onSendToPm,
+  onSendToScheduler,
   onMoveLine,
   rfqStatusForItem,
 }: {
@@ -936,7 +1235,16 @@ function EstimateDetailView({
   onOpenProof: (item: Record<string, unknown>) => void;
   onEditItem: (item: Record<string, unknown>) => void;
   onDeleteItem: (item: Record<string, unknown>) => void;
+  onAttachSnippet: (item: Record<string, unknown>) => void;
+  onCreateRfi: (item: Record<string, unknown>) => void;
+  onCreateSubmittal: (item: Record<string, unknown>) => void;
+  onPushToSchedule: (item: Record<string, unknown>) => void;
   onEditDetails: () => void;
+  onGoToRfq: () => void;
+  onGoToProduction: () => void;
+  onCreateCiceroAction: (action: string) => void;
+  onSendToPm: () => void;
+  onSendToScheduler: () => void;
   onMoveLine: (item: Record<string, unknown>, siblings: Array<Record<string, unknown>>, direction: "up" | "down") => void;
   rfqStatusForItem: (item: Record<string, unknown>) => string;
 }) {
@@ -985,6 +1293,24 @@ function EstimateDetailView({
         <p className="mt-1 text-xs text-muted-foreground">Action cards include Approve, Review, and Dismiss controls.</p>
         <p className="mt-4 text-sm text-blue-100">{predictiveSignals.length ? `${predictiveSignals.length} bid signal${predictiveSignals.length === 1 ? "" : "s"} need estimator review.` : "No actions in this lane right now."}</p>
       </section>
+
+      <CiceroCommandPanel
+        estimate={estimate}
+        items={items}
+        rfqSummary={rfqSummary}
+        scheduleScore={scheduleScore}
+        onGoToRfq={onGoToRfq}
+        onGoToProduction={onGoToProduction}
+        onCreateAction={onCreateCiceroAction}
+      />
+
+      <HandoffPipelinePanel
+        estimate={estimate}
+        items={items}
+        rfqSummary={rfqSummary}
+        onSendToPm={onSendToPm}
+        onSendToScheduler={onSendToScheduler}
+      />
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4 text-sm">
@@ -1116,6 +1442,10 @@ function EstimateDetailView({
                                     />
                                     <Button size="sm" variant="outline" onClick={() => onOpenProof(item)}>Proof</Button>
                                     <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
+                                    <Button size="sm" variant="outline" onClick={() => onCreateRfi(item)}>RFI</Button>
+                                    <Button size="sm" variant="outline" onClick={() => onCreateSubmittal(item)}>Submittal</Button>
+                                    <Button size="sm" variant="outline" onClick={() => onPushToSchedule(item)}>Schedule</Button>
+                                    <Button size="sm" variant="outline" onClick={() => onAttachSnippet(item)}>Snippet</Button>
                                     <Button size="sm" variant="outline" onClick={() => onEditItem(item)}>Edit</Button>
                                     <Button size="sm" variant="destructive" onClick={() => onDeleteItem(item)}>x</Button>
                                   </div>
@@ -1158,6 +1488,10 @@ function EstimateDetailView({
                               />
                               <Button size="sm" variant="outline" onClick={() => onOpenProof(item)}>Proof</Button>
                               <Button size="sm" variant="outline" onClick={() => onRequestQuote(item)}>Request RFQ</Button>
+                              <Button size="sm" variant="outline" onClick={() => onCreateRfi(item)}>RFI</Button>
+                              <Button size="sm" variant="outline" onClick={() => onCreateSubmittal(item)}>Submittal</Button>
+                              <Button size="sm" variant="outline" onClick={() => onPushToSchedule(item)}>Schedule</Button>
+                              <Button size="sm" variant="outline" onClick={() => onAttachSnippet(item)}>Snippet</Button>
                               <Button size="sm" variant="outline" onClick={() => onEditItem(item)}>Edit</Button>
                               <Button size="sm" variant="destructive" onClick={() => onDeleteItem(item)}>x</Button>
                             </div>
@@ -1638,6 +1972,9 @@ function EstimatingWorkspace() {
   const updateEstimateItem = useMutation(api.estimating.updateEstimateItem);
   const deleteEstimateItem = useMutation(api.estimating.deleteEstimateItem);
   const createVendor = useMutation(api.vendors.create);
+  const createRfi = useMutation(api.rfis.create);
+  const createSubmittal = useMutation(api.submittals.create);
+  const createTask = useMutation(api.tasks.create);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [proofItem, setProofItem] = useState<Record<string, unknown> | null>(null);
@@ -1650,6 +1987,10 @@ function EstimatingWorkspace() {
   const [editItemUnitCost, setEditItemUnitCost] = useState("0");
   const [editItemRequestRfq, setEditItemRequestRfq] = useState(false);
   const [editItemRequestSubmittal, setEditItemRequestSubmittal] = useState(false);
+  const [snippetItem, setSnippetItem] = useState<Record<string, unknown> | null>(null);
+  const [snippetTitle, setSnippetTitle] = useState("");
+  const [snippetPurpose, setSnippetPurpose] = useState("RFQ Backup");
+  const [snippetImage, setSnippetImage] = useState("");
   const [inlineRfqItemId, setInlineRfqItemId] = useState("");
   const [selectedVendorIds, setSelectedVendorIds] = useState<string[]>([]);
   const [pricingDueDate, setPricingDueDate] = useState("");
@@ -1844,6 +2185,31 @@ function EstimatingWorkspace() {
     if (String(proofItem?._id || "") === String(item._id)) setProofItem(null);
   }
 
+  function openSnippetTool(item: Record<string, unknown>) {
+    setSnippetItem(item);
+    setSnippetTitle(String(item.description || "Estimate snippet"));
+    setSnippetPurpose("RFQ Backup");
+    setSnippetImage("");
+  }
+
+  async function saveSnippetToItem() {
+    if (!snippetItem?._id || !snippetTitle.trim() || !snippetImage) return;
+    const snippet = {
+      id: `snippet-${Date.now()}`,
+      title: snippetTitle.trim(),
+      purpose: snippetPurpose,
+      image: snippetImage,
+      createdAt: new Date().toISOString(),
+    };
+    await updateEstimateItem({
+      id: snippetItem._id as Id<"estimateItems">,
+      notes: appendNoteLine(snippetItem.notes, `${SNIPPET_NOTE_PREFIX} ${JSON.stringify(snippet)}`),
+    });
+    setSnippetItem(null);
+    setSnippetTitle("");
+    setSnippetImage("");
+  }
+
   async function duplicateEstimateRow(estimate: Record<string, unknown>) {
     if (!estimate?._id) return;
     const newId = await duplicateEstimate({ id: estimate._id as Id<"estimates"> });
@@ -1880,6 +2246,138 @@ function EstimatingWorkspace() {
 
   function openQuickTemplates() {
     if (typeof window !== "undefined") window.alert("Quick Templates are being tied to the cost database and historical bid database. For now, use + Section, + Milestone, and + Add Item to keep this estimate structured.");
+  }
+
+  async function createCiceroAction(action: string) {
+    if (!selectedEstimate?._id) return;
+    const actionNote = {
+      id: `cicero-${Date.now()}`,
+      action,
+      status: "draft",
+      createdAt: new Date().toISOString(),
+    };
+    await updateEstimate({
+      id: selectedEstimate._id as Id<"estimates">,
+      notes: appendNoteLine(selectedEstimate.notes, `${ESTIMATOR_ACTION_PREFIX} ${JSON.stringify(actionNote)}`),
+    });
+    if (typeof window !== "undefined") window.alert("Cicero action saved to this estimate.");
+  }
+
+  async function createRfiFromEstimateItem(item: Record<string, unknown>) {
+    if (!selectedProject?._id || !user) {
+      await createCiceroAction(`Create RFI from estimate item: ${String(item.description || "Estimate item")}. Link this estimate to a PM project first.`);
+      return;
+    }
+    const subject = `Estimate clarification - ${String(item.description || "Bid item")}`;
+    await createRfi({
+      companyId: user.companyId,
+      projectId: selectedProject._id as Id<"projects">,
+      subject,
+      question: [
+        `Please confirm scope, material requirements, and installation responsibility for estimate item: ${String(item.description || "Bid item")}.`,
+        `Section: ${String(item.section || item.sourceSpecSection || "Unassigned")}`,
+        milestoneNameForItem(item) ? `Milestone: ${milestoneNameForItem(item)}` : "",
+        String(item.sourceSpecSection || item.specSection || "") ? `Spec/source: ${String(item.sourceSpecSection || item.specSection)}` : "",
+      ].filter(Boolean).join("\n"),
+      priority: "Medium",
+      requestedBy: user.name || user.email,
+      costImpact: true,
+      scheduleImpact: true,
+      notes: JSON.stringify({
+        sourceType: "estimate_item",
+        sourceItemId: String(item._id),
+        estimateId,
+        estimateName: selectedEstimate?.name,
+        section: item.section,
+        snippets: snippetsForItem(item).map((snippet) => ({ id: snippet.id, title: snippet.title, purpose: snippet.purpose })),
+      }),
+    });
+    if (typeof window !== "undefined") window.alert("RFI draft created from this estimate line.");
+  }
+
+  async function createSubmittalFromEstimateItem(item: Record<string, unknown>) {
+    if (!selectedProject?._id || !user) {
+      await createCiceroAction(`Create submittal from estimate item: ${String(item.description || "Estimate item")}. Link this estimate to a PM project first.`);
+      return;
+    }
+    await createSubmittal({
+      companyId: user.companyId,
+      projectId: selectedProject._id as Id<"projects">,
+      title: `Submittal - ${String(item.description || "Bid item")}`,
+      specSection: String(item.sourceSpecSection || item.specSection || item.section || ""),
+      description: [
+        `Created from estimate item: ${String(item.description || "Bid item")}`,
+        `Quantity: ${String(item.quantity || 0)} ${String(item.unit || "LS")}`,
+        milestoneNameForItem(item) ? `Milestone: ${milestoneNameForItem(item)}` : "",
+      ].filter(Boolean).join("\n"),
+      submittedBy: user.name || user.email,
+      priority: itemHasIntent(item, SUBMITTAL_INTENT_NOTE) ? "High" : "Normal",
+      trade: productionCategoryForItem(item),
+      sourceType: "estimate_item",
+      notes: JSON.stringify({
+        sourceType: "estimate_item",
+        sourceItemId: String(item._id),
+        estimateId,
+        estimateName: selectedEstimate?.name,
+        snippets: snippetsForItem(item).map((snippet) => ({ id: snippet.id, title: snippet.title, purpose: snippet.purpose })),
+      }),
+    });
+    if (typeof window !== "undefined") window.alert("Submittal draft created from this estimate line.");
+  }
+
+  async function pushEstimateItemToSchedule(item: Record<string, unknown>) {
+    if (!selectedProject?._id) {
+      await createCiceroAction(`Push estimate item to schedule: ${String(item.description || "Estimate item")}. Link this estimate to a PM project first.`);
+      return;
+    }
+    const category = productionCategoryForItem(item);
+    const rate = productionRateForItem(item);
+    const quantity = Number(item.quantity || 0) || 0;
+    const durationDays = rate.rate > 0 ? Math.max(1, Math.ceil(quantity / rate.rate)) : 1;
+    await createTask({
+      projectId: selectedProject._id as Id<"projects">,
+      task: String(item.description || "Estimate task"),
+      customTask: String(item.description || "Estimate task"),
+      priority: "Medium",
+      status: "Not Started",
+      impact: `Created from estimating. Suggested duration: ${durationDays} day${durationDays === 1 ? "" : "s"}.`,
+      trade: category,
+      phase: String(item.section || category),
+      sourceType: "estimate_item",
+      sourceItemId: String(item._id),
+      sourceSpecSection: String(item.sourceSpecSection || item.specSection || ""),
+      sourceQuote: String(item.description || ""),
+      sourceConfidence: 80,
+      sourceCategory: "estimating_handoff",
+      blocker: itemHasIntent(item, RFQ_INTENT_NOTE) && rfqStatusForItem(item) === "No RFQ" ? "RFQ pricing not complete" : undefined,
+    });
+    if (typeof window !== "undefined") window.alert("Scheduler task created from this estimate line.");
+  }
+
+  async function sendEstimateHandoff(destination: "PM" | "Scheduler") {
+    if (!selectedEstimate?._id) return;
+    const metrics = estimatorCoverageMetrics({ estimate: selectedEstimate, items: estimateItems || [], rfqSummary });
+    const handoff = {
+      destination,
+      createdAt: new Date().toISOString(),
+      estimateId,
+      estimateName: selectedEstimate.name || "Estimate",
+      total: selectedEstimateTotal,
+      itemCount: metrics.pricedItems.length,
+      pricedCount: metrics.pricedCount,
+      milestoneCount: metrics.withMilestone,
+      snippetCount: metrics.snippetCount,
+      rfqOpen: metrics.rfqOpen,
+      coverageScore: metrics.coverageScore,
+    };
+    await updateEstimate({
+      id: selectedEstimate._id as Id<"estimates">,
+      notes: appendNoteLine(selectedEstimate.notes, `${ESTIMATE_HANDOFF_PREFIX} ${JSON.stringify(handoff)}`),
+    });
+    const target = destination === "PM"
+      ? `/project-management${selectedProject?._id ? `?projectId=${String(selectedProject._id)}` : ""}`
+      : `/scheduler${selectedProject?._id ? `?projectId=${String(selectedProject._id)}&estimateId=${estimateId}` : ""}`;
+    if (typeof window !== "undefined") window.location.href = target;
   }
 
   function openPortfolioRow(row: BidPortfolioRow) {
@@ -2271,7 +2769,7 @@ function EstimatingWorkspace() {
       </button>
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cost")}>+ From Cost DB</button>
       <button type="button" className={bidActionButtonClass} onClick={() => window.print()}>Print Bid</button>
-      <button type="button" className={`${bidActionButtonClass} border-green-500/30`} onClick={() => setActiveTool("cockpit")}>AI Tools</button>
+      <button type="button" className={`${bidActionButtonClass} border-green-500/30`} onClick={() => setActiveTool("war-room")}>AI Tools</button>
       <div className="relative">
         <button
           type="button"
@@ -2305,6 +2803,8 @@ function EstimatingWorkspace() {
         )}
       </div>
       <button type="button" className={`${bidActionButtonClass} border-orange-500/35`} onClick={() => setActiveTool("rfq")}>Bid Package</button>
+      <button type="button" className={`${bidActionButtonClass} border-cyan-500/35`} onClick={() => void sendEstimateHandoff("PM")}>PM Handoff</button>
+      <button type="button" className={`${bidActionButtonClass} border-blue-500/35`} onClick={() => void sendEstimateHandoff("Scheduler")}>Scheduler Handoff</button>
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("settings")}>Settings</button>
     </div>
   );
@@ -2419,6 +2919,17 @@ function EstimatingWorkspace() {
             setProofItem(null);
             requestQuoteForItem(item);
           }}
+        />
+        <SnippetModal
+          item={snippetItem}
+          snippetTitle={snippetTitle}
+          snippetPurpose={snippetPurpose}
+          snippetImage={snippetImage}
+          onTitleChange={setSnippetTitle}
+          onPurposeChange={setSnippetPurpose}
+          onImageChange={setSnippetImage}
+          onCancel={() => setSnippetItem(null)}
+          onSave={() => void saveSnippetToItem()}
         />
         <div className="xl:hidden">
           <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimator Command Center</label>
@@ -2627,7 +3138,16 @@ function EstimatingWorkspace() {
             onOpenProof={setProofItem}
             onEditItem={openItemEditor}
             onDeleteItem={(item) => void deleteBidItem(item)}
+            onAttachSnippet={openSnippetTool}
+            onCreateRfi={(item) => void createRfiFromEstimateItem(item)}
+            onCreateSubmittal={(item) => void createSubmittalFromEstimateItem(item)}
+            onPushToSchedule={(item) => void pushEstimateItemToSchedule(item)}
             onEditDetails={() => setActiveTool("estimates")}
+            onGoToRfq={() => setActiveTool("rfq")}
+            onGoToProduction={() => setActiveTool("production-breakdown")}
+            onCreateCiceroAction={(action) => void createCiceroAction(action)}
+            onSendToPm={() => void sendEstimateHandoff("PM")}
+            onSendToScheduler={() => void sendEstimateHandoff("Scheduler")}
             onMoveLine={(item, siblings, direction) => void moveEstimateLine(item, siblings, direction)}
             rfqStatusForItem={rfqStatusForItem}
           />

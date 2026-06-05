@@ -63,6 +63,18 @@ for (const actionWiring of ["ProofModal", "onOpenProof", "openItemEditor", "save
   assert.ok(page.includes(actionWiring), `estimating page should wire visible action buttons: ${actionWiring}`);
 }
 
+for (const ciceroFeature of ["CiceroCommandPanel", "HandoffPipelinePanel", "SnippetModal", "SNIPPET_NOTE_PREFIX", "ESTIMATE_HANDOFF_PREFIX", "ESTIMATOR_ACTION_PREFIX", "Bid Survival Score", "Save Snippet", "Send to PM", "Send to Scheduler", "PM Handoff", "Scheduler Handoff"]) {
+  assert.ok(page.includes(ciceroFeature), `Cicero estimator engine should include ${ciceroFeature}`);
+}
+
+for (const pipelineBehavior of ["sendEstimateHandoff", "createCiceroAction", "openSnippetTool", "saveSnippetToItem", "window.location.href = target", "/scheduler", "/project-management"]) {
+  assert.ok(page.includes(pipelineBehavior), `estimating pipeline should wire ${pipelineBehavior}`);
+}
+
+for (const launchpadAction of ["createRfiFromEstimateItem", "createSubmittalFromEstimateItem", "pushEstimateItemToSchedule", "api.rfis.create", "api.submittals.create", "api.tasks.create", "sourceType: \"estimate_item\"", "Scheduler task created from this estimate line"]) {
+  assert.ok(page.includes(launchpadAction), `line item launchpad should include ${launchpadAction}`);
+}
+
 assert.match(page, /setActiveTool\("rfq"\)/, "request RFQ from a bid line should open the RFQ workspace");
 assert.match(page, /itemSnapshots:\s*\[\{\s*id:/, "RFQ drafts created from item actions should store item snapshot ids consistently");
 assert.doesNotMatch(page, /itemSnapshots:\s*\[\{\s*_id:/, "RFQ item snapshots should not use _id when comparison reads snapshot.id");
