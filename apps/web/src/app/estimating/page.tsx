@@ -127,17 +127,6 @@ const SNIPPET_NOTE_PREFIX = "OPSSLATE_SNIPPET:";
 const ESTIMATE_HANDOFF_PREFIX = "OPSSLATE_HANDOFF:";
 const ESTIMATOR_ACTION_PREFIX = "OPSSLATE_CICERO_ACTION:";
 
-const COMMON_MILESTONES = [
-  "Pre-bid review",
-  "Submittal checkpoint",
-  "Material release",
-  "Utility coordination",
-  "Crew mobilization",
-  "Inspection ready",
-  "Substantial completion",
-  "Closeout",
-];
-
 function isSectionParentItem(item: Record<string, unknown>) {
   return String(item.notes || "").includes(SECTION_PARENT_NOTE) || String(item.unit || "").toUpperCase() === "SECTION";
 }
@@ -817,80 +806,6 @@ function SectionPhaseModal({
   );
 }
 
-function MilestoneModal({
-  open,
-  sectionOptions,
-  selectedSection,
-  selectedMilestone,
-  customMilestone,
-  onSectionChange,
-  onMilestoneChange,
-  onCustomMilestoneChange,
-  onCancel,
-  onContinue,
-}: {
-  open: boolean;
-  sectionOptions: string[];
-  selectedSection: string;
-  selectedMilestone: string;
-  customMilestone: string;
-  onSectionChange: (value: string) => void;
-  onMilestoneChange: (value: string) => void;
-  onCustomMilestoneChange: (value: string) => void;
-  onCancel: () => void;
-  onContinue: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-3xl rounded-xl border border-border bg-card p-6 shadow-2xl">
-        <h2 className="text-2xl font-black text-white">Add Milestone</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Select the section parent, then add a milestone child line beneath it.</p>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Section</label>
-            <select
-              value={selectedSection}
-              onChange={(event) => onSectionChange(event.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-            >
-              <option value="">Select section...</option>
-              {sectionOptions.map((section) => <option key={section} value={section}>{section}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Milestone</label>
-            <select
-              value={selectedMilestone}
-              onChange={(event) => onMilestoneChange(event.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-            >
-              <option value="">Select milestone...</option>
-              {COMMON_MILESTONES.map((milestone) => <option key={milestone} value={milestone}>{milestone}</option>)}
-              <option value="Other">Other</option>
-            </select>
-          </div>
-        </div>
-        {selectedMilestone === "Other" && (
-          <div className="mt-4">
-            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Custom Milestone</label>
-            <input
-              value={customMilestone}
-              onChange={(event) => onCustomMilestoneChange(event.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-              placeholder="Type milestone name..."
-            />
-          </div>
-        )}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button onClick={onContinue} disabled={!selectedSection || !selectedMilestone || (selectedMilestone === "Other" && !customMilestone.trim())}>Add Milestone</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function HierarchyRenameModal({
   open,
   title,
@@ -936,11 +851,11 @@ function HierarchyRenameModal({
 
 function BidItemModal({
   open,
-  title = "Add Item Under Milestone",
-  intro = "Choose the milestone home first, then enter the priced bid item.",
+  title = "Add Estimate Item",
+  intro = "Choose the section home first, then enter the priced bid item.",
   submitLabel = "Add Item",
-  milestoneOptions,
-  selectedMilestone,
+  sectionOptions,
+  selectedSection,
   description,
   quantity,
   unit,
@@ -961,7 +876,7 @@ function BidItemModal({
   productionDays,
   crewSize,
   leadTime,
-  onMilestoneChange,
+  onSectionChange,
   onDescriptionChange,
   onQuantityChange,
   onUnitChange,
@@ -989,8 +904,8 @@ function BidItemModal({
   title?: string;
   intro?: string;
   submitLabel?: string;
-  milestoneOptions: Array<{ section: string; milestone: string }>;
-  selectedMilestone: string;
+  sectionOptions: string[];
+  selectedSection: string;
   description: string;
   quantity: string;
   unit: string;
@@ -1011,7 +926,7 @@ function BidItemModal({
   productionDays: string;
   crewSize: string;
   leadTime: string;
-  onMilestoneChange: (value: string) => void;
+  onSectionChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
   onQuantityChange: (value: string) => void;
   onUnitChange: (value: string) => void;
@@ -1061,18 +976,14 @@ function BidItemModal({
         <p className="mt-1 text-sm text-muted-foreground">{intro}</p>
         <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
           <div>
-            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Milestone</label>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Section</label>
             <select
-              value={selectedMilestone}
-              onChange={(event) => onMilestoneChange(event.target.value)}
+              value={selectedSection}
+              onChange={(event) => onSectionChange(event.target.value)}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
             >
-              <option value="">Select milestone...</option>
-              {milestoneOptions.map((option) => (
-                <option key={`${option.section}::${option.milestone}`} value={`${option.section}::${option.milestone}`}>
-                  {option.section} / {option.milestone}
-                </option>
-              ))}
+              <option value="">Select section...</option>
+              {sectionOptions.map((section) => <option key={section} value={section}>{section}</option>)}
             </select>
           </div>
           <div>
@@ -1246,7 +1157,7 @@ function BidItemModal({
         )}
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button onClick={onContinue} disabled={!selectedMilestone || !description.trim()}>{submitLabel}</Button>
+          <Button onClick={onContinue} disabled={!selectedSection || !description.trim()}>{submitLabel}</Button>
         </div>
       </div>
     </div>
@@ -1683,14 +1594,6 @@ function SectionGlyph() {
   );
 }
 
-function MilestoneGlyph() {
-  return (
-    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-orange-400/45 bg-orange-400/15">
-      <span className="h-2 w-2 rounded-full bg-orange-300" />
-    </span>
-  );
-}
-
 function EstimateDetailView({
   estimate,
   project,
@@ -1720,8 +1623,6 @@ function EstimateDetailView({
   onSendToScheduler,
   onEditSection,
   onDeleteSection,
-  onEditMilestone,
-  onDeleteMilestone,
   onMoveLine,
   rfqStatusForItem,
 }: {
@@ -1753,8 +1654,6 @@ function EstimateDetailView({
   onSendToScheduler: () => void;
   onEditSection: (section: string, sectionItems: Array<Record<string, unknown>>) => void;
   onDeleteSection: (section: string, sectionItems: Array<Record<string, unknown>>) => void;
-  onEditMilestone: (section: string, milestone: Record<string, unknown>, childItems: Array<Record<string, unknown>>) => void;
-  onDeleteMilestone: (milestone: Record<string, unknown>, childItems: Array<Record<string, unknown>>) => void;
   onMoveLine: (item: Record<string, unknown>, siblings: Array<Record<string, unknown>>, direction: "up" | "down") => void;
   rfqStatusForItem: (item: Record<string, unknown>) => string;
 }) {
@@ -1861,10 +1760,7 @@ function EstimateDetailView({
                 return orderForItem(parentA || itemsA[0] || {}, Number((parentA || itemsA[0])?._creationTime || 0)) - orderForItem(parentB || itemsB[0] || {}, Number((parentB || itemsB[0])?._creationTime || 0)) || sectionA.localeCompare(sectionB);
               }).map(([section, sectionItems]) => {
                 const sectionParent = sectionItems.find((item) => isSectionParentItem(item));
-                const childItems = sectionItems.filter((item) => !isSectionParentItem(item));
-                const milestoneParents = sortByEstimateOrder(childItems.filter((item) => isMilestoneParentItem(item)));
-                const pricedItems = sortByEstimateOrder(childItems.filter((item) => !isMilestoneParentItem(item)));
-                const unassignedItems = sortByEstimateOrder(pricedItems.filter((item) => !milestoneNameForItem(item)));
+                const pricedItems = sortByEstimateOrder(sectionItems.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item)));
                 const sectionTotal = estimateTotal(pricedItems);
                 return (
                   <Fragment key={`group-${section}`}>
@@ -1892,7 +1788,7 @@ function EstimateDetailView({
                         </div>
                       </td>
                     </tr>
-                    {!pricedItems.length && !milestoneParents.length && (
+                    {!pricedItems.length && (
                       <tr className="border-t border-border">
                         <td className="p-3" />
                         <td colSpan={8} className="p-4 pl-10 text-sm text-muted-foreground">
@@ -1900,79 +1796,7 @@ function EstimateDetailView({
                         </td>
                       </tr>
                     )}
-                    {milestoneParents.map((milestone) => {
-                      const milestoneName = String(milestone.description || "Milestone");
-                      const milestoneItems = sortByEstimateOrder(pricedItems.filter((item) => milestoneNameForItem(item) === milestoneName));
-                      const milestoneTotal = estimateTotal(milestoneItems);
-                      return (
-                        <Fragment key={`milestone-${section}-${milestoneName}`}>
-                          <tr className="border-t border-border bg-background/45">
-                            <td className="p-3" />
-                            <td className="p-3 pl-8 font-bold text-orange-100">
-                              <div className="flex items-center gap-2">
-                                <MilestoneGlyph />
-                                <span>{milestoneName}</span>
-                              </div>
-                            </td>
-                            <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{milestoneItems.length ? `${milestoneItems.length} child item${milestoneItems.length === 1 ? "" : "s"}` : "No child items yet"}</td>
-                            <td className="p-3 text-right font-black text-white">{money(milestoneTotal)}</td>
-                            <td className="p-3">
-                              <div className="flex flex-wrap justify-end gap-2">
-                                <MoveControls
-                                  label="milestone"
-                                  onMoveUp={() => onMoveLine(milestone, milestoneParents, "up")}
-                                  onMoveDown={() => onMoveLine(milestone, milestoneParents, "down")}
-                                />
-                                <button type="button" className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-bold text-white hover:border-orange-500/45" onClick={() => onEditMilestone(section, milestone, milestoneItems)}>Edit</button>
-                                <button type="button" className="rounded-md border border-red-500/35 bg-red-500/80 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-500" onClick={() => onDeleteMilestone(milestone, milestoneItems)}>Delete</button>
-                              </div>
-                            </td>
-                          </tr>
-                          {milestoneItems.map((item) => {
-                            const itemId = String(item._id);
-                            const rfqStatus = rfqStatusForItem(item);
-                            return (
-                              <tr key={itemId} className="border-t border-border">
-                                <td className="p-3">
-                                  <input type="checkbox" checked={selectedItemIds.includes(itemId)} onChange={(event) => onToggleItem(itemId, event.target.checked)} />
-                                </td>
-                                <td className="p-3 pl-12">
-                                  <div className="font-bold text-white">{String(item.description || "Estimate item")}</div>
-                                  <div className="mt-1 flex flex-wrap gap-2">
-                                    <Badge variant="outline">Spec: {String(item.sourceSpecSection || item.specSection || "No book")}</Badge>
-                                    <Badge className="bg-orange-500/15 text-orange-100">Milestone: {milestoneName}</Badge>
-                                    <Badge className="bg-blue-500/15 text-blue-200">RFQ Status: {rfqStatus === "No RFQ" ? "Not Requested" : rfqStatus}</Badge>
-                                    {itemHasIntent(item, RFQ_INTENT_NOTE) ? <Badge className="bg-cyan-500/15 text-cyan-200">RFQ Intent</Badge> : null}
-                                    {itemHasIntent(item, RFI_INTENT_NOTE) ? <Badge className="bg-sky-500/15 text-sky-200">RFI Intent</Badge> : null}
-                                    {itemHasIntent(item, SUBMITTAL_INTENT_NOTE) ? <Badge className="bg-purple-500/15 text-purple-200">Submittal Intent</Badge> : null}
-                                    {snippetsForItem(item).length ? <Badge className="bg-fuchsia-500/15 text-fuchsia-200">Snippet Attached</Badge> : null}
-                                  </div>
-                                </td>
-                                <td className="p-3 text-right text-white">{String(item.quantity || 0)}</td>
-                                <td className="p-3 text-muted-foreground">{String(item.unit || "LS")}</td>
-                                <td className="p-3 text-right text-muted-foreground">{String(item.taxPct || 0)}</td>
-                                <td className="p-3 text-right font-mono text-white">{money(item.unitCost)}</td>
-                                <td className="p-3 text-right font-mono text-white">{money(Number(item.quantity || 0) * Number(item.unitCost || 0))}</td>
-                                <td className="p-3 text-right font-mono font-bold text-white">{money(estimateTotal([item]))}</td>
-                                <td className="p-3">
-                                  <div className="flex flex-wrap justify-end gap-2">
-                                    <MoveControls
-                                      label="task"
-                                      onMoveUp={() => onMoveLine(item, milestoneItems, "up")}
-                                      onMoveDown={() => onMoveLine(item, milestoneItems, "down")}
-                                    />
-                                    <Button size="sm" variant="outline" onClick={() => onPushToSchedule(item)}>Schedule</Button>
-                                    <Button size="sm" variant="outline" onClick={() => onEditItem(item)}>Edit</Button>
-                                    <Button size="sm" variant="destructive" onClick={() => onDeleteItem(item)}>x</Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </Fragment>
-                      );
-                    })}
-                    {unassignedItems.map((item) => {
+                    {pricedItems.map((item) => {
                       const itemId = String(item._id);
                       const rfqStatus = rfqStatusForItem(item);
                       return (
@@ -2001,8 +1825,8 @@ function EstimateDetailView({
                             <div className="flex flex-wrap gap-2">
                               <MoveControls
                                 label="task"
-                                onMoveUp={() => onMoveLine(item, unassignedItems, "up")}
-                                onMoveDown={() => onMoveLine(item, unassignedItems, "down")}
+                                onMoveUp={() => onMoveLine(item, pricedItems, "up")}
+                                onMoveDown={() => onMoveLine(item, pricedItems, "down")}
                               />
                               <Button size="sm" variant="outline" onClick={() => onPushToSchedule(item)}>Schedule</Button>
                               <Button size="sm" variant="outline" onClick={() => onEditItem(item)}>Edit</Button>
@@ -2277,18 +2101,13 @@ function EstimatingWorkspace() {
   const [activeTool, setActiveTool] = useState<EstimatingToolKey>("cockpit");
   const [productionMenuOpen, setProductionMenuOpen] = useState(false);
   const [sectionPhaseModalOpen, setSectionPhaseModalOpen] = useState(false);
-  const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
   const [bidItemModalOpen, setBidItemModalOpen] = useState(false);
   const [customPhaseOptions, setCustomPhaseOptions] = useState<string[]>([]);
   const [selectedPhaseType, setSelectedPhaseType] = useState(COMMON_CONSTRUCTION_PHASES[0]);
   const [customPhaseName, setCustomPhaseName] = useState("");
-  const [selectedMilestoneSection, setSelectedMilestoneSection] = useState("");
-  const [selectedMilestoneType, setSelectedMilestoneType] = useState(COMMON_MILESTONES[0]);
-  const [customMilestoneName, setCustomMilestoneName] = useState("");
   const [editingSectionGroup, setEditingSectionGroup] = useState<{ section: string; items: Array<Record<string, unknown>> } | null>(null);
-  const [editingMilestoneGroup, setEditingMilestoneGroup] = useState<{ section: string; milestone: Record<string, unknown>; items: Array<Record<string, unknown>> } | null>(null);
   const [hierarchyRenameValue, setHierarchyRenameValue] = useState("");
-  const [selectedItemMilestone, setSelectedItemMilestone] = useState("");
+  const [selectedItemSection, setSelectedItemSection] = useState("");
   const [newItemDescription, setNewItemDescription] = useState("");
   const [newItemQuantity, setNewItemQuantity] = useState("1");
   const [newItemUnit, setNewItemUnit] = useState("LS");
@@ -2349,7 +2168,7 @@ function EstimatingWorkspace() {
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [proofItem, setProofItem] = useState<Record<string, unknown> | null>(null);
   const [editingItem, setEditingItem] = useState<Record<string, unknown> | null>(null);
-  const [editItemMilestone, setEditItemMilestone] = useState("");
+  const [editItemSection, setEditItemSection] = useState("");
   const [editItemDescription, setEditItemDescription] = useState("");
   const [editItemQuantity, setEditItemQuantity] = useState("1");
   const [editItemUnit, setEditItemUnit] = useState("LS");
@@ -2448,13 +2267,6 @@ function EstimatingWorkspace() {
     const sections = (estimateItems || []).map((item) => String(item.section || "").split(" / ")[0]).filter(Boolean);
     return [...new Set([...sections, ...phaseOptions])].sort((a, b) => a.localeCompare(b));
   }, [estimateItems, phaseOptions]);
-  const estimateMilestoneOptions = useMemo(() => {
-    return (estimateItems || [])
-      .filter((item) => isMilestoneParentItem(item))
-      .map((item) => ({ section: String(item.section || "Unassigned"), milestone: String(item.description || "Milestone") }))
-      .sort((a, b) => `${a.section} ${a.milestone}`.localeCompare(`${b.section} ${b.milestone}`));
-  }, [estimateItems]);
-
   useEffect(() => {
     setSignatureProfile(loadSignatureProfile(user));
   }, [user?._id, user?.email, user?.name]);
@@ -2490,10 +2302,8 @@ function EstimatingWorkspace() {
 
   function openItemEditor(item: Record<string, unknown>) {
     const section = String(item.section || "");
-    const milestone = milestoneNameForItem(item);
-    const fallbackMilestone = estimateMilestoneOptions.find((option) => option.section === section) || estimateMilestoneOptions[0];
     setEditingItem(item);
-    setEditItemMilestone(milestone ? `${section}::${milestone}` : fallbackMilestone ? `${fallbackMilestone.section}::${fallbackMilestone.milestone}` : "");
+    setEditItemSection(section || estimateSectionOptions[0] || "");
     setEditItemDescription(String(item.description || ""));
     setEditItemQuantity(String(item.quantity ?? "1"));
     setEditItemUnit(String(item.unit || "LS"));
@@ -2532,11 +2342,10 @@ function EstimatingWorkspace() {
 
   async function saveEditedItemLine() {
     if (!editingItem?._id) return;
-    const [sectionName, milestoneName] = editItemMilestone.split("::");
+    const sectionName = editItemSection.trim();
     const description = editItemDescription.trim();
-    if (!sectionName || !milestoneName || !description) return;
+    if (!sectionName || !description) return;
     const notes = [
-      `${MILESTONE_ITEM_NOTE_PREFIX} ${milestoneName}`,
       ...removeManagedItemDetailNotes(cleanItemNotesForEdit(editingItem).join("\n")),
       editItemRequestRfq ? `${RFQ_INTENT_NOTE}: Draft RFQ requested during item edit.` : "",
       editItemRequestRfi ? `${RFI_INTENT_NOTE}: Draft RFI requested during item edit.` : "",
@@ -2584,11 +2393,10 @@ function EstimatingWorkspace() {
             unit: editItemUnit.trim() || "LS",
             unitCost: Number(editItemUnitCost || 0) || 0,
             section: sectionName,
-            milestone: milestoneName,
             scopeNote: editItemScopeNote,
             leadTime: editItemLeadTime,
           }],
-          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nMilestone: ${milestoneName}\nQty: ${editItemQuantity || 0} ${editItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
+          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nQty: ${editItemQuantity || 0} ${editItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
         }),
       });
     }
@@ -2601,7 +2409,6 @@ function EstimatingWorkspace() {
           question: [
             editItemRfiQuestion.trim() || `Please confirm scope, material requirements, and installation responsibility for estimate item: ${description}.`,
             `Section: ${sectionName}`,
-            `Milestone: ${milestoneName}`,
             editItemScopeNote ? `Estimator note: ${editItemScopeNote}` : "",
           ].filter(Boolean).join("\n"),
           priority: "Medium",
@@ -2630,7 +2437,6 @@ function EstimatingWorkspace() {
           description: [
             editItemSubmittalRequirement.trim() || `Submittal draft requested for estimate item: ${description}`,
             `Quantity: ${editItemQuantity || 0} ${editItemUnit || "LS"}`,
-            `Milestone: ${milestoneName}`,
           ].filter(Boolean).join("\n"),
           submittedBy: user.name || user.email,
           priority: "High",
@@ -2683,47 +2489,6 @@ function EstimatingWorkspace() {
     if (!deletable.length) return;
     const childCount = deletable.filter((item) => !isSectionParentItem(item)).length;
     if (typeof window !== "undefined" && !window.confirm(`Delete ${section}${childCount ? ` and ${childCount} child line${childCount === 1 ? "" : "s"}` : ""}?`)) return;
-    await Promise.all(deletable.map((item) => deleteEstimateItem({ id: item._id as Id<"estimateItems"> })));
-    setSelectedItemIds((current) => current.filter((itemId) => !deletable.some((item) => String(item._id) === itemId)));
-  }
-
-  function openMilestoneEditor(section: string, milestone: Record<string, unknown>, childItems: Array<Record<string, unknown>>) {
-    setEditingMilestoneGroup({ section, milestone, items: childItems });
-    setHierarchyRenameValue(String(milestone.description || ""));
-  }
-
-  function renameMilestoneInNotes(notes: unknown, nextName: string) {
-    const lines = String(notes || "").split("\n");
-    const hasMilestoneLine = lines.some((line) => line.trim().startsWith(MILESTONE_ITEM_NOTE_PREFIX));
-    const renamed = lines.map((line) => line.trim().startsWith(MILESTONE_ITEM_NOTE_PREFIX) ? `${MILESTONE_ITEM_NOTE_PREFIX} ${nextName}` : line);
-    return (hasMilestoneLine ? renamed : [`${MILESTONE_ITEM_NOTE_PREFIX} ${nextName}`, ...renamed]).filter((line) => line.trim()).join("\n");
-  }
-
-  async function saveMilestoneRename() {
-    const nextName = hierarchyRenameValue.trim();
-    if (!editingMilestoneGroup || !nextName || !editingMilestoneGroup.milestone._id) return;
-    await Promise.all([
-      updateEstimateItem({
-        id: editingMilestoneGroup.milestone._id as Id<"estimateItems">,
-        description: nextName,
-        section: editingMilestoneGroup.section,
-      }),
-      ...editingMilestoneGroup.items
-        .filter((item) => item._id)
-        .map((item) => updateEstimateItem({
-          id: item._id as Id<"estimateItems">,
-          notes: renameMilestoneInNotes(item.notes, nextName),
-        })),
-    ]);
-    setEditingMilestoneGroup(null);
-    setHierarchyRenameValue("");
-  }
-
-  async function deleteMilestoneGroup(milestone: Record<string, unknown>, childItems: Array<Record<string, unknown>>) {
-    const deletable = [milestone, ...childItems].filter((item) => item._id);
-    if (!deletable.length) return;
-    const label = String(milestone.description || "this milestone");
-    if (typeof window !== "undefined" && !window.confirm(`Delete ${label}${childItems.length ? ` and ${childItems.length} child item${childItems.length === 1 ? "" : "s"}` : ""}?`)) return;
     await Promise.all(deletable.map((item) => deleteEstimateItem({ id: item._id as Id<"estimateItems"> })));
     setSelectedItemIds((current) => current.filter((itemId) => !deletable.some((item) => String(item._id) === itemId)));
   }
@@ -2785,7 +2550,7 @@ function EstimatingWorkspace() {
   }
 
   function openQuickTemplates() {
-    if (typeof window !== "undefined") window.alert("Quick Templates are being tied to the cost database and historical bid database. For now, use + Section, + Milestone, and + Add Item to keep this estimate structured.");
+    if (typeof window !== "undefined") window.alert("Quick Templates are being tied to the cost database and historical bid database. For now, use + Section and + Add Item to keep this estimate structured.");
   }
 
   async function createCiceroAction(action: string) {
@@ -3141,53 +2906,10 @@ function EstimatingWorkspace() {
     setActiveTool("estimate-detail");
   }
 
-  async function saveMilestoneLine() {
-    const sectionName = selectedMilestoneSection.trim();
-    const milestoneName = selectedMilestoneType === "Other" ? customMilestoneName.trim() : selectedMilestoneType;
-    if (!user || !selectedEstimate?._id || !sectionName || !milestoneName) return;
-    const existingSectionParent = (estimateItems || []).some((item) => isSectionParentItem(item) && String(item.section || "") === sectionName);
-    if (!existingSectionParent) {
-      await createEstimateItem({
-        companyId: user.companyId,
-        estimateId: selectedEstimate._id as Id<"estimates">,
-        section: sectionName,
-        description: sectionName,
-        quantity: 0,
-        unit: "SECTION",
-        unitCost: 0,
-        taxPct: 0,
-        notes: [
-          `${SECTION_PARENT_NOTE}: Parent phase line created automatically for milestone.`,
-          `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => isSectionParentItem(item)).length + 1}`,
-        ].join("\n"),
-      });
-    }
-    const existingMilestone = (estimateItems || []).some((item) => isMilestoneParentItem(item) && String(item.section || "") === sectionName && String(item.description || "") === milestoneName);
-    if (!existingMilestone) {
-      await createEstimateItem({
-        companyId: user.companyId,
-        estimateId: selectedEstimate._id as Id<"estimates">,
-        section: sectionName,
-        description: milestoneName,
-        quantity: 0,
-        unit: "MILESTONE",
-        unitCost: 0,
-        taxPct: 0,
-        notes: [
-          `${MILESTONE_PARENT_NOTE}: Milestone child line under ${sectionName}.`,
-          `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => isMilestoneParentItem(item) && String(item.section || "") === sectionName).length + 1}`,
-        ].join("\n"),
-      });
-    }
-    setMilestoneModalOpen(false);
-    setCustomMilestoneName("");
-    setActiveTool("estimate-detail");
-  }
-
   async function saveBidItemLine() {
-    const [sectionName, milestoneName] = selectedItemMilestone.split("::");
+    const sectionName = selectedItemSection.trim();
     const description = newItemDescription.trim();
-    if (!user || !selectedEstimate?._id || !sectionName || !milestoneName || !description) return;
+    if (!user || !selectedEstimate?._id || !sectionName || !description) return;
     const itemIdCreated = await createEstimateItem({
       companyId: user.companyId,
       estimateId: selectedEstimate._id as Id<"estimates">,
@@ -3198,8 +2920,7 @@ function EstimatingWorkspace() {
       unitCost: Number(newItemUnitCost || 0) || 0,
       taxPct: Number(newItemTaxPct || 0) || 0,
       notes: [
-        `${MILESTONE_ITEM_NOTE_PREFIX} ${milestoneName}`,
-        `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item) && String(item.section || "") === sectionName && milestoneNameForItem(item) === milestoneName).length + 1}`,
+        `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item) && String(item.section || "") === sectionName).length + 1}`,
         newItemRequestRfq ? `${RFQ_INTENT_NOTE}: Draft RFQ requested at item creation.` : "",
         newItemRequestRfi ? `${RFI_INTENT_NOTE}: Draft RFI requested at item creation.` : "",
         newItemRequestSubmittal ? `${SUBMITTAL_INTENT_NOTE}: Submittal draft requested at item creation.` : "",
@@ -3237,11 +2958,10 @@ function EstimatingWorkspace() {
             unit: newItemUnit.trim() || "LS",
             unitCost: Number(newItemUnitCost || 0) || 0,
             section: sectionName,
-            milestone: milestoneName,
             scopeNote: newItemScopeNote,
             leadTime: newItemLeadTime,
           }],
-          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nMilestone: ${milestoneName}\nQty: ${newItemQuantity || 0} ${newItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
+          packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nQty: ${newItemQuantity || 0} ${newItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
         }),
       });
     }
@@ -3254,7 +2974,6 @@ function EstimatingWorkspace() {
           question: [
             newItemRfiQuestion.trim() || `Please confirm scope, material requirements, and installation responsibility for estimate item: ${description}.`,
             `Section: ${sectionName}`,
-            `Milestone: ${milestoneName}`,
             newItemScopeNote ? `Estimator note: ${newItemScopeNote}` : "",
           ].filter(Boolean).join("\n"),
           priority: "Medium",
@@ -3283,7 +3002,6 @@ function EstimatingWorkspace() {
           description: [
             newItemSubmittalRequirement.trim() || `Submittal draft requested for estimate item: ${description}`,
             `Quantity: ${newItemQuantity || 0} ${newItemUnit || "LS"}`,
-            `Milestone: ${milestoneName}`,
           ].filter(Boolean).join("\n"),
           submittedBy: user.name || user.email,
           priority: "High",
@@ -3354,20 +3072,9 @@ function EstimatingWorkspace() {
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
       <button
         type="button"
-        className={`${bidActionButtonClass} border-orange-500/35 bg-orange-500/85 text-white hover:bg-orange-500`}
-        onClick={() => {
-          setSelectedMilestoneSection(selectedMilestoneSection || estimateSectionOptions[0] || "");
-          setMilestoneModalOpen(true);
-        }}
-      >
-        + Milestone
-      </button>
-      <button
-        type="button"
         className={`${bidActionButtonClass} border-green-500/35 bg-green-500/85 text-white hover:bg-green-500`}
         onClick={() => {
-          const firstMilestone = estimateMilestoneOptions[0];
-          setSelectedItemMilestone(selectedItemMilestone || (firstMilestone ? `${firstMilestone.section}::${firstMilestone.milestone}` : ""));
+          setSelectedItemSection(selectedItemSection || estimateSectionOptions[0] || "");
           setBidItemModalOpen(true);
         }}
       >
@@ -3496,36 +3203,23 @@ function EstimatingWorkspace() {
           onCancel={() => setSectionPhaseModalOpen(false)}
           onContinue={saveSectionPhase}
         />
-        <MilestoneModal
-          open={milestoneModalOpen}
-          sectionOptions={estimateSectionOptions}
-          selectedSection={selectedMilestoneSection}
-          selectedMilestone={selectedMilestoneType}
-          customMilestone={customMilestoneName}
-          onSectionChange={setSelectedMilestoneSection}
-          onMilestoneChange={setSelectedMilestoneType}
-          onCustomMilestoneChange={setCustomMilestoneName}
-          onCancel={() => setMilestoneModalOpen(false)}
-          onContinue={() => void saveMilestoneLine()}
-        />
         <HierarchyRenameModal
-          open={Boolean(editingSectionGroup || editingMilestoneGroup)}
-          title={editingSectionGroup ? "Edit Section" : "Edit Milestone"}
-          label={editingSectionGroup ? "Section Name" : "Milestone Name"}
+          open={Boolean(editingSectionGroup)}
+          title="Edit Section"
+          label="Section Name"
           value={hierarchyRenameValue}
-          helper={editingSectionGroup ? "Renaming a section updates its child estimate lines so the bid stays organized." : "Renaming a milestone updates each child item tied to that milestone."}
+          helper="Renaming a section updates its child estimate lines so the bid stays organized."
           onChange={setHierarchyRenameValue}
           onCancel={() => {
             setEditingSectionGroup(null);
-            setEditingMilestoneGroup(null);
             setHierarchyRenameValue("");
           }}
-          onSave={() => editingSectionGroup ? void saveSectionRename() : void saveMilestoneRename()}
+          onSave={() => void saveSectionRename()}
         />
         <BidItemModal
           open={bidItemModalOpen}
-          milestoneOptions={estimateMilestoneOptions}
-          selectedMilestone={selectedItemMilestone}
+          sectionOptions={estimateSectionOptions}
+          selectedSection={selectedItemSection}
           description={newItemDescription}
           quantity={newItemQuantity}
           unit={newItemUnit}
@@ -3546,7 +3240,7 @@ function EstimatingWorkspace() {
           productionDays={newItemProductionDays}
           crewSize={newItemCrewSize}
           leadTime={newItemLeadTime}
-          onMilestoneChange={setSelectedItemMilestone}
+          onSectionChange={setSelectedItemSection}
           onDescriptionChange={setNewItemDescription}
           onQuantityChange={setNewItemQuantity}
           onUnitChange={setNewItemUnit}
@@ -3573,10 +3267,10 @@ function EstimatingWorkspace() {
         <BidItemModal
           open={Boolean(editingItem)}
           title="Edit Estimate Item"
-          intro="Keep the bid item tied to a milestone while updating quantity, unit, cost, RFQ intent, and submittal intent."
+          intro="Keep the bid item tied to a section while updating quantity, unit, cost, RFQ intent, and submittal intent."
           submitLabel="Save Item Changes"
-          milestoneOptions={estimateMilestoneOptions}
-          selectedMilestone={editItemMilestone}
+          sectionOptions={estimateSectionOptions}
+          selectedSection={editItemSection}
           description={editItemDescription}
           quantity={editItemQuantity}
           unit={editItemUnit}
@@ -3597,7 +3291,7 @@ function EstimatingWorkspace() {
           productionDays={editItemProductionDays}
           crewSize={editItemCrewSize}
           leadTime={editItemLeadTime}
-          onMilestoneChange={setEditItemMilestone}
+          onSectionChange={setEditItemSection}
           onDescriptionChange={setEditItemDescription}
           onQuantityChange={setEditItemQuantity}
           onUnitChange={setEditItemUnit}
@@ -3911,8 +3605,6 @@ function EstimatingWorkspace() {
             onSendToScheduler={() => void sendEstimateHandoff("Scheduler")}
             onEditSection={openSectionEditor}
             onDeleteSection={(section, sectionItems) => void deleteSectionGroup(section, sectionItems)}
-            onEditMilestone={openMilestoneEditor}
-            onDeleteMilestone={(milestone, childItems) => void deleteMilestoneGroup(milestone, childItems)}
             onMoveLine={(item, siblings, direction) => void moveEstimateLine(item, siblings, direction)}
             rfqStatusForItem={rfqStatusForItem}
           />

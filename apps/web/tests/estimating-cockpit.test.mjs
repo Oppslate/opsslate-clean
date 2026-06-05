@@ -34,10 +34,10 @@ for (const label of ["Materials", "Labor", "Equipment", "Historical Bid Database
   assert.ok(page.includes(label), `estimating sidebar should include ${label}`);
 }
 
-for (const action of ["← Back", "+ Section", "+ Milestone", "+ Add Item", "+ From Cost DB", "Print Bid", "AI Tools", "Production", "Bid Package", "Settings"]) {
+for (const action of ["← Back", "+ Section", "+ Add Item", "+ From Cost DB", "Print Bid", "AI Tools", "Production", "Bid Package", "Settings"]) {
   assert.ok(page.includes(action), `estimating cockpit top toolbar should include ${action}`);
 }
-assert.match(page, /border-orange-500\/35 bg-orange-500\/85 text-white hover:bg-orange-500/, "milestone action should be orange and sit in the bid action toolbar");
+assert.doesNotMatch(page, /\+ Milestone/, "estimate toolbar should not create milestone hierarchy lines");
 
 for (const sectionFlow of ["Add Section / Phase", "Parent Phase", "COMMON_CONSTRUCTION_PHASES", "Other", "Custom Phase Name", "opsslate_estimate_custom_phases"]) {
   assert.ok(page.includes(sectionFlow), `section/phase workflow should include ${sectionFlow}`);
@@ -47,18 +47,18 @@ for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", 
   assert.ok(page.includes(parentLineFlow), `section button should create and render parent bid lines: ${parentLineFlow}`);
 }
 
-for (const polishedEstimateUi of ["SectionGlyph", "MilestoneGlyph", "sticky top-0 z-[70]", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidDateValue", "project?.contractDate", "bidCountdownLabel", "HierarchyRenameModal", "Edit Section", "Edit Milestone", "deleteSectionGroup", "deleteMilestoneGroup", "saveSectionRename", "saveMilestoneRename"]) {
+for (const polishedEstimateUi of ["SectionGlyph", "sticky top-0 z-[70]", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidDateValue", "project?.contractDate", "bidCountdownLabel", "HierarchyRenameModal", "Edit Section", "deleteSectionGroup", "saveSectionRename"]) {
   assert.ok(page.includes(polishedEstimateUi), `estimate detail should include polished bid command UI: ${polishedEstimateUi}`);
 }
 
 assert.ok(!page.includes("Folder {section}"), "estimate section rows should use a folder icon instead of the word Folder");
 assert.ok(!page.includes("Parent line"), "estimate section rows should not display non-actionable parent line filler text");
 
-for (const milestoneFlow of ["MilestoneModal", "Add Milestone", "Select the section parent", "MILESTONE_PARENT_NOTE", "OPSSLATE_MILESTONE_PARENT", "Milestone child line under", "estimateMilestoneOptions"]) {
-  assert.ok(page.includes(milestoneFlow), `milestone workflow should include ${milestoneFlow}`);
+for (const removedMilestoneFlow of ["MilestoneModal", "Add Milestone", "Select the section parent", "Milestone child line under", "estimateMilestoneOptions", "Edit Milestone", "deleteMilestoneGroup", "saveMilestoneRename"]) {
+  assert.ok(!page.includes(removedMilestoneFlow), `estimate workflow should not include milestone hierarchy: ${removedMilestoneFlow}`);
 }
 
-for (const bidItemFlow of ["BidItemModal", "Add Item Under Milestone", "Quantity", "Unit of Measure", "Tax %", "Unit Cost", "Line Total", "Extended", "MILESTONE_ITEM_NOTE_PREFIX"]) {
+for (const bidItemFlow of ["BidItemModal", "Add Estimate Item", "Section", "Quantity", "Unit of Measure", "Tax %", "Unit Cost", "Line Total", "Extended"]) {
   assert.ok(page.includes(bidItemFlow), `add item workflow should include ${bidItemFlow}`);
 }
 
