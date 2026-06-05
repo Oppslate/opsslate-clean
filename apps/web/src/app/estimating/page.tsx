@@ -715,7 +715,7 @@ function EstimatorCommandCenter({
   onSelect: (tool: EstimatingToolKey) => void;
 }) {
   return (
-    <aside className="sticky top-4 hidden h-[calc(100vh-5.5rem)] w-64 shrink-0 overflow-y-auto rounded-lg border border-border bg-card/85 p-3 xl:block">
+    <aside data-print-hide="true" className="sticky top-4 hidden h-[calc(100vh-5.5rem)] w-64 shrink-0 overflow-y-auto rounded-lg border border-border bg-card/85 p-3 xl:block">
       <div className="mb-4 border-b border-border pb-4">
         <div className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-300">Estimator Command Center</div>
         <div className="mt-2 text-lg font-black text-white">Bid Control</div>
@@ -1762,7 +1762,7 @@ function EstimateDetailView({
   const bidCountdown = bidCountdownLabel(bidDate, clockNow);
 
   return (
-    <div className="space-y-5">
+    <div data-print-document="estimate" className="space-y-5">
       <div className="rounded-xl border border-border bg-card/90 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0">
@@ -2055,7 +2055,7 @@ function ProductionRateBreakdownView({
   }, {} as Record<string, typeof rows>);
 
   return (
-    <div className="space-y-5">
+    <div data-print-document="production-rate-breakdown" className="space-y-5">
       <div className="flex flex-col gap-4 border-b border-border pb-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <Badge className="mb-2 bg-orange-500/15 text-orange-300">Production Rate Breakdown</Badge>
@@ -2064,7 +2064,7 @@ function ProductionRateBreakdownView({
             Estimate: {String(estimate?.name || "Selected estimate")} — Converts quantity bid into manhours, equipment hours, production days, and contractor review dollars.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div data-print-hide="true" className="flex flex-wrap gap-2">
           <Button onClick={() => window.alert("Prevailing rate editor is next in the production buildout. Current production math stays tied to the estimate rows shown below.")}>Prevailing Rates</Button>
           <Button variant="outline" onClick={onBack}>Back to Estimate</Button>
           <Button variant="outline" onClick={onEditDetails}>Edit Details</Button>
@@ -2100,7 +2100,7 @@ function ProductionRateBreakdownView({
                   {sectionRows.length} task{sectionRows.length === 1 ? "" : "s"} | {sectionSummary.productionDays.toFixed(1)} production days | {Math.round(sectionSummary.manHours)} man-hours
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div data-print-hide="true" className="flex gap-2">
                 <button className="grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-xs text-blue-100">↑</button>
                 <button className="grid h-8 w-8 place-items-center rounded-full border border-border bg-background text-xs text-blue-100">↓</button>
               </div>
@@ -3237,7 +3237,7 @@ function EstimatingWorkspace() {
   const showBidActionToolbar = activeTool !== "cockpit" && activeTool !== "estimates";
   const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
   const bidActionToolbar = (
-    <div className="fixed left-4 right-4 top-[76px] z-[90] flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur supports-[backdrop-filter]:bg-background/85 xl:left-[calc(16rem+1.25rem)]">
+    <div data-print-hide="true" className="fixed left-4 right-4 top-[76px] z-[90] flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur supports-[backdrop-filter]:bg-background/85 xl:left-[calc(16rem+1.25rem)]">
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cockpit")}>← Back</button>
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
       <button
@@ -3367,7 +3367,7 @@ function EstimatingWorkspace() {
         {showBidActionToolbar ? (
           <>
             {bidActionToolbar}
-            <div className="h-[72px] shrink-0" aria-hidden="true" />
+            <div data-print-hide="true" className="h-[72px] shrink-0" aria-hidden="true" />
           </>
         ) : null}
         <SectionPhaseModal

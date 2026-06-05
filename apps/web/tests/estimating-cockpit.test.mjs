@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const page = readFileSync(join(process.cwd(), "src", "app", "estimating", "page.tsx"), "utf8");
+const globals = readFileSync(join(process.cwd(), "src", "app", "globals.css"), "utf8");
 
 assert.match(page, /Estimating Cockpit/, "estimating route should render the cockpit");
 assert.match(page, /<AppShell showSidebar={false} showTopBar={false}>/, "estimating cockpit should not render the Project Management sidebar or extra utility bar");
@@ -142,5 +143,11 @@ for (const helper of ["productionRowsForItems", "productionSummaryForRows", "pro
   assert.match(page, new RegExp(helper), `production breakdown should use ${helper}`);
 }
 assert.ok(page.includes("items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item)).map"), "production breakdown should not turn section parent rows into production tasks");
+for (const printFlow of ['data-print-document="estimate"', 'data-print-document="production-rate-breakdown"', 'data-print-hide="true"']) {
+  assert.ok(page.includes(printFlow), `estimating print should separate report content from app chrome: ${printFlow}`);
+}
+for (const printCss of ["@media print", "[data-print-hide=\"true\"]", "[data-print-document] button", "size: letter landscape"]) {
+  assert.ok(globals.includes(printCss), `global print stylesheet should clean bid PDFs: ${printCss}`);
+}
 
 console.log("estimating cockpit checks passed");

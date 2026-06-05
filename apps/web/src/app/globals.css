@@ -60,3 +60,86 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     padding-top: 3.5rem !important;
   }
 }
+
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 0.35in;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  [data-print-hide="true"],
+  [data-print-document] button,
+  [data-print-document] input[type="checkbox"] {
+    display: none !important;
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  [data-print-document] {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  [data-print-document],
+  [data-print-document] * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  [data-print-document] section,
+  [data-print-document] article,
+  [data-print-document] table,
+  [data-print-document] tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  [data-print-document] table {
+    border-collapse: collapse !important;
+  }
+
+  [data-print-document] th,
+  [data-print-document] td {
+    border-color: #cbd5e1 !important;
+  }
+
+  [data-print-document] * {
+    color: #111827 !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  [data-print-document] .text-green-400,
+  [data-print-document] .text-green-300 {
+    color: #047857 !important;
+  }
+
+  [data-print-document] .text-orange-300,
+  [data-print-document] .text-orange-200 {
+    color: #c2410c !important;
+  }
+
+  [data-print-document] .text-muted-foreground,
+  [data-print-document] .text-blue-100,
+  [data-print-document] .text-blue-200 {
+    color: #475569 !important;
+  }
+}
