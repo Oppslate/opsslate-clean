@@ -39,8 +39,12 @@ for (const action of ["← Back", "+ Section", "+ Milestone", "+ Add Item", "+ F
 }
 assert.match(page, /border-orange-500\/35 bg-orange-500\/85 text-white hover:bg-orange-500`\} onClick=\{\(\) => setActiveTool\("calendar"\)\}>\+ Milestone/, "milestone action should be orange and sit in the bid action toolbar");
 
-for (const sectionFlow of ["Add Section / Phase", "Section / Phase Type", "COMMON_CONSTRUCTION_PHASES", "Other", "Custom Phase Name", "opsslate_estimate_custom_phases"]) {
+for (const sectionFlow of ["Add Section / Phase", "Parent Phase", "COMMON_CONSTRUCTION_PHASES", "Other", "Custom Phase Name", "opsslate_estimate_custom_phases"]) {
   assert.ok(page.includes(sectionFlow), `section/phase workflow should include ${sectionFlow}`);
+}
+
+for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", "Parent phase line created from + Section", "Parent line", "No estimate items yet. Add a child item under this phase when scope is ready."]) {
+  assert.ok(page.includes(parentLineFlow), `section button should create and render parent bid lines: ${parentLineFlow}`);
 }
 
 for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total", "Request RFQ", "No bid items yet"]) {

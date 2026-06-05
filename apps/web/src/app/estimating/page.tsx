@@ -73,6 +73,12 @@ function itemLabel(item: Record<string, unknown>) {
   return [item.section, item.description].filter(Boolean).join(" - ") || "Estimate item";
 }
 
+const SECTION_PARENT_NOTE = "OPSSLATE_SECTION_PARENT";
+
+function isSectionParentItem(item: Record<string, unknown>) {
+  return String(item.notes || "").includes(SECTION_PARENT_NOTE) || String(item.unit || "").toUpperCase() === "SECTION";
+}
+
 type BidPortfolioRow = {
   key: string;
   project?: Record<string, unknown>;
@@ -457,9 +463,9 @@ function SectionPhaseModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-4xl rounded-xl border border-border bg-card p-6 shadow-2xl">
         <h2 className="text-2xl font-black text-white">Add Section / Phase</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Choose a common construction phase or add your own. Custom phases are saved for future dropdowns.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Choose the phase for the new parent line in the bid. Custom phases are saved for future dropdowns.</p>
         <div className="mt-5">
-          <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Section / Phase Type</label>
+          <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Parent Phase</label>
           <select
             value={selectedPhase}
             onChange={(event) => onPhaseChange(event.target.value)}
@@ -483,7 +489,7 @@ function SectionPhaseModal({
           </div>
         )}
         <div className="mt-3 text-xs text-muted-foreground">
-          Estimate sections should match schedule phases so bid scope can flow into milestones and tasks later.
+          The selected phase becomes a parent line in the estimate. Items and milestones can be added beneath it later.
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
@@ -599,24 +605,32 @@ function EstimateDetailView({
             </thead>
             <tbody>
               {Object.entries(groupedItems).map(([section, sectionItems]) => {
-                const sectionTotal = estimateTotal(sectionItems);
-                const allSectionSelected = sectionItems.every((item) => selectedItemIds.includes(String(item._id)));
+                const childItems = sectionItems.filter((item) => !isSectionParentItem(item));
+                const sectionTotal = estimateTotal(childItems);
+                const allSectionSelected = childItems.length > 0 && childItems.every((item) => selectedItemIds.includes(String(item._id)));
                 return (
                   <Fragment key={`group-${section}`}>
                     <tr key={`section-${section}`} className="border-t border-border bg-secondary/45">
                       <td className="p-3">
                         <input
                           type="checkbox"
-                          checked={sectionItems.length > 0 && allSectionSelected}
-                          onChange={(event) => sectionItems.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
+                          checked={allSectionSelected}
+                          disabled={!childItems.length}
+                          onChange={(event) => childItems.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
                         />
                       </td>
                       <td className="p-3 font-black text-white">Folder {section}</td>
-                      <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>Select all</td>
+                      <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{childItems.length ? "Select all" : "Parent line"}</td>
                       <td className="p-3 text-right font-black text-white">{money(sectionTotal)}</td>
                       <td className="p-3" />
                     </tr>
-                    {sectionItems.map((item) => {
+                    {!childItems.length && (
+                      <tr className="border-t border-border">
+                        <td className="p-3" />
+                        <td colSpan={8} className="p-4 pl-10 text-sm text-muted-foreground">No estimate items yet. Add a child item under this phase when scope is ready.</td>
+                      </tr>
+                    )}
+                    {childItems.map((item) => {
                       const itemId = String(item._id);
                       const rfqStatus = rfqStatusForItem(item);
                       return (
@@ -1407,9 +1421,9 @@ function EstimatingWorkspace() {
     });
   }
 
-  function saveSectionPhase() {
+  async function saveSectionPhase() {
     const nextPhase = selectedPhaseType === "Other" ? customPhaseName.trim() : selectedPhaseType;
-    if (!nextPhase) return;
+    if (!user || !nextPhase || !selectedEstimate?._id) return;
     if (selectedPhaseType === "Other") {
       const nextOptions = [...new Set([...customPhaseOptions, nextPhase])].sort((a, b) => a.localeCompare(b));
       setCustomPhaseOptions(nextOptions);
@@ -1417,7 +1431,22 @@ function EstimatingWorkspace() {
       setSelectedPhaseType(nextPhase);
       setCustomPhaseName("");
     }
+    const existingParent = (estimateItems || []).some((item) => isSectionParentItem(item) && String(item.section || "") === nextPhase);
+    if (!existingParent) {
+      await createEstimateItem({
+        companyId: user.companyId,
+        estimateId: selectedEstimate._id as Id<"estimates">,
+        section: nextPhase,
+        description: nextPhase,
+        quantity: 0,
+        unit: "SECTION",
+        unitCost: 0,
+        taxPct: 0,
+        notes: `${SECTION_PARENT_NOTE}: Parent phase line created from + Section.`,
+      });
+    }
     setSectionPhaseModalOpen(false);
+    setActiveTool("estimate-detail");
   }
 
   if (!user) return null;
