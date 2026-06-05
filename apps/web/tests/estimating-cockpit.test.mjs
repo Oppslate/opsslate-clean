@@ -104,9 +104,10 @@ for (const detailText of ["Draft Actions", "Schedule readiness", "Estimate Total
   assert.ok(page.includes(detailText), `estimate detail worksheet should include ${detailText}`);
 }
 
-for (const builderText of ["Blank Estimate Slate", "Build the estimate structure", "Phase", "Section Under Phase", "Item Under Section", "Guardrail: an item cannot be created until Phase, Section, and Item are filled in.", "Create Estimate + Add Item", "ESTIMATE_PHASE_LIBRARY"]) {
-  assert.ok(page.includes(builderText), `blank estimate slate should include ${builderText}`);
+for (const removedBuilderText of ["Blank Estimate Slate", "Build the estimate structure", "Guardrail: an item cannot be created until Phase, Section, and Item are filled in.", "Create Estimate + Add Item", "ESTIMATE_PHASE_LIBRARY"]) {
+  assert.ok(!page.includes(removedBuilderText), `estimates page should not show the experimental blank slate builder: ${removedBuilderText}`);
 }
+assert.match(page, /Start Estimate/, "estimates list should remain the starting point for project estimates");
 
 for (const productionTool of ["Ops-Takeoff", "Production Breakdown", "Equipment Analyzer", "Equipment Dealers"]) {
   assert.ok(page.includes(productionTool), `production dropdown should include ${productionTool}`);

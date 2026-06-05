@@ -445,31 +445,6 @@ const COMMON_CONSTRUCTION_PHASES = [
   "Closeout",
 ];
 
-const ESTIMATE_PHASE_LIBRARY: Record<string, string[]> = {
-  Preconstruction: ["Mobilization", "Survey / Layout", "Permits", "Safety Setup", "Temporary Controls", "Project Administration"],
-  Mobilization: ["Move Equipment", "Jobsite Setup", "Temporary Facilities", "Initial Coordination"],
-  "Site Preparation": ["Clearing", "Erosion Control", "Traffic Control", "Saw Cutting", "Demolition"],
-  Earthwork: ["Excavation", "Backfill", "Subbase", "Export / Disposal", "Compaction"],
-  "Underground Utilities": ["Trenching", "Conduit", "Drainage", "Water / Sewer", "Utility Coordination"],
-  Concrete: ["Forming", "Reinforcing", "Place Concrete", "Curing", "Sawcut / Jointing"],
-  "Asphalt Paving": ["Subbase Prep", "Binder Course", "Top Course", "Pavement Markings"],
-  Electrical: ["Duct Bank", "Pull Boxes", "Wire / Cable", "Panels / Gear", "EV Equipment", "Testing"],
-  Restoration: ["Topsoil", "Seed / Mulch", "Cleanup", "Punchlist"],
-  Closeout: ["As-Builts", "Final Testing", "Submittal Closeout", "Demobilization"],
-};
-
-const ESTIMATE_ITEM_STARTERS: Record<string, string[]> = {
-  Mobilization: ["Move equipment to site", "Jobsite setup", "Temporary facilities"],
-  "Move Equipment": ["Move equipment to site", "Unload equipment", "Demobilize equipment"],
-  "Survey / Layout": ["Initial layout", "Stake work limits", "Layout utility alignment"],
-  Excavation: ["Excavation for duct bank", "Load and haul spoils", "Trench excavation"],
-  Backfill: ["Backfill material", "Place and compact backfill"],
-  "Duct Bank": ["Install conduit duct bank", "Concrete encasement", "Pull string and mandrel"],
-  Forming: ["Concrete forming and accessories", "Form slab edges"],
-  "Binder Course": ["Asphalt binder course"],
-  "Top Course": ["Asphalt top course"],
-};
-
 function statusLabel(status?: string) {
   const clean = String(status || "draft").trim();
   if (!clean) return "Draft";
@@ -2055,25 +2030,10 @@ function EstimateDetailView({
 
 function EstimatesListView({
   rows,
-  selectedProject,
-  selectedPhase,
-  selectedSection,
-  starterDescription,
-  starterQuantity,
-  starterUnit,
-  starterUnitCost,
-  creatingStarter,
   selectedEstimateId,
   selectedEstimateTotal,
   selectedEstimateItemCount,
   onOpenEstimate,
-  onSelectedPhaseChange,
-  onSelectedSectionChange,
-  onStarterDescriptionChange,
-  onStarterQuantityChange,
-  onStarterUnitChange,
-  onStarterUnitCostChange,
-  onCreateStarter,
   onDuplicateEstimate,
   onDeleteEstimate,
   onNewEstimate,
@@ -2081,36 +2041,16 @@ function EstimatesListView({
   onQuickTemplates,
 }: {
   rows: BidPortfolioRow[];
-  selectedProject?: Record<string, unknown>;
-  selectedPhase: string;
-  selectedSection: string;
-  starterDescription: string;
-  starterQuantity: string;
-  starterUnit: string;
-  starterUnitCost: string;
-  creatingStarter: boolean;
   selectedEstimateId: string;
   selectedEstimateTotal: number;
   selectedEstimateItemCount: number;
   onOpenEstimate: (row: BidPortfolioRow) => void;
-  onSelectedPhaseChange: (value: string) => void;
-  onSelectedSectionChange: (value: string) => void;
-  onStarterDescriptionChange: (value: string) => void;
-  onStarterQuantityChange: (value: string) => void;
-  onStarterUnitChange: (value: string) => void;
-  onStarterUnitCostChange: (value: string) => void;
-  onCreateStarter: () => void;
   onDuplicateEstimate: (estimate: Record<string, unknown>) => void;
   onDeleteEstimate: (estimate: Record<string, unknown>) => void;
   onNewEstimate: () => void;
   onAutoBid: () => void;
   onQuickTemplates: () => void;
 }) {
-  const phaseSections = ESTIMATE_PHASE_LIBRARY[selectedPhase] || [];
-  const sectionSuggestions = phaseSections.length ? phaseSections : [...new Set(Object.values(ESTIMATE_PHASE_LIBRARY).flat())].slice(0, 24);
-  const starterItems = ESTIMATE_ITEM_STARTERS[selectedSection] || ESTIMATE_ITEM_STARTERS[selectedPhase] || [];
-  const selectedProjectHasEstimate = selectedProject ? rows.some((row) => row.project && recordId(row.project) === recordId(selectedProject) && row.estimate) : false;
-
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
@@ -2185,131 +2125,6 @@ function EstimatesListView({
         </div>
       </section>
 
-      {selectedProject && !selectedProjectHasEstimate && (
-        <section className="rounded-lg border border-orange-500/30 bg-orange-500/5 p-5">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <Badge className="mb-2 bg-orange-500/20 text-orange-200">Blank Estimate Slate</Badge>
-              <h2 className="text-2xl font-black text-white">Build the estimate structure</h2>
-              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                Type the phase, section, milestone, and item freely. OpsSlate keeps every item attached to a home before it can enter the estimate.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-background/60 px-4 py-3 text-sm text-blue-100">
-              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Selected Project</div>
-              <div className="font-bold text-white">{projectDisplayName(selectedProject)}</div>
-            </div>
-          </div>
-
-          <div className="mt-5 rounded-lg border border-border bg-card">
-            <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background/55 p-3">
-              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-yellow-500/35 bg-yellow-500/85 px-3 text-xs font-bold text-black hover:bg-yellow-400" onClick={() => { onSelectedPhaseChange(""); onSelectedSectionChange(""); onStarterDescriptionChange(""); }}>+ Phase</button>
-              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-blue-500/35 bg-blue-500/80 px-3 text-xs font-bold text-white hover:bg-blue-500" onClick={() => { onSelectedSectionChange(""); onStarterDescriptionChange(""); }}>+ Section</button>
-              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-orange-500/35 bg-orange-500/85 px-3 text-xs font-bold text-white hover:bg-orange-500" onClick={() => onStarterDescriptionChange(starterDescription || "Milestone - ")}>+ Milestone</button>
-              <button type="button" className="inline-flex h-9 items-center rounded-xl border border-green-500/35 bg-green-500/85 px-3 text-xs font-bold text-white hover:bg-green-500" disabled={!selectedPhase.trim() || !selectedSection.trim() || !starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>+ Add Item</button>
-            </div>
-
-            <div className="border-b border-border bg-secondary/40 p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-orange-300">Phase</div>
-                  <h3 className="mt-1 text-xl font-black text-white">{selectedPhase || "No phase named yet"}</h3>
-                </div>
-                <input
-                  list="estimate-phase-suggestions"
-                  value={selectedPhase}
-                  onChange={(event) => onSelectedPhaseChange(event.target.value)}
-                  placeholder="Type phase name, e.g. Preconstruction"
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white lg:w-80"
-                />
-                <datalist id="estimate-phase-suggestions">
-                  {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => <option key={phase} value={phase} />)}
-                </datalist>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="self-center text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Optional suggestions</span>
-                {Object.keys(ESTIMATE_PHASE_LIBRARY).map((phase) => (
-                  <button
-                    key={phase}
-                    type="button"
-                    onClick={() => onSelectedPhaseChange(phase)}
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${phase === selectedPhase ? "border-orange-500/50 bg-orange-500/15 text-orange-100" : "border-border bg-background/50 text-blue-100"}`}
-                  >
-                    {phase}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="border-b border-border p-4 pl-8">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-blue-300">Section Under Phase</div>
-                  <h3 className="mt-1 text-lg font-black text-white">{selectedSection || "No section named yet"}</h3>
-                </div>
-                <input
-                  list="estimate-section-suggestions"
-                  value={selectedSection}
-                  onChange={(event) => onSelectedSectionChange(event.target.value)}
-                  placeholder="Type section name, e.g. Mobilization"
-                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white lg:w-80"
-                />
-                <datalist id="estimate-section-suggestions">
-                  {sectionSuggestions.map((section) => <option key={section} value={section} />)}
-                </datalist>
-              </div>
-              {!!sectionSuggestions.length && <div className="mt-3 flex flex-wrap gap-2">
-                <span className="self-center text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Optional suggestions</span>
-                {sectionSuggestions.map((section) => (
-                  <button
-                    key={section}
-                    type="button"
-                    onClick={() => onSelectedSectionChange(section)}
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${section === selectedSection ? "border-blue-500/50 bg-blue-500/15 text-blue-100" : "border-border bg-background/50 text-muted-foreground"}`}
-                  >
-                    {section}
-                  </button>
-                ))}
-              </div>}
-            </div>
-
-            <div className="p-4 pl-12">
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-green-300">Item Under Section</div>
-              <div className="grid gap-3 xl:grid-cols-[1fr_110px_110px_150px]">
-                <input
-                  value={starterDescription}
-                  onChange={(event) => onStarterDescriptionChange(event.target.value)}
-                  className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
-                  placeholder="Type item or milestone name..."
-                />
-                <input value={starterQuantity} onChange={(event) => onStarterQuantityChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Qty" />
-                <input value={starterUnit} onChange={(event) => onStarterUnitChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit" />
-                <input value={starterUnitCost} onChange={(event) => onStarterUnitCostChange(event.target.value)} className="rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Unit cost" />
-              </div>
-              {!!starterItems.length && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {starterItems.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => onStarterDescriptionChange(item)}
-                      className="rounded-full border border-border bg-background/70 px-3 py-1 text-xs font-semibold text-blue-100 hover:border-orange-500/40"
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="mt-4 flex flex-col gap-3 rounded-md border border-border bg-background/50 p-3 text-xs text-muted-foreground lg:flex-row lg:items-center lg:justify-between">
-                <span>{selectedPhase.trim() && selectedSection.trim() ? <>This will create the estimate and file the first item under <span className="font-bold text-white">{selectedPhase} / {selectedSection}</span>.</> : "Guardrail: an item cannot be created until Phase, Section, and Item are filled in."}</span>
-                <Button disabled={!selectedPhase.trim() || !selectedSection.trim() || !starterDescription.trim() || creatingStarter} onClick={onCreateStarter}>
-                  {creatingStarter ? "Creating estimate..." : "Create Estimate + Add Item"}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
     </div>
   );
 }
@@ -2566,13 +2381,6 @@ function EstimatingWorkspace() {
   const [signatureProfile, setSignatureProfile] = useState<CorrespondenceSignatureProfile>(() => defaultSignatureProfile(user));
   const [creatingDrafts, setCreatingDrafts] = useState(false);
   const [newVendor, setNewVendor] = useState({ name: "", contactName: "", email: "", phone: "", category: "Material Supplier" });
-  const [selectedBuilderPhase, setSelectedBuilderPhase] = useState("");
-  const [selectedBuilderSection, setSelectedBuilderSection] = useState("");
-  const [starterDescription, setStarterDescription] = useState("");
-  const [starterQuantity, setStarterQuantity] = useState("1");
-  const [starterUnit, setStarterUnit] = useState("LS");
-  const [starterUnitCost, setStarterUnitCost] = useState("0");
-  const [creatingStarterEstimate, setCreatingStarterEstimate] = useState(false);
   const [responseDraft, setResponseDraft] = useState({
     rfqId: "",
     itemId: "",
@@ -2968,9 +2776,6 @@ function EstimatingWorkspace() {
       setActiveTool("cockpit");
       return;
     }
-    setSelectedBuilderPhase("");
-    setSelectedBuilderSection("");
-    setStarterDescription("");
     setActiveTool("estimates");
   }
 
@@ -3115,53 +2920,32 @@ function EstimatingWorkspace() {
     if (typeof window !== "undefined") window.location.href = target;
   }
 
-  function openPortfolioRow(row: BidPortfolioRow) {
-    if (row.project?._id) setSelectedProjectId(String(row.project._id));
-    setSelectedEstimateId(row.estimate?._id ? String(row.estimate._id) : "");
-    setSelectedItemIds([]);
-    setActiveTool(row.estimate?._id ? "estimate-detail" : "estimates");
-  }
-
-  async function createStarterEstimate() {
-    const phaseName = selectedBuilderPhase.trim();
-    const sectionName = selectedBuilderSection.trim();
-    const itemName = starterDescription.trim();
-    if (!user || !selectedProject || !phaseName || !sectionName || !itemName) return;
-    setCreatingStarterEstimate(true);
-    try {
-      const projectName = projectDisplayName(selectedProject);
-      const estimateName = `${projectName} EST`;
-      const location = projectAddressLine(selectedProject);
+  async function openPortfolioRow(row: BidPortfolioRow) {
+    const project = row.project;
+    if (project?._id) setSelectedProjectId(String(project._id));
+    if (!row.estimate?._id && project?._id && user?.companyId) {
+      const projectName = projectDisplayName(project);
       const estimateIdCreated = await createEstimate({
         companyId: user.companyId,
-        name: estimateName,
-        client: portfolioClientLabel(selectedProject),
-        location,
+        name: `${projectName} EST`,
+        client: portfolioClientLabel(project),
+        location: projectAddressLine(project),
         status: "draft",
-        bidType: portfolioTypeLabel(selectedProject),
-        description: `Estimate started from blank slate guardrail: ${phaseName} / ${sectionName}`,
+        bidType: portfolioTypeLabel(project),
+        description: `Estimate started from project ${projectName}.`,
       });
       await updateEstimate({
         id: estimateIdCreated as Id<"estimates">,
-        projectId: selectedProject._id as Id<"projects">,
-      });
-      await createEstimateItem({
-        companyId: user.companyId,
-        estimateId: estimateIdCreated as Id<"estimates">,
-        section: `${phaseName} / ${sectionName}`,
-        description: itemName,
-        quantity: Number(starterQuantity || 0) || 0,
-        unit: starterUnit.trim() || "LS",
-        unitCost: Number(starterUnitCost || 0) || 0,
-        taxPct: 0,
-        notes: "Created from blank estimate slate with Phase / Section / Item guardrails.",
+        projectId: project._id as Id<"projects">,
       });
       setSelectedEstimateId(String(estimateIdCreated));
       setSelectedItemIds([]);
       setActiveTool("estimate-detail");
-    } finally {
-      setCreatingStarterEstimate(false);
+      return;
     }
+    setSelectedEstimateId(row.estimate?._id ? String(row.estimate._id) : "");
+    setSelectedItemIds([]);
+    setActiveTool(row.estimate?._id ? "estimate-detail" : "estimates");
   }
 
   function buildPackageText(vendor: Record<string, unknown>, items: Array<Record<string, unknown>>) {
@@ -4135,25 +3919,10 @@ function EstimatingWorkspace() {
         ) : activeTool === "estimates" ? (
           <EstimatesListView
             rows={portfolioRows}
-            selectedProject={selectedProject}
-            selectedPhase={selectedBuilderPhase}
-            selectedSection={selectedBuilderSection}
-            starterDescription={starterDescription}
-            starterQuantity={starterQuantity}
-            starterUnit={starterUnit}
-            starterUnitCost={starterUnitCost}
-            creatingStarter={creatingStarterEstimate}
             selectedEstimateId={estimateId}
             selectedEstimateTotal={selectedEstimateTotal}
             selectedEstimateItemCount={(estimateItems || []).length}
-            onOpenEstimate={openPortfolioRow}
-            onSelectedPhaseChange={setSelectedBuilderPhase}
-            onSelectedSectionChange={setSelectedBuilderSection}
-            onStarterDescriptionChange={setStarterDescription}
-            onStarterQuantityChange={setStarterQuantity}
-            onStarterUnitChange={setStarterUnit}
-            onStarterUnitCostChange={setStarterUnitCost}
-            onCreateStarter={() => void createStarterEstimate()}
+            onOpenEstimate={(row) => void openPortfolioRow(row)}
             onDuplicateEstimate={(estimate) => void duplicateEstimateRow(estimate)}
             onDeleteEstimate={(estimate) => void deleteEstimateRow(estimate)}
             onNewEstimate={startNewEstimateFlow}
