@@ -141,5 +141,6 @@ for (const predictiveInput of ["historicalEstimates", "historicalItems", "histor
 for (const helper of ["productionRowsForItems", "productionSummaryForRows", "productionRateForItem", "ProductionRateBreakdownView"]) {
   assert.match(page, new RegExp(helper), `production breakdown should use ${helper}`);
 }
+assert.ok(page.includes("items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item)).map"), "production breakdown should not turn section parent rows into production tasks");
 
 console.log("estimating cockpit checks passed");

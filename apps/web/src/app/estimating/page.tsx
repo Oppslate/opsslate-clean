@@ -648,7 +648,7 @@ function productionRateForItem(item: Record<string, unknown>) {
 }
 
 function productionRowsForItems(items: Array<Record<string, unknown>> = []) {
-  return items.map((item, index) => {
+  return items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item)).map((item, index) => {
     const quantity = Number(item.quantity || 0) || 0;
     const unitCost = Number(item.unitCost || 0) || 0;
     const baseCost = quantity * unitCost;
