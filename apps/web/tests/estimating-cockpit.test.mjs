@@ -64,6 +64,9 @@ for (const removedMilestoneFlow of ["MilestoneModal", "Add Milestone", "Select t
 for (const bidItemFlow of ["BidItemModal", "Add Estimate Item", "Section", "Quantity", "Unit of Measure", "Tax %", "Unit Cost", "Line Total", "Extended"]) {
   assert.ok(page.includes(bidItemFlow), `add item workflow should include ${bidItemFlow}`);
 }
+for (const itemDescriptionDropdownFlow of ["COMMON_ESTIMATE_ITEM_DESCRIPTIONS", "Survey Operations", "Duct Bank Excavation", "Select item description", "Type custom item description", "opsslate_estimate_custom_item_descriptions"]) {
+  assert.ok(page.includes(itemDescriptionDropdownFlow), `item description should use saved dropdown options with custom Other entries: ${itemDescriptionDropdownFlow}`);
+}
 
 for (const itemEntryFlow of ["Scope / Proof Notes", "RFQ Vendor / Supplier", "RFQ Due Date", "Submittal Requirement", "Production Days", "Crew Size", "Lead Time / Constraint", "ITEM_SCOPE_NOTE_PREFIX", "ITEM_RFQ_DETAIL_PREFIX", "ITEM_SUBMITTAL_DETAIL_PREFIX", "ITEM_SCHEDULE_DETAIL_PREFIX"]) {
   assert.ok(page.includes(itemEntryFlow), `bid item modal should capture estimator detail at item creation/edit: ${itemEntryFlow}`);
