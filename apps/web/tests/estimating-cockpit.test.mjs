@@ -66,6 +66,14 @@ for (const itemEntryFlow of ["Scope / Proof Notes", "RFQ Vendor / Supplier", "RF
   assert.ok(page.includes(itemEntryFlow), `bid item modal should capture estimator detail at item creation/edit: ${itemEntryFlow}`);
 }
 
+for (const modalOwnedAction of ["RFI required", "RFI Question", "Attach snippet", "Snippet title", "Snippet purpose", "ITEM_RFI_DETAIL_PREFIX", "RFI_INTENT_NOTE"]) {
+  assert.ok(page.includes(modalOwnedAction), `add/edit item modal should own line evidence/action capture: ${modalOwnedAction}`);
+}
+
+for (const rowAction of ["onRequestQuote(item)", "onCreateRfi(item)", "onCreateSubmittal(item)", "onAttachSnippet(item)"]) {
+  assert.doesNotMatch(page, new RegExp(`<Button size="sm" variant="outline" onClick=\\{\\(\\) => ${rowAction.replace(/[()]/g, "\\$&")}\\}`), `estimate worksheet rows should not expose cluttered action button ${rowAction}`);
+}
+
 assert.match(page, /activeTool === "war-room" \? aiToolsWorkspace/, "AI estimator cards should live behind the AI Tools workspace, not in the estimate worksheet");
 
 for (const moonshotFlow of ["MoveControls", "ORDER_NOTE_PREFIX", "OPSSLATE_ORDER", "RFQ required", "Request submittal", "RFQ_INTENT_NOTE", "SUBMITTAL_INTENT_NOTE", "TBD supplier", "Submittal Intent"]) {
