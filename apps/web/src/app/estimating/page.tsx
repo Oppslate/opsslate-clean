@@ -63,6 +63,10 @@ function engineerEstimateValue(estimate?: Record<string, unknown>, project?: Rec
     numericField(project, ["engineerEstimate", "engineersEstimate", "engineerEstimateAmount", "ownerEstimate", "budget", "budgetValue", "contractValue"]);
 }
 
+function bidDateValue(estimate?: Record<string, unknown>, project?: Record<string, unknown>) {
+  return estimate?.bidDate || project?.contractDate || project?.bidDateTime || project?.bidDate || "";
+}
+
 function parseBidDate(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -478,11 +482,13 @@ function scheduleReadinessScore(items: Array<Record<string, unknown>> = []) {
 
 function predictiveSignalsForEstimate({
   estimate,
+  project,
   items,
   rfqSummary,
   costItems,
 }: {
   estimate?: Record<string, unknown>;
+  project?: Record<string, unknown>;
   items: Array<Record<string, unknown>>;
   rfqSummary: ReturnType<typeof rfqCounts>;
   costItems: Array<Record<string, unknown>>;
@@ -497,7 +503,7 @@ function predictiveSignalsForEstimate({
   if (materialHeavy && rfqSummary.total === 0) signals.push({ label: "RFQ exposure", detail: "Material-heavy work exists with no quote records yet.", severity: "high" });
   if (rfqSummary.overdue) signals.push({ label: "Vendor response risk", detail: `${rfqSummary.overdue} RFQ package${rfqSummary.overdue === 1 ? "" : "s"} appear overdue.`, severity: "medium" });
   if (!costItems.length) signals.push({ label: "Cost database empty", detail: "Seed labor, equipment, and material costs before trusting predictions.", severity: "medium" });
-  if (!estimate?.bidDate) signals.push({ label: "Bid calendar gap", detail: "Bid date is missing, so bid-day pressure cannot be predicted.", severity: "low" });
+  if (!bidDateValue(estimate, project)) signals.push({ label: "Bid calendar gap", detail: "Bid date is missing, so bid-day pressure cannot be predicted.", severity: "low" });
   return signals.slice(0, 5);
 }
 
@@ -1678,7 +1684,8 @@ function EstimateDetailView({
   const engineerEstimate = engineerEstimateValue(estimate, project);
   const bidDelta = engineerEstimate ? selectedEstimateTotal - engineerEstimate : 0;
   const bidDeltaClass = bidDelta > 0 ? "text-red-300" : bidDelta < 0 ? "text-green-300" : "text-blue-100";
-  const bidCountdown = bidCountdownLabel(estimate?.bidDate, clockNow);
+  const bidDate = bidDateValue(estimate, project);
+  const bidCountdown = bidCountdownLabel(bidDate, clockNow);
 
   return (
     <div className="space-y-5">
@@ -1696,7 +1703,7 @@ function EstimateDetailView({
             <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-3">
               <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-orange-100">Bid Clock</div>
               <div className="mt-1 text-xl font-black text-white">{bidCountdown}</div>
-              <div className="text-[11px] text-muted-foreground">{estimate?.bidDate ? String(estimate.bidDate) : "Set bid date"}</div>
+              <div className="text-[11px] text-muted-foreground">{bidDate ? String(bidDate) : "Set bid date"}</div>
             </div>
             <div className="rounded-lg border border-border bg-background/55 p-3">
               <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Engineer Est.</div>
@@ -2027,6 +2034,7 @@ function EstimatesListView({
                 const { project, estimate } = row;
                 const isSelected = Boolean(estimate?._id && String(estimate._id) === selectedEstimateId);
                 const storedTotal = portfolioStoredTotal(estimate);
+                const rowBidDate = bidDateValue(estimate, project);
                 return (
                   <tr key={row.key} className="border-t border-border">
                     <td className="p-3 text-muted-foreground">{estimate ? "Bid" : "Project"}</td>
@@ -2037,7 +2045,7 @@ function EstimatesListView({
                       </button>
                     </td>
                     <td className="p-3 text-muted-foreground">{portfolioClientLabel(project, estimate)}</td>
-                    <td className="p-3 text-muted-foreground">{String(estimate?.bidDate || "No date")}</td>
+                    <td className="p-3 text-muted-foreground">{rowBidDate ? String(rowBidDate) : "No date"}</td>
                     <td className="p-3"><Badge variant={estimate ? "outline" : "secondary"}>{estimate ? statusLabel(String(estimate.status || "draft")) : "No estimate"}</Badge></td>
                     <td className="p-3 text-white">{isSelected ? selectedEstimateItemCount : estimate ? "Open" : "-"}</td>
                     <td className="p-3 text-right font-mono font-bold text-white">{isSelected ? money(selectedEstimateTotal) : storedTotal !== undefined ? money(storedTotal) : "-"}</td>
@@ -2476,10 +2484,11 @@ function EstimatingWorkspace() {
   const scheduleScore = useMemo(() => scheduleReadinessScore(estimateItems || []), [estimateItems]);
   const predictiveSignals = useMemo(() => predictiveSignalsForEstimate({
     estimate: selectedEstimate,
+    project: selectedProject,
     items: estimateItems || [],
     rfqSummary,
     costItems: costItems || [],
-  }), [selectedEstimate, estimateItems, rfqSummary, costItems]);
+  }), [selectedEstimate, selectedProject, estimateItems, rfqSummary, costItems]);
   const productionRows = useMemo(() => productionRowsForItems(estimateItems || []), [estimateItems]);
   const productionSummary = useMemo(() => productionSummaryForRows(productionRows), [productionRows]);
   const predictiveEstimatorModel = useMemo(() => buildPredictiveEstimatorModel({

@@ -47,7 +47,7 @@ for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", 
   assert.ok(page.includes(parentLineFlow), `section button should create and render parent bid lines: ${parentLineFlow}`);
 }
 
-for (const polishedEstimateUi of ["SectionGlyph", "MilestoneGlyph", "sticky top-0 z-[70]", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidCountdownLabel", "HierarchyRenameModal", "Edit Section", "Edit Milestone", "deleteSectionGroup", "deleteMilestoneGroup", "saveSectionRename", "saveMilestoneRename"]) {
+for (const polishedEstimateUi of ["SectionGlyph", "MilestoneGlyph", "sticky top-0 z-[70]", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidDateValue", "project?.contractDate", "bidCountdownLabel", "HierarchyRenameModal", "Edit Section", "Edit Milestone", "deleteSectionGroup", "deleteMilestoneGroup", "saveSectionRename", "saveMilestoneRename"]) {
   assert.ok(page.includes(polishedEstimateUi), `estimate detail should include polished bid command UI: ${polishedEstimateUi}`);
 }
 
