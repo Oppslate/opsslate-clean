@@ -195,7 +195,7 @@ export const listItems = query({
 });
 
 function percent(done: number, total: number) {
-  if (!total) return 100;
+  if (!total) return 0;
   return Math.round((done / total) * 100);
 }
 
@@ -206,7 +206,9 @@ function readinessLane(label: string, items: any[], categories: string[]) {
   return {
     label,
     score,
-    status: score >= 90 ? "ready" : score >= 60 ? "needs review" : "at risk",
+    count: scoped.length,
+    complete: complete.length,
+    status: scoped.length === 0 ? "waiting" : score >= 90 ? "ready" : score >= 60 ? "needs review" : "at risk",
     blockers: scoped.filter((item) => item.status !== "committed" && item.status !== "resolved" && item.status !== "rejected").slice(0, 5).map((item) => item.title),
   };
 }

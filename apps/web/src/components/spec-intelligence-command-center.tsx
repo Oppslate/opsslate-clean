@@ -19,11 +19,18 @@ function scoreTone(score: number) {
 function statusTone(status?: string) {
   if (status === "ready") return "border-green-500/30 bg-green-500/10 text-green-200";
   if (status === "needs review") return "border-amber-500/30 bg-amber-500/10 text-amber-100";
+  if (status === "waiting") return "border-cyan-500/30 bg-cyan-500/10 text-cyan-100";
   return "border-red-500/30 bg-red-500/10 text-red-100";
 }
 
 const publishDestinations = ["RFIs", "Tasks", "Submittals", "Estimate Items", "Billing Rules", "Schedule Logic"];
 const agentWatchDomains = ["RFIs", "Submittals", "Tasks", "Schedule", "Billing", "Estimating"];
+const readinessPanelTargets: Record<string, { label: string; path: (projectId: string) => string }> = {
+  Estimating: { label: "Open Estimating", path: () => "/estimating" },
+  "Project Management": { label: "Open Project", path: (projectId) => `/project/${projectId}` },
+  Schedule: { label: "Open Schedule", path: () => "/scheduler" },
+  Billing: { label: "Open Books", path: () => "/books" },
+};
 
 function CollapsibleCommandSection({
   title,
@@ -97,6 +104,12 @@ export function SpecIntelligenceCommandCenter({ projectId }: { projectId: Id<"pr
 
   function toggleSection(id: string, defaultCollapsed: boolean) {
     setCollapsedSections((current) => ({ ...current, [id]: !(current[id] ?? defaultCollapsed) }));
+  }
+
+  function openReadinessLane(lane: { label: string }) {
+    const target = readinessPanelTargets[lane.label];
+    if (!target || typeof window === "undefined") return;
+    window.location.href = target.path(String(projectId));
   }
 
   async function handleMarkReminder(item: any) {
@@ -418,12 +431,22 @@ export function SpecIntelligenceCommandCenter({ projectId }: { projectId: Id<"pr
                   <div key={lane.label} className="rounded-lg border border-border bg-background/65 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="font-semibold">{lane.label}</div>
-                      <Badge variant="outline" className={statusTone(lane.status)}>{lane.status}</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={statusTone(lane.status)}>{lane.status}</Badge>
+                        {readinessPanelTargets[lane.label] && (
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => openReadinessLane(lane)}>
+                            {readinessPanelTargets[lane.label].label}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
                       <div className="h-full rounded-full bg-orange-500" style={{ width: `${Math.max(0, Math.min(100, lane.score || 0))}%` }} />
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">{lane.score}% complete</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {lane.score}% ready
+                      {typeof lane.count === "number" ? ` - ${lane.complete || 0}/${lane.count} reviewed` : ""}
+                    </div>
                     {lane.blockers?.length > 0 && (
                       <div className="mt-2 text-xs text-muted-foreground">
                         <span className="font-semibold text-foreground">Blockers:</span> {lane.blockers.slice(0, 2).join(", ")}
