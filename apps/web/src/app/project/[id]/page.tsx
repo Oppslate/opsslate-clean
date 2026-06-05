@@ -58,6 +58,7 @@ type ProjectDetailsFormState = {
   bidDateTime: string;
   status: string;
   contractValue: string;
+  engineerEstimate: string;
 };
 
 type ProjectTeamMemberFormState = {
@@ -94,6 +95,7 @@ const emptyProjectDetailsForm: ProjectDetailsFormState = {
   bidDateTime: "",
   status: "",
   contractValue: "",
+  engineerEstimate: "",
 };
 
 function uniqueValues(values: Array<string | null | undefined>) {
@@ -289,6 +291,7 @@ function getProjectDetailsForm(project: Partial<Doc<"projects">> | null | undefi
     bidDateTime: project?.contractDate || "",
     status: project?.status || "",
     contractValue: typeof project?.contractValue === "number" ? String(project.contractValue) : "",
+    engineerEstimate: typeof (project as any)?.engineerEstimate === "number" ? String((project as any).engineerEstimate) : "",
   };
 }
 
@@ -714,6 +717,7 @@ function ProjectDashboardContent() {
         contractDate: projectDetailsForm.status === "Bid" ? projectDetailsForm.bidDateTime : "",
         status: projectDetailsForm.status.trim() || undefined,
         contractValue: optionalNumber(projectDetailsForm.contractValue),
+        engineerEstimate: optionalNumber(projectDetailsForm.engineerEstimate),
       });
       rememberProjectCode(projectCode);
       persistProjectDetailsDropdownValues({ ...projectDetailsForm, code: projectCode });
@@ -1000,13 +1004,14 @@ function ProjectDashboardContent() {
             ["End", project.endDate],
             ["Bid Date/Time", project.status === "Bid" ? formatDateTime(project.contractDate) : ""],
             ["Contract Value", typeof project.contractValue === "number" ? fmt(project.contractValue) : ""],
+            ["Engineer's Estimate", typeof (project as any).engineerEstimate === "number" ? fmt((project as any).engineerEstimate) : ""],
           ].filter(([, value]) => value).map(([label, value]) => (
             <div key={label as string} className="min-w-0">
             <div className="text-[10px] uppercase text-muted-foreground">{label as string}</div>
             <div className="font-medium truncate">{value as string}</div>
             </div>
           ))}
-          {!locationText && !project.code && !project.projectManager && !project.contractor && !project.projectRole && !project.type && !project.contractDate && !project.contractValue && (
+          {!locationText && !project.code && !project.projectManager && !project.contractor && !project.projectRole && !project.type && !project.contractDate && !project.contractValue && !(project as any).engineerEstimate && (
             <p className="text-sm text-muted-foreground col-span-2 md:col-span-4">No project details recorded yet.</p>
           )}
           </div>
@@ -1127,6 +1132,10 @@ function ProjectDashboardContent() {
             <div className="space-y-2">
               <Label htmlFor="project-contract-value">Contract value</Label>
               <Input id="project-contract-value" type="number" min="0" step="0.01" value={projectDetailsForm.contractValue} onChange={(e) => updateProjectDetailsField("contractValue", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-engineer-estimate">Engineer's estimate</Label>
+              <Input id="project-engineer-estimate" type="number" min="0" step="0.01" value={projectDetailsForm.engineerEstimate} onChange={(e) => updateProjectDetailsField("engineerEstimate", e.target.value)} />
             </div>
             </div>
             {projectDetailsError && <p className="text-sm text-destructive">{projectDetailsError}</p>}

@@ -19,6 +19,9 @@ assert.ok(projectPage.includes("Edit Project Details"), "project details card sh
 assert.ok(projectPage.includes("handleSaveProjectDetails"), "project details dialog should have a save handler");
 assert.ok(projectPage.includes("Project manager"), "project details edit form should include project manager input");
 assert.ok(projectPage.includes("Contract value"), "project details edit form should include contract value input");
+assert.ok(projectPage.includes("Engineer's estimate"), "project details edit form should include engineer's estimate input");
+assert.ok(projectPage.includes('id="project-engineer-estimate"'), "engineer's estimate should have a dedicated numeric input");
+assert.ok(projectPage.includes("engineerEstimate: optionalNumber(projectDetailsForm.engineerEstimate)"), "engineer's estimate should save through the project update mutation");
 assert.ok(projectPage.includes("<select"), "project status should use a dropdown control");
 assert.ok(!projectPage.includes('<Input id="project-status"'), "project status should not be a free-text input");
 for (const status of ["Active", "Bid", "On Hold", "Complete"]) {

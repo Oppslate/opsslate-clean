@@ -44,6 +44,7 @@ export const update = mutation({
     foundationType: v.optional(v.string()),
     projectManager: v.optional(v.string()),
     contractValue: v.optional(v.number()),
+    engineerEstimate: v.optional(v.number()),
     retainagePercent: v.optional(v.number()),
     billingMethod: v.optional(v.string()),
     clientPO: v.optional(v.string()),

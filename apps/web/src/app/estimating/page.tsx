@@ -60,7 +60,7 @@ function numericField(record: Record<string, unknown> | undefined, keys: string[
 
 function engineerEstimateValue(estimate?: Record<string, unknown>, project?: Record<string, unknown>) {
   return numericField(estimate, ["engineersEstimate", "engineerEstimate", "engineerEstimateAmount", "ownerEstimate", "budget", "budgetValue"]) ||
-    numericField(project, ["engineersEstimate", "engineerEstimate", "engineerEstimateAmount", "ownerEstimate", "budget", "budgetValue", "contractValue"]);
+    numericField(project, ["engineerEstimate", "engineersEstimate", "engineerEstimateAmount", "ownerEstimate", "budget", "budgetValue", "contractValue"]);
 }
 
 function parseBidDate(value: unknown) {

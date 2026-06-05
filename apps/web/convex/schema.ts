@@ -67,6 +67,7 @@ export default defineSchema({
     status: v.optional(v.string()),
     // Financial
     contractValue: v.optional(v.number()),
+    engineerEstimate: v.optional(v.number()),
     retainagePercent: v.optional(v.number()),
     billingMethod: v.optional(v.string()), // "fixed" | "time-materials" | "cost-plus" | "unit-price"
     clientPO: v.optional(v.string()),
