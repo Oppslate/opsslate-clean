@@ -43,9 +43,15 @@ for (const sectionFlow of ["Add Section / Phase", "Parent Phase", "COMMON_CONSTR
   assert.ok(page.includes(sectionFlow), `section/phase workflow should include ${sectionFlow}`);
 }
 
-for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", "Parent phase line created from + Section", "Parent line", "No estimate items yet. Add a child item under this phase when scope is ready."]) {
+for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", "Parent phase line created from + Section", "Parent line", "No estimate items yet"]) {
   assert.ok(page.includes(parentLineFlow), `section button should create and render parent bid lines: ${parentLineFlow}`);
 }
+
+for (const polishedEstimateUi of ["SectionGlyph", "MilestoneGlyph", "sticky top-2 z-40", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidCountdownLabel"]) {
+  assert.ok(page.includes(polishedEstimateUi), `estimate detail should include polished bid command UI: ${polishedEstimateUi}`);
+}
+
+assert.ok(!page.includes("Folder {section}"), "estimate section rows should use a folder icon instead of the word Folder");
 
 for (const milestoneFlow of ["MilestoneModal", "Add Milestone", "Select the section parent", "MILESTONE_PARENT_NOTE", "OPSSLATE_MILESTONE_PARENT", "Milestone child line under", "estimateMilestoneOptions"]) {
   assert.ok(page.includes(milestoneFlow), `milestone workflow should include ${milestoneFlow}`);

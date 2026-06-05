@@ -50,6 +50,40 @@ function money(value: unknown) {
   return "$" + amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+function numericField(record: Record<string, unknown> | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (value !== undefined && value !== null && value !== "" && !Number.isNaN(Number(value))) return Number(value);
+  }
+  return 0;
+}
+
+function engineerEstimateValue(estimate?: Record<string, unknown>, project?: Record<string, unknown>) {
+  return numericField(estimate, ["engineersEstimate", "engineerEstimate", "engineerEstimateAmount", "ownerEstimate", "budget", "budgetValue"]) ||
+    numericField(project, ["engineersEstimate", "engineerEstimate", "engineerEstimateAmount", "ownerEstimate", "budget", "budgetValue", "contractValue"]);
+}
+
+function parseBidDate(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function bidCountdownLabel(bidDate: unknown, now: Date) {
+  const date = parseBidDate(bidDate);
+  if (!date) return "No bid date";
+  const ms = date.getTime() - now.getTime();
+  if (ms <= 0) return "Bid due now";
+  const totalMinutes = Math.ceil(ms / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 function safeRfqNotes(value: unknown): RfqNotes {
   if (!value || typeof value !== "string") return {};
   try {
@@ -1368,6 +1402,22 @@ function MoveControls({
   );
 }
 
+function SectionGlyph() {
+  return (
+    <span className="relative inline-block h-4 w-5 shrink-0 rounded-[3px] border border-orange-400/50 bg-orange-400/20 align-middle">
+      <span className="absolute -top-1 left-0.5 h-1.5 w-2.5 rounded-t-[3px] border border-orange-400/50 border-b-0 bg-orange-400/25" />
+    </span>
+  );
+}
+
+function MilestoneGlyph() {
+  return (
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-orange-400/45 bg-orange-400/15">
+      <span className="h-2 w-2 rounded-full bg-orange-300" />
+    </span>
+  );
+}
+
 function EstimateDetailView({
   estimate,
   project,
@@ -1434,23 +1484,57 @@ function EstimateDetailView({
     groupedItems[key].push(item);
   });
   const sectionParentItems = sortByEstimateOrder(items.filter((item) => isSectionParentItem(item)));
+  const [clockNow, setClockNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(new Date()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const estimateName = String(estimate?.name || projectDisplayName(project, estimate));
   const projectMeta = [
     portfolioClientLabel(project, estimate) !== "No client" ? `Client: ${portfolioClientLabel(project, estimate)}` : "",
-    estimate?.bidDate ? `Bid Date: ${String(estimate.bidDate)}` : "",
     projectAddressLine(project, estimate),
   ].filter(Boolean).join(" | ");
   const selectableItems = items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item));
+  const engineerEstimate = engineerEstimateValue(estimate, project);
+  const bidDelta = engineerEstimate ? selectedEstimateTotal - engineerEstimate : 0;
+  const bidDeltaClass = bidDelta > 0 ? "text-red-300" : bidDelta < 0 ? "text-green-300" : "text-blue-100";
+  const bidCountdown = bidCountdownLabel(estimate?.bidDate, clockNow);
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="max-w-3xl text-3xl font-black leading-tight tracking-tight text-white">{estimateName}</h1>
-          <p className="mt-2 max-w-4xl text-sm text-blue-100">{projectMeta}</p>
+      <div className="rounded-xl border border-border bg-card/90 p-4 shadow-[0_18px_50px_rgba(0,0,0,0.22)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="border border-orange-500/30 bg-orange-500/15 text-[10px] font-semibold tracking-[0.18em] text-orange-200">EST</Badge>
+              <Badge variant="outline">{statusLabel(String(estimate?.status || "draft"))}</Badge>
+            </div>
+            <h1 className="mt-2 max-w-4xl text-2xl font-extrabold leading-tight tracking-normal text-white md:text-3xl">{estimateName}</h1>
+            <p className="mt-2 max-w-4xl text-sm text-blue-100">{projectMeta}</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[620px] xl:grid-cols-5">
+            <div className="rounded-lg border border-orange-500/30 bg-orange-500/10 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-orange-100">Bid Clock</div>
+              <div className="mt-1 text-xl font-black text-white">{bidCountdown}</div>
+              <div className="text-[11px] text-muted-foreground">{estimate?.bidDate ? String(estimate.bidDate) : "Set bid date"}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/55 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Engineer Est.</div>
+              <div className="mt-1 text-xl font-black text-blue-100">{engineerEstimate ? money(engineerEstimate) : "Not set"}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/55 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Current Bid</div>
+              <div className="mt-1 text-xl font-black text-green-400">{money(selectedEstimateTotal)}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/55 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Bid Delta</div>
+              <div className={`mt-1 text-xl font-black ${bidDeltaClass}`}>{engineerEstimate ? money(bidDelta) : "--"}</div>
+            </div>
+            <Button variant="outline" className="h-full min-h-14" onClick={onEditDetails}>Edit Details</Button>
+          </div>
         </div>
-        <Button variant="outline" onClick={onEditDetails}>Edit Details</Button>
       </div>
 
       <section className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
@@ -1544,7 +1628,7 @@ function EstimateDetailView({
                 const allSectionSelected = pricedItems.length > 0 && pricedItems.every((item) => selectedItemIds.includes(String(item._id)));
                 return (
                   <Fragment key={`group-${section}`}>
-                    <tr key={`section-${section}`} className="border-t border-border bg-secondary/45">
+                    <tr key={`section-${section}`} className="border-t border-border bg-secondary/55">
                       <td className="p-3">
                         <input
                           type="checkbox"
@@ -1553,7 +1637,12 @@ function EstimateDetailView({
                           onChange={(event) => pricedItems.forEach((item) => onToggleItem(String(item._id), event.target.checked))}
                         />
                       </td>
-                      <td className="p-3 font-black text-white">Folder {section}</td>
+                      <td className="p-3 font-black text-white">
+                        <div className="flex items-center gap-2">
+                          <SectionGlyph />
+                          <span>{section}</span>
+                        </div>
+                      </td>
                       <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{pricedItems.length ? "Select all" : "Parent line"}</td>
                       <td className="p-3 text-right font-black text-white">{money(sectionTotal)}</td>
                       <td className="p-3">
@@ -1569,7 +1658,9 @@ function EstimateDetailView({
                     {!pricedItems.length && !milestoneParents.length && (
                       <tr className="border-t border-border">
                         <td className="p-3" />
-                        <td colSpan={8} className="p-4 pl-10 text-sm text-muted-foreground">No estimate items yet. Add a child item under this phase when scope is ready.</td>
+                        <td colSpan={8} className="p-4 pl-10 text-sm text-muted-foreground">
+                          <span className="rounded-md border border-dashed border-border bg-background/40 px-3 py-2">No estimate items yet</span>
+                        </td>
                       </tr>
                     )}
                     {milestoneParents.map((milestone) => {
@@ -1586,7 +1677,12 @@ function EstimateDetailView({
                                 onMoveDown={() => onMoveLine(milestone, milestoneParents, "down")}
                               />
                             </td>
-                            <td className="p-3 pl-8 font-bold text-orange-100">Milestone {milestoneName}</td>
+                            <td className="p-3 pl-8 font-bold text-orange-100">
+                              <div className="flex items-center gap-2">
+                                <MilestoneGlyph />
+                                <span>{milestoneName}</span>
+                              </div>
+                            </td>
                             <td className="p-3 text-right text-xs text-muted-foreground" colSpan={5}>{milestoneItems.length ? `${milestoneItems.length} child item${milestoneItems.length === 1 ? "" : "s"}` : "No child items yet"}</td>
                             <td className="p-3 text-right font-black text-white">{money(milestoneTotal)}</td>
                             <td className="p-3" />
@@ -2018,7 +2114,7 @@ function ProductionRateBreakdownView({
           <section key={section} className="overflow-hidden rounded-lg border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border bg-secondary/55 px-4 py-3">
               <div>
-                <h2 className="text-lg font-black text-white">Folder {section}</h2>
+                <h2 className="flex items-center gap-2 text-lg font-black text-white"><SectionGlyph /> {section}</h2>
                 <p className="text-xs text-muted-foreground">
                   {sectionRows.length} task{sectionRows.length === 1 ? "" : "s"} | {sectionSummary.productionDays.toFixed(1)} production days | {Math.round(sectionSummary.manHours)} man-hours
                 </p>
@@ -2933,7 +3029,7 @@ function EstimatingWorkspace() {
   const activeToolConfig = ESTIMATING_TOOLS.find((tool) => tool.key === activeTool) || ESTIMATING_TOOLS[0];
   const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
   const bidActionToolbar = (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/65 p-3">
+    <div className="sticky top-2 z-40 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/90 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur">
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cockpit")}>← Back</button>
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
       <button
