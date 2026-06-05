@@ -1791,7 +1791,7 @@ function EstimateDetailView({
                     {!pricedItems.length && (
                       <tr className="border-t border-border">
                         <td className="p-3" />
-                        <td colSpan={8} className="p-4 pl-10 text-sm text-muted-foreground">
+                        <td colSpan={8} className="p-4 pl-16 text-sm text-muted-foreground">
                           <span className="rounded-md border border-dashed border-border bg-background/40 px-3 py-2">No bid items yet</span>
                         </td>
                       </tr>
@@ -1800,12 +1800,15 @@ function EstimateDetailView({
                       const itemId = String(item._id);
                       const rfqStatus = rfqStatusForItem(item);
                       return (
-                        <tr key={itemId} className="border-t border-border">
+                        <tr key={itemId} className="border-t border-border" data-estimate-child-row="true">
                           <td className="p-3">
                             <input type="checkbox" checked={selectedItemIds.includes(itemId)} onChange={(event) => onToggleItem(itemId, event.target.checked)} />
                           </td>
-                          <td className="p-3">
-                            <div className="font-bold text-white">{String(item.description || "Estimate item")}</div>
+                          <td className="p-3 pl-12">
+                            <div className="relative">
+                              <span className="absolute -left-6 top-2 h-px w-4 bg-border" aria-hidden="true" />
+                              <div className="font-bold text-white">{String(item.description || "Estimate item")}</div>
+                            </div>
                             <div className="mt-1 flex flex-wrap gap-2">
                               <Badge variant="outline">Spec: {String(item.sourceSpecSection || item.specSection || "No book")}</Badge>
                               <Badge className="bg-blue-500/15 text-blue-200">RFQ Status: {rfqStatus === "No RFQ" ? "Not Requested" : rfqStatus}</Badge>

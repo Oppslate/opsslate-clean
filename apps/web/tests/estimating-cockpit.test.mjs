@@ -50,6 +50,9 @@ for (const parentLineFlow of ["SECTION_PARENT_NOTE", "OPSSLATE_SECTION_PARENT", 
 for (const polishedEstimateUi of ["SectionGlyph", "fixed left-4 right-4 top-[76px] z-[90]", "h-[72px] shrink-0", "Bid Clock", "Engineer Est.", "Current Bid", "Bid Delta", "engineerEstimateValue", "bidDateValue", "project?.contractDate", "bidCountdownLabel", "HierarchyRenameModal", "Edit Section", "deleteSectionGroup", "saveSectionRename"]) {
   assert.ok(page.includes(polishedEstimateUi), `estimate detail should include polished bid command UI: ${polishedEstimateUi}`);
 }
+for (const childRowIndent of ['data-estimate-child-row="true"', "p-3 pl-12", "-left-6 top-2 h-px w-4"]) {
+  assert.ok(page.includes(childRowIndent), `estimate child rows should be visually indented under their parent section: ${childRowIndent}`);
+}
 
 assert.ok(!page.includes("Folder {section}"), "estimate section rows should use a folder icon instead of the word Folder");
 assert.ok(!page.includes("Parent line"), "estimate section rows should not display non-actionable parent line filler text");
