@@ -3291,7 +3291,7 @@ function EstimatingWorkspace() {
   const activeToolConfig = ESTIMATING_TOOLS.find((tool) => tool.key === activeTool) || ESTIMATING_TOOLS[0];
   const bidActionButtonClass = "inline-flex h-9 items-center rounded-xl border border-border bg-card px-3 text-xs font-bold text-white shadow-[0_10px_30px_rgba(0,0,0,0.22)] transition-colors hover:border-orange-500/45 hover:bg-secondary";
   const bidActionToolbar = (
-    <div className="sticky top-2 z-40 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/90 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur">
+    <div className="sticky top-0 z-[70] flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/95 p-3 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur supports-[backdrop-filter]:bg-background/85">
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cockpit")}>← Back</button>
       <button type="button" className={`${bidActionButtonClass} border-yellow-500/35 bg-yellow-500/85 text-black hover:bg-yellow-400`} onClick={() => setSectionPhaseModalOpen(true)}>+ Section</button>
       <button
