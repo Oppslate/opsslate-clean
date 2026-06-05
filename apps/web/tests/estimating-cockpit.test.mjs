@@ -62,6 +62,12 @@ for (const bidItemFlow of ["BidItemModal", "Add Item Under Milestone", "Quantity
   assert.ok(page.includes(bidItemFlow), `add item workflow should include ${bidItemFlow}`);
 }
 
+for (const itemEntryFlow of ["Scope / Proof Notes", "RFQ Vendor / Supplier", "RFQ Due Date", "Submittal Requirement", "Production Days", "Crew Size", "Lead Time / Constraint", "ITEM_SCOPE_NOTE_PREFIX", "ITEM_RFQ_DETAIL_PREFIX", "ITEM_SUBMITTAL_DETAIL_PREFIX", "ITEM_SCHEDULE_DETAIL_PREFIX"]) {
+  assert.ok(page.includes(itemEntryFlow), `bid item modal should capture estimator detail at item creation/edit: ${itemEntryFlow}`);
+}
+
+assert.match(page, /activeTool === "war-room" \? aiToolsWorkspace/, "AI estimator cards should live behind the AI Tools workspace, not in the estimate worksheet");
+
 for (const moonshotFlow of ["MoveControls", "ORDER_NOTE_PREFIX", "OPSSLATE_ORDER", "RFQ required", "Request submittal", "RFQ_INTENT_NOTE", "SUBMITTAL_INTENT_NOTE", "TBD supplier", "Submittal Intent"]) {
   assert.ok(page.includes(moonshotFlow), `hierarchy moonshot workflow should include ${moonshotFlow}`);
 }

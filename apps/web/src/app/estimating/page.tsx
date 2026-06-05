@@ -113,6 +113,10 @@ const MILESTONE_ITEM_NOTE_PREFIX = "OPSSLATE_MILESTONE:";
 const ORDER_NOTE_PREFIX = "OPSSLATE_ORDER:";
 const RFQ_INTENT_NOTE = "OPSSLATE_RFQ_INTENT";
 const SUBMITTAL_INTENT_NOTE = "OPSSLATE_SUBMITTAL_INTENT";
+const ITEM_SCOPE_NOTE_PREFIX = "OPSSLATE_ITEM_SCOPE:";
+const ITEM_RFQ_DETAIL_PREFIX = "OPSSLATE_RFQ_DETAIL:";
+const ITEM_SUBMITTAL_DETAIL_PREFIX = "OPSSLATE_SUBMITTAL_DETAIL:";
+const ITEM_SCHEDULE_DETAIL_PREFIX = "OPSSLATE_SCHEDULE_DETAIL:";
 const SNIPPET_NOTE_PREFIX = "OPSSLATE_SNIPPET:";
 const ESTIMATE_HANDOFF_PREFIX = "OPSSLATE_HANDOFF:";
 const ESTIMATOR_ACTION_PREFIX = "OPSSLATE_CICERO_ACTION:";
@@ -186,6 +190,54 @@ function ciceroActionsForEstimate(estimate?: Record<string, unknown>) {
 
 function appendNoteLine(notes: unknown, line: string) {
   return [String(notes || "").trim(), line].filter(Boolean).join("\n");
+}
+
+function noteValue(notes: unknown, prefix: string) {
+  const line = String(notes || "").split("\n").find((entry) => entry.trim().startsWith(prefix));
+  return line ? line.replace(prefix, "").trim() : "";
+}
+
+function removeManagedItemDetailNotes(notes: unknown) {
+  return String(notes || "")
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed &&
+        !trimmed.startsWith(ITEM_SCOPE_NOTE_PREFIX) &&
+        !trimmed.startsWith(ITEM_RFQ_DETAIL_PREFIX) &&
+        !trimmed.startsWith(ITEM_SUBMITTAL_DETAIL_PREFIX) &&
+        !trimmed.startsWith(ITEM_SCHEDULE_DETAIL_PREFIX);
+    });
+}
+
+function itemDetailNoteLines({
+  scopeNote,
+  rfqVendor,
+  rfqDueDate,
+  submittalRequirement,
+  productionDays,
+  crewSize,
+  leadTime,
+}: {
+  scopeNote: string;
+  rfqVendor: string;
+  rfqDueDate: string;
+  submittalRequirement: string;
+  productionDays: string;
+  crewSize: string;
+  leadTime: string;
+}) {
+  const scheduleParts = [
+    productionDays.trim() ? `production days ${productionDays.trim()}` : "",
+    crewSize.trim() ? `crew ${crewSize.trim()}` : "",
+    leadTime.trim() ? `lead time ${leadTime.trim()}` : "",
+  ].filter(Boolean).join("; ");
+  return [
+    scopeNote.trim() ? `${ITEM_SCOPE_NOTE_PREFIX} ${scopeNote.trim()}` : "",
+    rfqVendor.trim() || rfqDueDate.trim() ? `${ITEM_RFQ_DETAIL_PREFIX} ${[rfqVendor.trim() ? `vendor ${rfqVendor.trim()}` : "", rfqDueDate.trim() ? `due ${rfqDueDate.trim()}` : ""].filter(Boolean).join("; ")}` : "",
+    submittalRequirement.trim() ? `${ITEM_SUBMITTAL_DETAIL_PREFIX} ${submittalRequirement.trim()}` : "",
+    scheduleParts ? `${ITEM_SCHEDULE_DETAIL_PREFIX} ${scheduleParts}` : "",
+  ].filter(Boolean);
 }
 
 function estimatorCoverageMetrics({
@@ -890,6 +942,13 @@ function BidItemModal({
   unitCost,
   requestRfq,
   requestSubmittal,
+  scopeNote,
+  rfqVendor,
+  rfqDueDate,
+  submittalRequirement,
+  productionDays,
+  crewSize,
+  leadTime,
   onMilestoneChange,
   onDescriptionChange,
   onQuantityChange,
@@ -898,6 +957,13 @@ function BidItemModal({
   onUnitCostChange,
   onRequestRfqChange,
   onRequestSubmittalChange,
+  onScopeNoteChange,
+  onRfqVendorChange,
+  onRfqDueDateChange,
+  onSubmittalRequirementChange,
+  onProductionDaysChange,
+  onCrewSizeChange,
+  onLeadTimeChange,
   onCancel,
   onContinue,
 }: {
@@ -914,6 +980,13 @@ function BidItemModal({
   unitCost: string;
   requestRfq: boolean;
   requestSubmittal: boolean;
+  scopeNote: string;
+  rfqVendor: string;
+  rfqDueDate: string;
+  submittalRequirement: string;
+  productionDays: string;
+  crewSize: string;
+  leadTime: string;
   onMilestoneChange: (value: string) => void;
   onDescriptionChange: (value: string) => void;
   onQuantityChange: (value: string) => void;
@@ -922,6 +995,13 @@ function BidItemModal({
   onUnitCostChange: (value: string) => void;
   onRequestRfqChange: (value: boolean) => void;
   onRequestSubmittalChange: (value: boolean) => void;
+  onScopeNoteChange: (value: string) => void;
+  onRfqVendorChange: (value: string) => void;
+  onRfqDueDateChange: (value: string) => void;
+  onSubmittalRequirementChange: (value: string) => void;
+  onProductionDaysChange: (value: string) => void;
+  onCrewSizeChange: (value: string) => void;
+  onLeadTimeChange: (value: string) => void;
   onCancel: () => void;
   onContinue: () => void;
 }) {
@@ -1014,6 +1094,53 @@ function BidItemModal({
             </span>
           </label>
         </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Scope / Proof Notes</label>
+            <textarea
+              value={scopeNote}
+              onChange={(event) => onScopeNoteChange(event.target.value)}
+              className="mt-1 h-28 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+              placeholder="What makes this line real? Takeoff basis, spec note, drawing reference, assumption, exclusion..."
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Production Days</label>
+              <input value={productionDays} onChange={(event) => onProductionDaysChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="e.g. 2.5" />
+            </div>
+            <div>
+              <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Crew Size</label>
+              <input value={crewSize} onChange={(event) => onCrewSizeChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="e.g. 3" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Lead Time / Constraint</label>
+              <input value={leadTime} onChange={(event) => onLeadTimeChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="e.g. 2 weeks, after submittal approval, weather sensitive..." />
+            </div>
+          </div>
+        </div>
+        {(requestRfq || requestSubmittal) && (
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {requestRfq ? (
+              <>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">RFQ Vendor / Supplier</label>
+                  <input value={rfqVendor} onChange={(event) => onRfqVendorChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="TBD supplier or preferred vendor" />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">RFQ Due Date</label>
+                  <input type="date" value={rfqDueDate} onChange={(event) => onRfqDueDateChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" />
+                </div>
+              </>
+            ) : null}
+            {requestSubmittal ? (
+              <div className={requestRfq ? "" : "md:col-span-3"}>
+                <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Submittal Requirement</label>
+                <input value={submittalRequirement} onChange={(event) => onSubmittalRequirementChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Product data, shop drawing, mix design, sample, certification..." />
+              </div>
+            ) : null}
+          </div>
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
           <Button onClick={onContinue} disabled={!selectedMilestone || !description.trim()}>{submitLabel}</Button>
@@ -1587,47 +1714,6 @@ function EstimateDetailView({
           </div>
         </div>
       </div>
-
-      <section className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {[
-            ["Needs Action", predictiveSignals.length],
-            ["Submittals", 0],
-            ["RFQs", rfqSummary.open],
-            ["Scope Gaps", predictiveSignals.filter((signal) => signal.label.includes("Scope")).length],
-            ["Risk / Requirements", predictiveSignals.length],
-            ["Dismissed", 0],
-          ].map(([label, value], index) => (
-            <Badge key={String(label)} className={index === 0 ? "bg-orange-500 text-white" : "bg-secondary text-blue-100"}>
-              {label} <span className="ml-1 rounded-full bg-blue-500/20 px-1.5">{String(value)}</span>
-            </Badge>
-          ))}
-        </div>
-        <h2 className="text-sm font-bold text-blue-100">Draft Actions</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Action cards include Approve, Review, and Dismiss controls.</p>
-        <p className="mt-4 text-sm text-blue-100">{predictiveSignals.length ? `${predictiveSignals.length} bid signal${predictiveSignals.length === 1 ? "" : "s"} need estimator review.` : "No actions in this lane right now."}</p>
-      </section>
-
-      <CiceroCommandPanel
-        estimate={estimate}
-        items={items}
-        rfqSummary={rfqSummary}
-        scheduleScore={scheduleScore}
-        productionRows={productionRows}
-        historicalEstimates={historicalEstimates}
-        historicalItems={historicalItems}
-        onGoToRfq={onGoToRfq}
-        onGoToProduction={onGoToProduction}
-        onCreateAction={onCreateCiceroAction}
-      />
-
-      <HandoffPipelinePanel
-        estimate={estimate}
-        items={items}
-        rfqSummary={rfqSummary}
-        onSendToPm={onSendToPm}
-        onSendToScheduler={onSendToScheduler}
-      />
 
       <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4 text-sm">
@@ -2271,6 +2357,13 @@ function EstimatingWorkspace() {
   const [newItemUnitCost, setNewItemUnitCost] = useState("0");
   const [newItemRequestRfq, setNewItemRequestRfq] = useState(false);
   const [newItemRequestSubmittal, setNewItemRequestSubmittal] = useState(false);
+  const [newItemScopeNote, setNewItemScopeNote] = useState("");
+  const [newItemRfqVendor, setNewItemRfqVendor] = useState("");
+  const [newItemRfqDueDate, setNewItemRfqDueDate] = useState("");
+  const [newItemSubmittalRequirement, setNewItemSubmittalRequirement] = useState("");
+  const [newItemProductionDays, setNewItemProductionDays] = useState("");
+  const [newItemCrewSize, setNewItemCrewSize] = useState("");
+  const [newItemLeadTime, setNewItemLeadTime] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
   const projectFilteredEstimates = useMemo(() => {
@@ -2319,6 +2412,13 @@ function EstimatingWorkspace() {
   const [editItemUnitCost, setEditItemUnitCost] = useState("0");
   const [editItemRequestRfq, setEditItemRequestRfq] = useState(false);
   const [editItemRequestSubmittal, setEditItemRequestSubmittal] = useState(false);
+  const [editItemScopeNote, setEditItemScopeNote] = useState("");
+  const [editItemRfqVendor, setEditItemRfqVendor] = useState("");
+  const [editItemRfqDueDate, setEditItemRfqDueDate] = useState("");
+  const [editItemSubmittalRequirement, setEditItemSubmittalRequirement] = useState("");
+  const [editItemProductionDays, setEditItemProductionDays] = useState("");
+  const [editItemCrewSize, setEditItemCrewSize] = useState("");
+  const [editItemLeadTime, setEditItemLeadTime] = useState("");
   const [snippetItem, setSnippetItem] = useState<Record<string, unknown> | null>(null);
   const [snippetTitle, setSnippetTitle] = useState("");
   const [snippetPurpose, setSnippetPurpose] = useState("RFQ Backup");
@@ -2456,6 +2556,14 @@ function EstimatingWorkspace() {
     setEditItemUnitCost(String(item.unitCost ?? "0"));
     setEditItemRequestRfq(itemHasIntent(item, RFQ_INTENT_NOTE));
     setEditItemRequestSubmittal(itemHasIntent(item, SUBMITTAL_INTENT_NOTE));
+    setEditItemScopeNote(noteValue(item.notes, ITEM_SCOPE_NOTE_PREFIX));
+    setEditItemRfqVendor(noteValue(item.notes, ITEM_RFQ_DETAIL_PREFIX).replace(/^vendor\s+/i, "").split(";")[0]?.trim() || "");
+    setEditItemRfqDueDate(noteValue(item.notes, ITEM_RFQ_DETAIL_PREFIX).match(/due\s+([^;]+)/i)?.[1]?.trim() || "");
+    setEditItemSubmittalRequirement(noteValue(item.notes, ITEM_SUBMITTAL_DETAIL_PREFIX));
+    const scheduleDetail = noteValue(item.notes, ITEM_SCHEDULE_DETAIL_PREFIX);
+    setEditItemProductionDays(scheduleDetail.match(/production days\s+([^;]+)/i)?.[1]?.trim() || "");
+    setEditItemCrewSize(scheduleDetail.match(/crew\s+([^;]+)/i)?.[1]?.trim() || "");
+    setEditItemLeadTime(scheduleDetail.match(/lead time\s+([^;]+)/i)?.[1]?.trim() || "");
   }
 
   function cleanItemNotesForEdit(item: Record<string, unknown>) {
@@ -2477,9 +2585,18 @@ function EstimatingWorkspace() {
     if (!sectionName || !milestoneName || !description) return;
     const notes = [
       `${MILESTONE_ITEM_NOTE_PREFIX} ${milestoneName}`,
-      ...cleanItemNotesForEdit(editingItem),
+      ...removeManagedItemDetailNotes(cleanItemNotesForEdit(editingItem).join("\n")),
       editItemRequestRfq ? `${RFQ_INTENT_NOTE}: Draft RFQ requested during item edit.` : "",
       editItemRequestSubmittal ? `${SUBMITTAL_INTENT_NOTE}: Submittal draft requested during item edit.` : "",
+      ...itemDetailNoteLines({
+        scopeNote: editItemScopeNote,
+        rfqVendor: editItemRfqVendor,
+        rfqDueDate: editItemRfqDueDate,
+        submittalRequirement: editItemSubmittalRequirement,
+        productionDays: editItemProductionDays,
+        crewSize: editItemCrewSize,
+        leadTime: editItemLeadTime,
+      }),
     ].filter(Boolean).join("\n");
     await updateEstimateItem({
       id: editingItem._id as Id<"estimateItems">,
@@ -2495,10 +2612,11 @@ function EstimatingWorkspace() {
       await createRfq({
         companyId: user.companyId,
         estimateId: selectedEstimate._id as Id<"estimates">,
-        vendorName: "TBD supplier",
+        vendorName: editItemRfqVendor.trim() || "TBD supplier",
         status: "draft",
+        dueDate: editItemRfqDueDate || undefined,
         notes: JSON.stringify({
-          specNotes: `RFQ requested during item edit for ${description}.`,
+          specNotes: [editItemScopeNote || `RFQ requested during item edit for ${description}.`, editItemLeadTime ? `Lead time/constraint: ${editItemLeadTime}` : ""].filter(Boolean).join("\n"),
           itemIds: [String(editingItem._id)],
           itemSnapshots: [{
             id: String(editingItem._id),
@@ -2508,6 +2626,8 @@ function EstimatingWorkspace() {
             unitCost: Number(editItemUnitCost || 0) || 0,
             section: sectionName,
             milestone: milestoneName,
+            scopeNote: editItemScopeNote,
+            leadTime: editItemLeadTime,
           }],
           packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nMilestone: ${milestoneName}\nQty: ${editItemQuantity || 0} ${editItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
         }),
@@ -3092,16 +3212,26 @@ function EstimatingWorkspace() {
         `${ORDER_NOTE_PREFIX} ${(estimateItems || []).filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item) && String(item.section || "") === sectionName && milestoneNameForItem(item) === milestoneName).length + 1}`,
         newItemRequestRfq ? `${RFQ_INTENT_NOTE}: Draft RFQ requested at item creation.` : "",
         newItemRequestSubmittal ? `${SUBMITTAL_INTENT_NOTE}: Submittal draft requested at item creation.` : "",
+        ...itemDetailNoteLines({
+          scopeNote: newItemScopeNote,
+          rfqVendor: newItemRfqVendor,
+          rfqDueDate: newItemRfqDueDate,
+          submittalRequirement: newItemSubmittalRequirement,
+          productionDays: newItemProductionDays,
+          crewSize: newItemCrewSize,
+          leadTime: newItemLeadTime,
+        }),
       ].filter(Boolean).join("\n"),
     });
     if (newItemRequestRfq) {
       await createRfq({
         companyId: user.companyId,
         estimateId: selectedEstimate._id as Id<"estimates">,
-        vendorName: "TBD supplier",
+        vendorName: newItemRfqVendor.trim() || "TBD supplier",
         status: "draft",
+        dueDate: newItemRfqDueDate || undefined,
         notes: JSON.stringify({
-          specNotes: `RFQ requested at item creation for ${description}.`,
+          specNotes: [newItemScopeNote || `RFQ requested at item creation for ${description}.`, newItemLeadTime ? `Lead time/constraint: ${newItemLeadTime}` : ""].filter(Boolean).join("\n"),
           itemIds: [String(itemIdCreated)],
           itemSnapshots: [{
             id: String(itemIdCreated),
@@ -3111,6 +3241,8 @@ function EstimatingWorkspace() {
             unitCost: Number(newItemUnitCost || 0) || 0,
             section: sectionName,
             milestone: milestoneName,
+            scopeNote: newItemScopeNote,
+            leadTime: newItemLeadTime,
           }],
           packageText: `REQUEST FOR QUOTE\nItem: ${description}\nSection: ${sectionName}\nMilestone: ${milestoneName}\nQty: ${newItemQuantity || 0} ${newItemUnit || "LS"}\nPlease provide unit price, total price, lead time, freight, tax, exclusions, and quote expiration.`,
         }),
@@ -3124,6 +3256,13 @@ function EstimatingWorkspace() {
     setNewItemUnitCost("0");
     setNewItemRequestRfq(false);
     setNewItemRequestSubmittal(false);
+    setNewItemScopeNote("");
+    setNewItemRfqVendor("");
+    setNewItemRfqDueDate("");
+    setNewItemSubmittalRequirement("");
+    setNewItemProductionDays("");
+    setNewItemCrewSize("");
+    setNewItemLeadTime("");
     setActiveTool("estimate-detail");
   }
 
@@ -3241,6 +3380,48 @@ function EstimatingWorkspace() {
       </div>
     </div>
   );
+  const aiToolsWorkspace = (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-green-500/30 bg-green-500/5 p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {[
+            ["Needs Action", predictiveSignals.length],
+            ["Submittals", 0],
+            ["RFQs", rfqSummary.open],
+            ["Scope Gaps", predictiveSignals.filter((signal) => signal.label.includes("Scope")).length],
+            ["Risk / Requirements", predictiveSignals.length],
+            ["Dismissed", 0],
+          ].map(([label, value], index) => (
+            <Badge key={String(label)} className={index === 0 ? "bg-orange-500 text-white" : "bg-secondary text-blue-100"}>
+              {label} <span className="ml-1 rounded-full bg-blue-500/20 px-1.5">{String(value)}</span>
+            </Badge>
+          ))}
+        </div>
+        <h2 className="text-sm font-bold text-blue-100">Draft Actions</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Action cards include Approve, Review, and Dismiss controls.</p>
+        <p className="mt-4 text-sm text-blue-100">{predictiveSignals.length ? `${predictiveSignals.length} bid signal${predictiveSignals.length === 1 ? "" : "s"} need estimator review.` : "No actions in this lane right now."}</p>
+      </section>
+      <CiceroCommandPanel
+        estimate={selectedEstimate}
+        items={estimateItems || []}
+        rfqSummary={rfqSummary}
+        scheduleScore={scheduleScore}
+        productionRows={productionRows}
+        historicalEstimates={estimates || []}
+        historicalItems={estimateItems || []}
+        onGoToRfq={() => setActiveTool("rfq")}
+        onGoToProduction={() => setActiveTool("production-breakdown")}
+        onCreateAction={(action) => void createCiceroAction(action)}
+      />
+      <HandoffPipelinePanel
+        estimate={selectedEstimate}
+        items={estimateItems || []}
+        rfqSummary={rfqSummary}
+        onSendToPm={() => void sendEstimateHandoff("PM")}
+        onSendToScheduler={() => void sendEstimateHandoff("Scheduler")}
+      />
+    </div>
+  );
 
   return (
     <div className="flex gap-5">
@@ -3294,6 +3475,13 @@ function EstimatingWorkspace() {
           unitCost={newItemUnitCost}
           requestRfq={newItemRequestRfq}
           requestSubmittal={newItemRequestSubmittal}
+          scopeNote={newItemScopeNote}
+          rfqVendor={newItemRfqVendor}
+          rfqDueDate={newItemRfqDueDate}
+          submittalRequirement={newItemSubmittalRequirement}
+          productionDays={newItemProductionDays}
+          crewSize={newItemCrewSize}
+          leadTime={newItemLeadTime}
           onMilestoneChange={setSelectedItemMilestone}
           onDescriptionChange={setNewItemDescription}
           onQuantityChange={setNewItemQuantity}
@@ -3302,6 +3490,13 @@ function EstimatingWorkspace() {
           onUnitCostChange={setNewItemUnitCost}
           onRequestRfqChange={setNewItemRequestRfq}
           onRequestSubmittalChange={setNewItemRequestSubmittal}
+          onScopeNoteChange={setNewItemScopeNote}
+          onRfqVendorChange={setNewItemRfqVendor}
+          onRfqDueDateChange={setNewItemRfqDueDate}
+          onSubmittalRequirementChange={setNewItemSubmittalRequirement}
+          onProductionDaysChange={setNewItemProductionDays}
+          onCrewSizeChange={setNewItemCrewSize}
+          onLeadTimeChange={setNewItemLeadTime}
           onCancel={() => setBidItemModalOpen(false)}
           onContinue={() => void saveBidItemLine()}
         />
@@ -3319,6 +3514,13 @@ function EstimatingWorkspace() {
           unitCost={editItemUnitCost}
           requestRfq={editItemRequestRfq}
           requestSubmittal={editItemRequestSubmittal}
+          scopeNote={editItemScopeNote}
+          rfqVendor={editItemRfqVendor}
+          rfqDueDate={editItemRfqDueDate}
+          submittalRequirement={editItemSubmittalRequirement}
+          productionDays={editItemProductionDays}
+          crewSize={editItemCrewSize}
+          leadTime={editItemLeadTime}
           onMilestoneChange={setEditItemMilestone}
           onDescriptionChange={setEditItemDescription}
           onQuantityChange={setEditItemQuantity}
@@ -3327,6 +3529,13 @@ function EstimatingWorkspace() {
           onUnitCostChange={setEditItemUnitCost}
           onRequestRfqChange={setEditItemRequestRfq}
           onRequestSubmittalChange={setEditItemRequestSubmittal}
+          onScopeNoteChange={setEditItemScopeNote}
+          onRfqVendorChange={setEditItemRfqVendor}
+          onRfqDueDateChange={setEditItemRfqDueDate}
+          onSubmittalRequirementChange={setEditItemSubmittalRequirement}
+          onProductionDaysChange={setEditItemProductionDays}
+          onCrewSizeChange={setEditItemCrewSize}
+          onLeadTimeChange={setEditItemLeadTime}
           onCancel={() => setEditingItem(null)}
           onContinue={() => void saveEditedItemLine()}
         />
@@ -3653,7 +3862,7 @@ function EstimatingWorkspace() {
             onAutoBid={openAutoBidQueue}
             onQuickTemplates={openQuickTemplates}
           />
-        ) : activeTool !== "rfq" ? stagedTool : (
+        ) : activeTool === "war-room" ? aiToolsWorkspace : activeTool !== "rfq" ? stagedTool : (
     <div className="space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
