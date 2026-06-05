@@ -550,6 +550,33 @@ function DashboardContent() {
           </Link>
 
           <div className="rounded-xl border border-border bg-card/80 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.20)]">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-sm font-bold">Commodity Tracker</h2>
+              <Badge variant="outline" className="text-[10px]">Market Watch</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Gas", value: "$3.15", unit: "/ gal", tone: "text-green-300", note: "retail avg" },
+                { label: "Diesel", value: "$3.64", unit: "/ gal", tone: "text-orange-300", note: "fleet fuel" },
+                { label: "Lumber", value: "$625", unit: "/ mbf", tone: "text-blue-200", note: "framing index" },
+                { label: "Steel", value: "$850", unit: "/ ton", tone: "text-purple-200", note: "mill index" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-lg border border-border bg-background/55 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{item.label}</div>
+                  <div className={`mt-1 text-lg font-black ${item.tone}`}>
+                    {item.value} <span className="text-[10px] font-semibold text-muted-foreground">{item.unit}</span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">{item.note}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
+              <span>Fuel and material exposure snapshot</span>
+              <span>Review</span>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card/80 p-4 shadow-[0_24px_70px_rgba(0,0,0,0.20)]">
             <h2 className="mb-3 text-lg font-bold">Priority Actions</h2>
             <div className="space-y-2">
               {priorityActions.map((a) => (
