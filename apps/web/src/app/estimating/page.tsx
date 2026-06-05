@@ -331,6 +331,192 @@ function portfolioStoredTotal(estimate?: Record<string, unknown>) {
   return typeof total === "number" || typeof total === "string" ? total : undefined;
 }
 
+function printEscape(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function printDocumentShell(title: string, body: string) {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${printEscape(title)}</title>
+  <style>
+    @page { size: letter landscape; margin: 0.38in; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #111827; background: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 11px; line-height: 1.35; }
+    .brand { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; border-bottom: 3px solid #111827; padding-bottom: 12px; margin-bottom: 14px; }
+    .brand-mark { color: #f97316; font-size: 12px; font-weight: 900; letter-spacing: 0.16em; text-transform: uppercase; }
+    h1 { margin: 4px 0 0; font-size: 24px; line-height: 1.08; }
+    h2 { margin: 18px 0 8px; font-size: 15px; }
+    .muted { color: #64748b; }
+    .meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 14px; }
+    .box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; break-inside: avoid; }
+    .label { color: #64748b; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
+    .value { margin-top: 3px; font-size: 14px; font-weight: 900; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th { background: #111827; color: #fff; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 7px; vertical-align: top; }
+    .section-row td { background: #e2e8f0; font-weight: 900; font-size: 12px; }
+    .child-desc { padding-left: 22px; }
+    .right { text-align: right; }
+    .money { font-weight: 900; color: #047857; }
+    .badge { display: inline-block; border: 1px solid #cbd5e1; border-radius: 999px; padding: 1px 6px; color: #475569; font-size: 9px; margin-top: 3px; }
+    .summary { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin: 12px 0 14px; }
+    .note { border-top: 1px solid #cbd5e1; margin-top: 14px; padding-top: 8px; color: #64748b; font-size: 10px; }
+    tr, .box { break-inside: avoid; page-break-inside: avoid; }
+  </style>
+</head>
+<body>${body}</body>
+</html>`;
+}
+
+function openPrintHtml(title: string, body: string) {
+  if (typeof window === "undefined") return;
+  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=900");
+  if (!printWindow) {
+    window.alert("Please allow popups so OpsSlate can open the clean print package.");
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(printDocumentShell(title, body));
+  printWindow.document.close();
+  printWindow.focus();
+  window.setTimeout(() => printWindow.print(), 250);
+}
+
+function buildEstimatePrintBody({
+  estimate,
+  project,
+  items,
+  total,
+}: {
+  estimate?: Record<string, unknown>;
+  project?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  total: number;
+}) {
+  const groupedItems = items.reduce<Record<string, Array<Record<string, unknown>>>>((groups, item) => {
+    const section = String(item.section || item.sourceSpecSection || "Unassigned");
+    groups[section] = groups[section] || [];
+    groups[section].push(item);
+    return groups;
+  }, {} as Record<string, Array<Record<string, unknown>>>);
+  const engineerEstimate = engineerEstimateValue(estimate, project);
+  const bidDelta = engineerEstimate ? total - engineerEstimate : 0;
+  const rows = Object.entries(groupedItems).map(([section, sectionItems]) => {
+    const pricedItems = sortByEstimateOrder(sectionItems.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item)));
+    const sectionTotal = estimateTotal(pricedItems);
+    return `
+      <tr class="section-row"><td colspan="6">${printEscape(section)}</td><td class="right">${pricedItems.length} item${pricedItems.length === 1 ? "" : "s"}</td><td class="right money">${printEscape(money(sectionTotal))}</td></tr>
+      ${pricedItems.map((item) => `
+        <tr>
+          <td class="child-desc" colspan="2">
+            <strong>${printEscape(item.description || "Estimate item")}</strong><br />
+            <span class="badge">Spec: ${printEscape(item.sourceSpecSection || item.specSection || "No book")}</span>
+          </td>
+          <td class="right">${printEscape(item.quantity || 0)}</td>
+          <td>${printEscape(item.unit || "LS")}</td>
+          <td class="right">${printEscape(item.taxPct || "-")}</td>
+          <td class="right">${printEscape(money(item.unitCost))}</td>
+          <td class="right">${printEscape(money(itemLineTotal(item)))}</td>
+          <td class="right money">${printEscape(money(itemLineTotal(item)))}</td>
+        </tr>
+      `).join("")}
+    `;
+  }).join("");
+  return `
+    <div class="brand">
+      <div>
+        <div class="brand-mark">OpsSlate Bid Estimate</div>
+        <h1>${printEscape(projectDisplayName(project, estimate))}</h1>
+        <div class="muted">${printEscape(projectAddressLine(project, estimate))}</div>
+      </div>
+      <div class="box" style="min-width: 190px;">
+        <div class="label">Estimate Total</div>
+        <div class="value money">${printEscape(money(total))}</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="box"><div class="label">Client</div><div class="value">${printEscape(portfolioClientLabel(project, estimate))}</div></div>
+      <div class="box"><div class="label">Bid Date</div><div class="value">${printEscape(bidDateValue(estimate, project) || "Not set")}</div></div>
+      <div class="box"><div class="label">Engineer Est.</div><div class="value">${printEscape(engineerEstimate ? money(engineerEstimate) : "Not set")}</div></div>
+      <div class="box"><div class="label">Bid Delta</div><div class="value">${printEscape(engineerEstimate ? money(bidDelta) : "--")}</div></div>
+    </div>
+    <table>
+      <thead><tr><th colspan="2">Description</th><th class="right">Qty</th><th>Unit</th><th class="right">Tax %</th><th class="right">Unit Cost</th><th class="right">Line Total</th><th class="right">Extended</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="8" class="muted">No estimate items yet.</td></tr>`}</tbody>
+    </table>
+    <div class="note">Generated from OpsSlate. Review scope, exclusions, RFQs, submittals, and schedule assumptions before submission.</div>
+  `;
+}
+
+function buildProductionPrintBody({
+  estimate,
+  rows,
+  summary,
+}: {
+  estimate?: Record<string, unknown>;
+  rows: ReturnType<typeof productionRowsForItems>;
+  summary: ReturnType<typeof productionSummaryForRows>;
+}) {
+  const groupedRows = rows.reduce((groups, row) => {
+    const key = row.section || "Unassigned";
+    groups[key] = groups[key] || [];
+    groups[key].push(row);
+    return groups;
+  }, {} as Record<string, typeof rows>);
+  const groups = Object.entries(groupedRows).map(([section, sectionRows]) => `
+    <h2>${printEscape(section)}</h2>
+    <table>
+      <thead><tr><th>Task</th><th>Category</th><th class="right">Qty</th><th>Unit</th><th class="right">Prod Rate</th><th class="right">Crew</th><th class="right">Days</th><th class="right">Hours</th><th class="right">Total</th></tr></thead>
+      <tbody>
+        ${sectionRows.map((row) => `
+          <tr>
+            <td><strong>${printEscape(row.description)}</strong></td>
+            <td>${printEscape(row.category)}</td>
+            <td class="right">${printEscape(row.quantity)}</td>
+            <td>${printEscape(row.unit)}</td>
+            <td class="right">${printEscape(`${row.prodRate} ${row.rateBasis}`)}</td>
+            <td class="right">${printEscape(row.crewSize.toFixed(2))}</td>
+            <td class="right">${printEscape(row.days.toFixed(1))}</td>
+            <td class="right">${printEscape(row.manHours.toFixed(1))}</td>
+            <td class="right money">${printEscape(money(row.total))}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `).join("");
+  return `
+    <div class="brand">
+      <div>
+        <div class="brand-mark">OpsSlate Production Rate Breakdown</div>
+        <h1>${printEscape(estimate?.name || "Selected estimate")}</h1>
+        <div class="muted">Converts bid quantities into man-hours, equipment hours, production days, and review dollars.</div>
+      </div>
+      <div class="box" style="min-width: 190px;">
+        <div class="label">Total L+E+M</div>
+        <div class="value money">${printEscape(money(summary.total))}</div>
+      </div>
+    </div>
+    <div class="summary">
+      <div class="box"><div class="label">Equipment Hours</div><div class="value">${printEscape(summary.equipmentHours.toFixed(1))}</div></div>
+      <div class="box"><div class="label">Man-Hours</div><div class="value">${printEscape(Math.round(summary.manHours).toLocaleString())}</div></div>
+      <div class="box"><div class="label">Production Days</div><div class="value">${printEscape(summary.productionDays.toFixed(1))}</div></div>
+      <div class="box"><div class="label">Labor Cost</div><div class="value">${printEscape(money(summary.laborCost))}</div></div>
+      <div class="box"><div class="label">Equipment Cost</div><div class="value">${printEscape(money(summary.equipmentCost))}</div></div>
+      <div class="box"><div class="label">Total</div><div class="value money">${printEscape(money(summary.total))}</div></div>
+    </div>
+    ${groups || `<div class="box muted">No production rows yet.</div>`}
+    <div class="note">Generated from OpsSlate production assumptions. Confirm crew sizes, rates, prevailing wage, and equipment assumptions before final bid review.</div>
+  `;
+}
+
 function estimateForProject(project: Record<string, unknown>, estimates: Array<Record<string, unknown>> = []) {
   const projectId = recordId(project);
   return estimates.find((estimate) => String(estimate.projectId || "") === projectId);
@@ -2068,7 +2254,7 @@ function ProductionRateBreakdownView({
           <Button onClick={() => window.alert("Prevailing rate editor is next in the production buildout. Current production math stays tied to the estimate rows shown below.")}>Prevailing Rates</Button>
           <Button variant="outline" onClick={onBack}>Back to Estimate</Button>
           <Button variant="outline" onClick={onEditDetails}>Edit Details</Button>
-          <Button onClick={() => window.print()}>Print / PDF</Button>
+          <Button onClick={() => openPrintHtml("Production Rate Breakdown", buildProductionPrintBody({ estimate, rows, summary }))}>Print / PDF</Button>
           <Button variant="outline" onClick={() => window.alert("Production totals recalculate automatically from the current estimate lines.")}>Recalculate</Button>
         </div>
       </div>
@@ -3253,7 +3439,18 @@ function EstimatingWorkspace() {
         + Add Item
       </button>
       <button type="button" className={bidActionButtonClass} onClick={() => setActiveTool("cost")}>+ From Cost DB</button>
-      <button type="button" className={bidActionButtonClass} onClick={() => window.print()}>Print Bid</button>
+      <button
+        type="button"
+        className={bidActionButtonClass}
+        onClick={() => openPrintHtml("OpsSlate Bid Estimate", buildEstimatePrintBody({
+          estimate: selectedEstimate,
+          project: selectedProject,
+          items: estimateItems || [],
+          total: selectedEstimateTotal,
+        }))}
+      >
+        Print Bid
+      </button>
       <button type="button" className={`${bidActionButtonClass} border-green-500/30`} onClick={() => setActiveTool("war-room")}>AI Tools</button>
       <div className="relative">
         <button
