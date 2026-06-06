@@ -630,6 +630,7 @@ type EstimatingToolKey =
   | "equipment"
   | "history"
   | "risk"
+  | "data-center"
   | "war-room"
   | "calendar"
   | "analytics"
@@ -649,10 +650,66 @@ const ESTIMATING_TOOLS: Array<{ key: EstimatingToolKey; label: string; icon: str
   { key: "equipment", label: "Equipment", icon: "EQ", description: "Shared equipment costs" },
   { key: "history", label: "Historical Bid Database", icon: "HIST", description: "Past bid intelligence" },
   { key: "risk", label: "Risk Database", icon: "RISK", description: "Known risk language and patterns" },
+  { key: "data-center", label: "Data Center", icon: "DATA", description: "Suite-wide intelligence, memory, and prediction data" },
   { key: "war-room", label: "Bid War Room", icon: "WAR", description: "Bid day pressure and checklist" },
   { key: "calendar", label: "Bid Calendar", icon: "CAL", description: "Due dates and bid milestones" },
   { key: "analytics", label: "Win/Loss Analytics", icon: "WIN", description: "Win rate and lessons learned" },
   { key: "settings", label: "Settings", icon: "SET", description: "Estimator preferences" },
+];
+
+type DataCenterTab = "overview" | "estimator-memory" | "market-intelligence" | "strategic-playbooks";
+
+type DataCenterRecordSummary = {
+  id: string;
+  sourceApp: "estimating" | "rfq" | "buyout" | "production" | "project-management";
+  sourceRecordId: string;
+  sourceType: "estimate_item" | "rfq_quote" | "buyout_award" | "actual_outcome" | "accepted_recommendation" | "dismissed_recommendation";
+  title: string;
+  category: string;
+  status: string;
+  confidence: "Strong" | "Likely" | "Needs Review";
+  projectId?: string;
+  estimateId?: string;
+  estimateItemId?: string;
+  sourceDate?: string;
+  notes?: string;
+};
+
+type DataCenterCategory = {
+  group: "Company Intelligence" | "Market Intelligence" | "Strategic Playbooks";
+  name: string;
+  description: string;
+  status: "active" | "starter" | "future";
+  tab?: DataCenterTab;
+};
+
+const DATA_CENTER_CATEGORIES: DataCenterCategory[] = [
+  { group: "Company Intelligence", name: "Cost Database", description: "Labor, equipment, material, and subcontractor unit costs.", status: "starter" },
+  { group: "Company Intelligence", name: "Material Database", description: "Material items, quote history, and price movement memory.", status: "starter" },
+  { group: "Company Intelligence", name: "Labor Database", description: "Crew labor rates, classifications, and burden assumptions.", status: "starter" },
+  { group: "Company Intelligence", name: "Equipment Database", description: "Owned, rented, and dealer equipment costs.", status: "starter" },
+  { group: "Company Intelligence", name: "Vendor Pricing", description: "RFQ responses, selected quotes, buyout awards, and quote gaps.", status: "active" },
+  { group: "Company Intelligence", name: "Production Rates", description: "Production rows, crew assumptions, man-hours, and equipment hours.", status: "active" },
+  { group: "Company Intelligence", name: "Historical Bid Database", description: "Past estimates and company-wide estimate item memory.", status: "active" },
+  { group: "Company Intelligence", name: "Risk Database", description: "Known risk language, scope warnings, and bid blockers.", status: "active" },
+  { group: "Company Intelligence", name: "Spec Requirements", description: "Indexed requirements, submittal duties, and spec-derived scope.", status: "starter" },
+  { group: "Company Intelligence", name: "Estimator Memory", description: "Prediction runs, feedback, outcomes, and Cicero recommendations.", status: "active", tab: "estimator-memory" },
+  { group: "Market Intelligence", name: "Public Bid Results", description: "Agency lettings and awarded bid result research queue.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Agency Lettings", description: "Upcoming NYSDOT, NYSERDA, municipal, and utility opportunities.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Prevailing Wage", description: "Regional wage classifications and labor trend inputs.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Commodity Indexes", description: "Fuel, asphalt, lumber, concrete, steel, copper, and escalation inputs.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Fuel and Diesel", description: "Fuel exposure, trucking pressure, and equipment cost trend inputs.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Regional Pricing Trends", description: "Market heat, location pressure, and seasonal bid strategy.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Competitor Bid Patterns", description: "Observed competitor behavior from public results and win/loss review.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Owner Procurement History", description: "Owner-specific award patterns, alternates, and bid timing.", status: "future", tab: "market-intelligence" },
+  { group: "Market Intelligence", name: "Funding and Grant Programs", description: "Grant-backed demand signals and program timing.", status: "future", tab: "market-intelligence" },
+  { group: "Strategic Playbooks", name: "Bid Strategy Library", description: "Repeatable bid positioning moves and margin protection rules.", status: "starter", tab: "strategic-playbooks" },
+  { group: "Strategic Playbooks", name: "Risk Playbooks", description: "Known qualifiers, exclusions, and risk handling paths.", status: "starter", tab: "strategic-playbooks" },
+  { group: "Strategic Playbooks", name: "VE Playbooks", description: "Value engineering options, substitutes, and scope alternatives.", status: "starter", tab: "strategic-playbooks" },
+  { group: "Strategic Playbooks", name: "Qualification Templates", description: "Reusable qualifications tied to spec, owner, and scope patterns.", status: "starter", tab: "strategic-playbooks" },
+  { group: "Strategic Playbooks", name: "Owner Strategy Notes", description: "Owner-specific bidding posture and communication memory.", status: "starter", tab: "strategic-playbooks" },
+  { group: "Strategic Playbooks", name: "Market Timing Notes", description: "When to chase, wait, qualify, or walk away.", status: "starter", tab: "strategic-playbooks" },
+  { group: "Strategic Playbooks", name: "Cicero Recommendations", description: "Estimator-facing action memory and recommendation history.", status: "active", tab: "estimator-memory" },
 ];
 
 const INSPIRATION_LINES = [
@@ -990,6 +1047,153 @@ function itemLineTotal(item: Record<string, unknown>) {
   return quantity * unitCost * (1 + taxPct / 100);
 }
 
+function confidenceForRecord(value: number): DataCenterRecordSummary["confidence"] {
+  if (value >= 80) return "Strong";
+  if (value >= 45) return "Likely";
+  return "Needs Review";
+}
+
+function buildEstimatorMemoryRecords({
+  estimate,
+  items,
+  rfqs,
+  predictiveEstimatorModel,
+  historicalItems,
+}: {
+  estimate?: Record<string, unknown>;
+  items: Array<Record<string, unknown>>;
+  rfqs: Array<Record<string, unknown>>;
+  predictiveSignals: Array<Record<string, unknown>>;
+  predictiveEstimatorModel: Record<string, unknown>;
+  productionRows: Array<Record<string, unknown>>;
+  historicalItems: Array<Record<string, unknown>>;
+}): DataCenterRecordSummary[] {
+  const estimateId = String(estimate?._id || "");
+  const projectId = String(estimate?.projectId || "");
+  const records: DataCenterRecordSummary[] = [];
+  const pricedItems = items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item));
+  const estimatorActions = ciceroActionsForEstimate(estimate);
+  const survivalScore = Number(predictiveEstimatorModel.survivalScore || predictiveEstimatorModel.bidSurvivalScore || 0);
+
+  pricedItems.forEach((item) => {
+    const total = itemLineTotal(item);
+    const itemId = String(item._id || "");
+    records.push({
+      id: `estimate-item-${itemId}`,
+      sourceApp: "estimating",
+      sourceRecordId: itemId,
+      sourceType: "estimate_item",
+      title: itemLabel(item),
+      category: String(item.section || "Unassigned"),
+      status: total > 0 ? "priced" : "price placeholder",
+      confidence: confidenceForRecord(total > 0 ? 70 : 30),
+      projectId,
+      estimateId,
+      estimateItemId: itemId,
+      sourceDate: String(item._creationTime || estimate?._creationTime || ""),
+      notes: String(item.notes || "").slice(0, 220),
+    });
+    if (
+      String(item.notes || "").includes("actual") ||
+      String(item.notes || "").includes("OPSSLATE_ACTUAL_OUTCOME") ||
+      String(item.actualTotalCost || item.actualCost || "").trim()
+    ) {
+      records.push({
+        id: `actual-outcome-${itemId}`,
+        sourceApp: "production",
+        sourceRecordId: itemId,
+        sourceType: "actual_outcome",
+        title: `${itemLabel(item)} actual outcome`,
+        category: "Outcome Memory",
+        status: "captured",
+        confidence: "Likely",
+        projectId,
+        estimateId,
+        estimateItemId: itemId,
+        sourceDate: String(item.updatedAt || item._creationTime || ""),
+        notes: "Actual cost or production outcome linked to this estimate item.",
+      });
+    }
+  });
+
+  rfqs.forEach((rfq) => {
+    const notes = (rfq.parsedNotes && typeof rfq.parsedNotes === "object" ? rfq.parsedNotes : safeRfqNotes(rfq.notes)) as RfqNotes;
+    Object.entries(notes.lineResponses || {}).forEach(([itemId, response]) => {
+      const total = Number(response.totalPrice || 0);
+      const title = itemLabel(pricedItems.find((item) => String(item._id) === itemId) || { description: "RFQ line response" });
+      records.push({
+        id: `rfq-quote-${String(rfq._id || "")}-${itemId}`,
+        sourceApp: "rfq",
+        sourceRecordId: String(rfq._id || ""),
+        sourceType: "rfq_quote",
+        title: `${title} quote from ${String(rfq.vendorName || notes.vendor?.name || "Vendor")}`,
+        category: "Vendor Pricing",
+        status: String(rfq.status || "draft"),
+        confidence: confidenceForRecord(total > 0 ? 75 : 35),
+        projectId,
+        estimateId,
+        estimateItemId: itemId,
+        sourceDate: String(rfq._creationTime || ""),
+        notes: missingResponseDetails(response).length ? `Missing ${missingResponseDetails(response).join(", ")}` : "Quote detail is ready for comparison.",
+      });
+      if (response.selected) {
+        records.push({
+          id: `buyout-award-${String(rfq._id || "")}-${itemId}`,
+          sourceApp: "buyout",
+          sourceRecordId: String(rfq._id || ""),
+          sourceType: "buyout_award",
+          title: `${title} buyout award`,
+          category: "Vendor Pricing",
+          status: "selected",
+          confidence: confidenceForRecord(total > 0 ? 90 : 50),
+          projectId,
+          estimateId,
+          estimateItemId: itemId,
+          sourceDate: String(rfq._creationTime || ""),
+          notes: `${String(rfq.vendorName || notes.vendor?.name || "Vendor")} selected at ${money(total)}`,
+        });
+      }
+    });
+  });
+
+  estimatorActions.forEach((action, index) => {
+    const status = String(action.status || "draft").toLowerCase();
+    const sourceType: DataCenterRecordSummary["sourceType"] = status === "dismissed" ? "dismissed_recommendation" : "accepted_recommendation";
+    records.push({
+      id: `cicero-action-${index}-${status}`,
+      sourceApp: "estimating",
+      sourceRecordId: String(action.id || index),
+      sourceType,
+      title: String(action.title || action.label || "Cicero recommendation"),
+      category: "Estimator Feedback",
+      status: status || "recorded",
+      confidence: confidenceForRecord(Number(action.confidence || survivalScore || 60)),
+      projectId,
+      estimateId,
+      sourceDate: String(action.createdAt || estimate?._creationTime || ""),
+      notes: String(action.reason || action.note || action.description || "").slice(0, 220),
+    });
+  });
+
+  if (!records.some((record) => record.sourceType === "actual_outcome") && historicalItems.length) {
+    records.push({
+      id: "actual-outcome-company-history",
+      sourceApp: "production",
+      sourceRecordId: "company-history",
+      sourceType: "actual_outcome",
+      title: "Company outcome memory seed",
+      category: "Outcome Memory",
+      status: "ready for links",
+      confidence: "Needs Review",
+      projectId,
+      estimateId,
+      notes: `${historicalItems.length} historical estimate item records are available to connect with actual cost and production outcomes.`,
+    });
+  }
+
+  return records;
+}
+
 export default function EstimatingPage() {
   return (
     <AppShell showSidebar={false} showTopBar={false}>
@@ -1049,6 +1253,232 @@ function CockpitMetricCard({ label, value, sub, tone = "orange" }: { label: stri
       <div className={`text-2xl font-black ${tones[tone]}`}>{value}</div>
       <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100">{label}</div>
       <div className="mt-2 text-xs text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+function EstimatorMemoryView({
+  records,
+  predictiveEstimatorModel,
+  onBack,
+}: {
+  records: DataCenterRecordSummary[];
+  predictiveEstimatorModel: Record<string, unknown>;
+  onBack: () => void;
+}) {
+  const counts = {
+    predictionRuns: records.filter((record) => record.sourceType === "estimate_item").length,
+    estimatorFeedback: records.filter((record) => record.category === "Estimator Feedback").length,
+    outcomeMemory: records.filter((record) => record.sourceType === "actual_outcome").length,
+    acceptedRecommendations: records.filter((record) => record.sourceType === "accepted_recommendation").length,
+    dismissedRecommendations: records.filter((record) => record.sourceType === "dismissed_recommendation").length,
+  };
+
+  return (
+    <section className="space-y-4 rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <Badge className="bg-cyan-500/15 text-cyan-200">Estimator Memory</Badge>
+          <h2 className="mt-3 text-2xl font-black text-white">Estimator Memory</h2>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+            Persistent estimating intelligence pulled from prediction runs, quote decisions, buyout selections, actual outcomes, and estimator feedback.
+          </p>
+        </div>
+        <Button variant="outline" onClick={onBack}>Back to Data Center</Button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-5">
+        {[
+          ["Prediction Runs", counts.predictionRuns, "Current estimate item signals"],
+          ["Estimator Feedback", counts.estimatorFeedback, "Recorded Cicero decisions"],
+          ["Outcome Memory", counts.outcomeMemory, "Actual cost and production links"],
+          ["Accepted Recommendations", counts.acceptedRecommendations, "Approved estimator moves"],
+          ["Dismissed Recommendations", counts.dismissedRecommendations, "Rejected or blocked moves"],
+        ].map(([label, value, helper]) => (
+          <div key={String(label)} className="rounded-lg border border-border bg-background/50 p-3">
+            <div className="text-2xl font-black text-green-400">{String(value)}</div>
+            <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100">{String(label)}</div>
+            <div className="mt-2 text-xs text-muted-foreground">{String(helper)}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-border bg-background/40 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Current predictive posture</div>
+            <div className="mt-1 text-lg font-black text-white">{String(predictiveEstimatorModel.predictedOutcome || "No prediction recorded")}</div>
+          </div>
+          <div className="rounded-lg border border-green-500/25 bg-green-500/10 px-4 py-2 text-right">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-green-200">Confidence</div>
+            <div className="text-xl font-black text-green-400">{String(predictiveEstimatorModel.survivalScore || predictiveEstimatorModel.bidSurvivalScore || 0)}%</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border">
+        <table className="w-full text-sm">
+          <thead className="bg-background/70 text-xs uppercase tracking-[0.14em] text-muted-foreground">
+            <tr>
+              <th className="p-3 text-left">Source</th>
+              <th className="p-3 text-left">Record</th>
+              <th className="p-3 text-left">Category</th>
+              <th className="p-3 text-left">Status</th>
+              <th className="p-3 text-left">Confidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.slice(0, 18).map((record) => (
+              <tr key={record.id} className="border-t border-border">
+                <td className="p-3 text-blue-100">{record.sourceType.replaceAll("_", " ")}</td>
+                <td className="p-3">
+                  <div className="font-bold text-white">{record.title}</div>
+                  {record.notes ? <div className="mt-1 text-xs text-muted-foreground">{record.notes}</div> : null}
+                </td>
+                <td className="p-3 text-muted-foreground">{record.category}</td>
+                <td className="p-3"><Badge variant="outline">{record.status}</Badge></td>
+                <td className="p-3 text-green-300">{record.confidence}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!records.length && (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            No memory records yet. Cicero will start filling this as estimates, RFQs, buyouts, feedback, and outcomes are captured.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function DataCenterView({
+  activeTab,
+  onTabChange,
+  records,
+  predictiveEstimatorModel,
+}: {
+  activeTab: DataCenterTab;
+  onTabChange: (tab: DataCenterTab) => void;
+  records: DataCenterRecordSummary[];
+  predictiveEstimatorModel: Record<string, unknown>;
+}) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const groups: DataCenterCategory["group"][] = ["Company Intelligence", "Market Intelligence", "Strategic Playbooks"];
+  const filteredCategories = DATA_CENTER_CATEGORIES.filter((category) => {
+    if (!normalizedQuery) return true;
+    return `${category.group} ${category.name} ${category.description}`.toLowerCase().includes(normalizedQuery);
+  });
+  const shownRecords = records.filter((record) => {
+    if (!normalizedQuery) return true;
+    return `${record.title} ${record.category} ${record.status} ${record.notes || ""}`.toLowerCase().includes(normalizedQuery);
+  });
+
+  if (activeTab === "estimator-memory") {
+    return (
+      <EstimatorMemoryView
+        records={records}
+        predictiveEstimatorModel={predictiveEstimatorModel}
+        onBack={() => onTabChange("overview")}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Badge className="bg-orange-500/15 text-orange-300">Data Center</Badge>
+            <h1 className="mt-3 text-3xl font-black text-white">Data Center</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Suite-wide intelligence center. Estimating works here; OpsSlate learns here.
+            </p>
+          </div>
+          <input
+            data-center-search="true"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search intelligence, memory, vendors, risk..."
+            className="w-full max-w-md rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+          />
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {[
+            ["overview", "Overview"],
+            ["estimator-memory", "Estimator Memory"],
+            ["market-intelligence", "Market Intelligence"],
+            ["strategic-playbooks", "Strategic Playbooks"],
+          ].map(([tab, label]) => (
+            <Button
+              key={tab}
+              type="button"
+              variant={activeTab === tab ? "default" : "outline"}
+              onClick={() => onTabChange(tab as DataCenterTab)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </section>
+
+      <section data-center-detail="true" className="grid gap-4 xl:grid-cols-[1fr_360px]">
+        <div className="space-y-4">
+          {groups.map((group) => {
+            const categories = filteredCategories.filter((category) => category.group === group);
+            if (!categories.length) return null;
+            return (
+              <div key={group} className="rounded-lg border border-border bg-card p-4">
+                <div className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-blue-100">{group}</div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  {categories.map((category) => (
+                    <button
+                      key={`${category.group}-${category.name}`}
+                      type="button"
+                      onClick={() => category.tab && onTabChange(category.tab)}
+                      className="rounded-lg border border-border bg-background/45 p-4 text-left transition-colors hover:border-orange-500/35 hover:bg-secondary/60"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-black text-white">{category.name}</div>
+                        <Badge className={category.status === "active" ? "bg-green-500/15 text-green-200" : category.status === "starter" ? "bg-blue-500/15 text-blue-200" : "bg-secondary text-muted-foreground"}>
+                          {category.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">{category.description}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <aside className="space-y-4">
+          <div className="rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-200">Estimator Memory</div>
+            <div className="mt-2 text-3xl font-black text-white">{records.length}</div>
+            <p className="mt-1 text-xs text-muted-foreground">Normalized records ready for Cicero, prediction storage, and later outcome training.</p>
+            <Button className="mt-4 w-full" onClick={() => onTabChange("estimator-memory")}>Open Estimator Memory</Button>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Recent intelligence records</div>
+            <div className="mt-3 space-y-2">
+              {shownRecords.slice(0, 6).map((record) => (
+                <div key={record.id} className="rounded-md border border-border bg-background/45 p-3">
+                  <div className="text-sm font-bold text-white">{record.title}</div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span>{record.sourceType.replaceAll("_", " ")}</span>
+                    <span>{record.confidence}</span>
+                  </div>
+                </div>
+              ))}
+              {!shownRecords.length && <div className="text-sm text-muted-foreground">No records match this search yet.</div>}
+            </div>
+          </div>
+        </aside>
+      </section>
     </div>
   );
 }
@@ -2622,6 +3052,7 @@ function EstimatingWorkspace() {
   const branding = useQuery(api.companyBranding.get, user ? { companyId: user.companyId as Id<"companies"> } : "skip") as any;
 
   const [activeTool, setActiveTool] = useState<EstimatingToolKey>("cockpit");
+  const [dataCenterTab, setDataCenterTab] = useState<DataCenterTab>("overview");
   const [productionMenuOpen, setProductionMenuOpen] = useState(false);
   const [sectionPhaseModalOpen, setSectionPhaseModalOpen] = useState(false);
   const [bidItemModalOpen, setBidItemModalOpen] = useState(false);
@@ -2824,6 +3255,15 @@ function EstimatingWorkspace() {
     historicalEstimates: estimates || [],
     historicalItems: historicalEstimateItems || [],
   }), [selectedEstimate, estimateItems, rfqSummary, productionRows, estimates, historicalEstimateItems]);
+  const dataCenterRecords = useMemo(() => buildEstimatorMemoryRecords({
+    estimate: selectedEstimate,
+    items: estimateItems || [],
+    rfqs: rfqsWithNotes,
+    predictiveSignals,
+    predictiveEstimatorModel,
+    productionRows,
+    historicalItems: historicalEstimateItems || [],
+  }), [selectedEstimate, estimateItems, rfqsWithNotes, predictiveSignals, predictiveEstimatorModel, productionRows, historicalEstimateItems]);
   const predictionOutputSnapshot = useMemo(() => ({
     modelVersion: predictiveEstimatorModel.modelVersion,
     bidSurvivalScore: predictiveEstimatorModel.bidSurvivalScore,
@@ -4588,6 +5028,13 @@ function EstimatingWorkspace() {
             onNewEstimate={startNewEstimateFlow}
             onAutoBid={openAutoBidQueue}
             onQuickTemplates={openQuickTemplates}
+          />
+        ) : activeTool === "data-center" ? (
+          <DataCenterView
+            activeTab={dataCenterTab}
+            onTabChange={setDataCenterTab}
+            records={dataCenterRecords}
+            predictiveEstimatorModel={predictiveEstimatorModel as Record<string, unknown>}
           />
         ) : activeTool === "war-room" ? aiToolsWorkspace : activeTool !== "rfq" ? stagedTool : (
     <div className="space-y-5">
