@@ -2438,6 +2438,10 @@ function EstimatingWorkspace() {
     api.estimating.listEstimateItems,
     estimateId ? { estimateId: estimateId as Id<"estimates"> } : "skip"
   ) as any[] | undefined;
+  const historicalEstimateItems = useQuery(
+    api.estimating.listCompanyEstimateItems,
+    user ? { companyId: user.companyId, limit: 2000 } : "skip"
+  ) as any[] | undefined;
   const rfqs = useQuery(
     api.estimating.listRfqs,
     user && estimateId ? { companyId: user.companyId, estimateId: estimateId as Id<"estimates"> } : "skip"
@@ -2548,8 +2552,8 @@ function EstimatingWorkspace() {
     rfqSummary,
     productionRows,
     historicalEstimates: estimates || [],
-    historicalItems: estimateItems || [],
-  }), [selectedEstimate, estimateItems, rfqSummary, productionRows, estimates]);
+    historicalItems: historicalEstimateItems || [],
+  }), [selectedEstimate, estimateItems, rfqSummary, productionRows, estimates, historicalEstimateItems]);
   const activeBids = projectFilteredEstimates.filter((estimate) => !["won", "lost", "archived"].includes(String(estimate.status || "").toLowerCase())).length;
   const draftBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "draft").length;
   const wonBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "won").length;
@@ -3561,7 +3565,7 @@ function EstimatingWorkspace() {
         scheduleScore={scheduleScore}
         productionRows={productionRows}
         historicalEstimates={estimates || []}
-        historicalItems={estimateItems || []}
+        historicalItems={historicalEstimateItems || []}
         onGoToRfq={() => setActiveTool("rfq")}
         onGoToProduction={() => setActiveTool("production-breakdown")}
         onCreateAction={(action) => void createCiceroAction(action)}
@@ -4000,7 +4004,7 @@ function EstimatingWorkspace() {
             predictiveSignals={predictiveSignals}
             productionRows={productionRows}
             historicalEstimates={estimates || []}
-            historicalItems={estimateItems || []}
+            historicalItems={historicalEstimateItems || []}
             onToggleItem={toggleItem}
             onRequestQuote={requestQuoteForItem}
             onOpenProof={setProofItem}

@@ -124,6 +124,17 @@ export const listEstimateItems = query({
   },
 });
 
+export const listCompanyEstimateItems = query({
+  args: { companyId: v.id("companies"), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 2000, 1), 5000);
+    return await ctx.db.query("estimateItems")
+      .withIndex("by_company", q => q.eq("companyId", args.companyId))
+      .order("desc")
+      .take(limit);
+  },
+});
+
 export const createEstimateItem = mutation({
   args: { companyId: v.id("companies"), estimateId: v.id("estimates"), section: v.optional(v.string()), description: v.string(), quantity: v.optional(v.number()), unit: v.optional(v.string()), unitCost: v.optional(v.number()), taxPct: v.optional(v.number()), costItemId: v.optional(v.id("costItems")), costCode: v.optional(v.string()), assemblyId: v.optional(v.string()), assemblyName: v.optional(v.string()), duplicateFingerprint: v.optional(v.string()), notes: v.optional(v.string()) },
   handler: async (ctx, args) => {
