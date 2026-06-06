@@ -34,6 +34,22 @@ type RfqLineResponse = {
   selected?: boolean;
 };
 
+type BuyoutLinkSummary = {
+  quoteCount: number;
+  selectedQuote?: {
+    rfqId: string;
+    vendorName: string;
+    totalPrice: number;
+    unitPrice: number;
+    leadTime?: string;
+    status: string;
+  };
+  awardedVendor?: string;
+  awardedAmount?: number;
+  sourceRfqId?: string;
+  sourceQuoteId?: string;
+};
+
 const VENDOR_CATEGORIES = [
   "Concrete",
   "Electrical",
@@ -105,6 +121,33 @@ function missingResponseDetails(response?: RfqLineResponse) {
   if (!response?.expiration) missing.push("expiration");
   if (!response?.exclusions) missing.push("exclusions");
   return missing;
+}
+
+function buyoutLinksForItem(item: Record<string, unknown>, rfqHistory: Array<Record<string, unknown>>): BuyoutLinkSummary {
+  const itemId = String(item._id || "");
+  const quotes = rfqHistory.flatMap((rfq) => {
+    const notes = (rfq.parsedNotes && typeof rfq.parsedNotes === "object" ? rfq.parsedNotes : safeRfqNotes(rfq.notes)) as RfqNotes;
+    const response = notes.lineResponses?.[itemId];
+    if (!response) return [];
+    return [{
+      rfqId: String(rfq._id || ""),
+      vendorName: String(rfq.vendorName || notes.vendor?.name || "Vendor"),
+      totalPrice: Number(response.totalPrice || 0),
+      unitPrice: Number(response.unitPrice || 0),
+      leadTime: response.leadTime,
+      status: String(rfq.status || "draft"),
+      selected: Boolean(response.selected),
+    }];
+  });
+  const selectedQuote = quotes.find((quote) => quote.selected);
+  return {
+    quoteCount: quotes.length,
+    selectedQuote,
+    awardedVendor: selectedQuote?.vendorName,
+    awardedAmount: selectedQuote?.totalPrice,
+    sourceRfqId: selectedQuote?.rfqId,
+    sourceQuoteId: undefined,
+  };
 }
 
 function itemLabel(item: Record<string, unknown>) {
@@ -2075,6 +2118,7 @@ function EstimateDetailView({
   productionRows,
   historicalEstimates,
   historicalItems,
+  rfqHistory,
   onToggleItem,
   onRequestQuote,
   onOpenProof,
@@ -2107,6 +2151,7 @@ function EstimateDetailView({
   productionRows: ReturnType<typeof productionRowsForItems>;
   historicalEstimates: Array<Record<string, unknown>>;
   historicalItems: Array<Record<string, unknown>>;
+  rfqHistory: Array<Record<string, unknown>>;
   onToggleItem: (id: string, checked: boolean) => void;
   onRequestQuote: (item: Record<string, unknown>) => void;
   onOpenProof: (item: Record<string, unknown>) => void;
@@ -2270,6 +2315,7 @@ function EstimateDetailView({
                     {pricedItems.map((item) => {
                       const itemId = String(item._id);
                       const rfqStatus = rfqStatusForItem(item);
+                      const buyoutLink = buyoutLinksForItem(item, rfqHistory);
                       return (
                         <tr key={itemId} className="border-t border-border" data-estimate-child-row="true">
                           <td className="p-3">
@@ -2283,6 +2329,8 @@ function EstimateDetailView({
                             <div className="mt-1 flex flex-wrap gap-2">
                               <Badge variant="outline">Spec: {String(item.sourceSpecSection || item.specSection || "No book")}</Badge>
                               <Badge className="bg-blue-500/15 text-blue-200">RFQ Status: {rfqStatus === "No RFQ" ? "Not Requested" : rfqStatus}</Badge>
+                              {buyoutLink.quoteCount ? <Badge className="bg-teal-500/15 text-teal-200">Quote History: {buyoutLink.quoteCount}</Badge> : null}
+                              {buyoutLink.selectedQuote ? <Badge className="bg-green-500/15 text-green-200">Buyout Award: {buyoutLink.selectedQuote.vendorName} {money(buyoutLink.selectedQuote.totalPrice)}</Badge> : null}
                               {itemHasIntent(item, RFQ_INTENT_NOTE) ? <Badge className="bg-cyan-500/15 text-cyan-200">RFQ Intent</Badge> : null}
                               {itemHasIntent(item, RFI_INTENT_NOTE) ? <Badge className="bg-sky-500/15 text-sky-200">RFI Intent</Badge> : null}
                               {itemHasIntent(item, SUBMITTAL_INTENT_NOTE) ? <Badge className="bg-purple-500/15 text-purple-200">Submittal Intent</Badge> : null}
@@ -2646,6 +2694,9 @@ function EstimatingWorkspace() {
   const createRfi = useMutation(api.rfis.create);
   const createSubmittal = useMutation(api.submittals.create);
   const createTask = useMutation(api.tasks.create);
+  const createBuyoutItem = useMutation(api.buyout.createItem);
+  const updateBuyoutItem = useMutation(api.buyout.updateItem);
+  const createBuyoutQuote = useMutation(api.buyout.createQuote);
   const createPredictionRun = useMutation(api.estimatePredictionMemory.createPredictionRun);
   const recordEstimateOutcome = useMutation(api.estimatePredictionMemory.recordEstimateOutcome);
 
@@ -3587,6 +3638,8 @@ function EstimatingWorkspace() {
 
     const quantity = Number(item.quantity || 0);
     const unitPrice = Number(response.unitPrice || (quantity ? Number(response.totalPrice || 0) / quantity : 0));
+    const awardedAmount = Number(response.totalPrice || 0);
+    const budgetAmount = itemLineTotal(item);
     const selectedNote = [
       item.notes || "",
       `Selected RFQ: ${rfq.vendorName}`,
@@ -3608,6 +3661,108 @@ function EstimatingWorkspace() {
       status: "accepted",
       notes: JSON.stringify({ ...notes, lineResponses: nextResponses }),
     });
+    let buyoutQuoteId: unknown = undefined;
+    try {
+      if (user?.companyId && selectedProject?._id && selectedEstimate?._id) {
+        const buyoutItemId = await createBuyoutItem({
+          companyId: user.companyId,
+          projectId: selectedProject._id as Id<"projects">,
+          estimateId: selectedEstimate._id as Id<"estimates">,
+          estimateItemId: item._id as Id<"estimateItems">,
+          sourceRfqId: String(rfq._id),
+          sourceQuoteId: undefined,
+          sourceType: "estimating_rfq_award",
+          category: String(item.section || "Buyout"),
+          description: String(item.description || "Estimate item"),
+          budgetAmount,
+          quantity,
+          unit: String(item.unit || "LS"),
+          status: "awarded",
+          awardedVendor: String(rfq.vendorName || "Selected vendor"),
+          awardedAmount,
+          awardedDate: new Date().toISOString().slice(0, 10),
+          quotesReceived: 1,
+          leadTime: response.leadTime,
+          savings: budgetAmount - awardedAmount,
+          savingsPercent: budgetAmount > 0 ? ((budgetAmount - awardedAmount) / budgetAmount) * 100 : 0,
+          notes: JSON.stringify({
+            estimateItemId: itemId,
+            sourceRfqId: String(rfq._id),
+            exclusions: response.exclusions,
+            alternates: response.alternates,
+          }),
+        });
+        buyoutQuoteId = await createBuyoutQuote({
+          companyId: user.companyId,
+          buyoutItemId: buyoutItemId as Id<"buyoutItems">,
+          estimateId: selectedEstimate._id as Id<"estimates">,
+          estimateItemId: item._id as Id<"estimateItems">,
+          sourceRfqId: String(rfq._id),
+          sourceQuoteId: undefined,
+          sourceType: "estimating_rfq_award",
+          vendorName: String(rfq.vendorName || "Selected vendor"),
+          amount: awardedAmount,
+          unitPrice,
+          leadTime: response.leadTime,
+          notes: JSON.stringify({
+            estimateItemId: itemId,
+            sourceRfqId: String(rfq._id),
+            exclusions: response.exclusions,
+            alternates: response.alternates,
+          }),
+          quoteDate: new Date().toISOString().slice(0, 10),
+          expiresDate: response.expiration,
+          status: "selected",
+        });
+        await updateBuyoutItem({
+          id: buyoutItemId as Id<"buyoutItems">,
+          sourceQuoteId: buyoutQuoteId ? String(buyoutQuoteId) : undefined,
+        });
+      }
+    } catch (error) {
+      console.warn("Could not create buyout link for selected RFQ quote", error);
+    }
+    try {
+      if (user?.companyId && selectedEstimate?._id) {
+        await recordEstimateOutcome({
+          companyId: user.companyId,
+          estimateId: selectedEstimate._id as Id<"estimates">,
+          projectId: selectedProject?._id as Id<"projects"> | undefined,
+          outcomeType: "estimate_item_buyout_award",
+          outcomeKey: itemId,
+          expectedValue: {
+            estimateItemId: itemId,
+            description: item.description,
+            section: item.section,
+            budgetAmount,
+            estimatedQuantity: quantity,
+            estimatedUnitCost: Number(item.unitCost || 0),
+          },
+          actualValue: {
+            estimateItemId: itemId,
+            awardedVendor: String(rfq.vendorName || "Selected vendor"),
+            awardedAmount,
+            unitPrice,
+            leadTime: response.leadTime,
+            sourceRfqId: String(rfq._id),
+            sourceQuoteId: buyoutQuoteId ? String(buyoutQuoteId) : undefined,
+          },
+          variance: awardedAmount - budgetAmount,
+          actualCost: awardedAmount,
+          awardedAmount,
+          notes: JSON.stringify({
+            estimateItemId: itemId,
+            sourceRfqId: String(rfq._id),
+            sourceQuoteId: buyoutQuoteId ? String(buyoutQuoteId) : undefined,
+            vendorName: String(rfq.vendorName || "Selected vendor"),
+            exclusions: response.exclusions,
+            alternates: response.alternates,
+          }),
+        });
+      }
+    } catch (error) {
+      console.warn("Could not record buyout award outcome memory", error);
+    }
   }
 
   async function saveSectionPhase() {
@@ -4399,6 +4554,7 @@ function EstimatingWorkspace() {
             productionRows={productionRows}
             historicalEstimates={estimates || []}
             historicalItems={historicalEstimateItems || []}
+            rfqHistory={rfqsWithNotes}
             onToggleItem={toggleItem}
             onRequestQuote={requestQuoteForItem}
             onOpenProof={setProofItem}

@@ -1398,6 +1398,11 @@ export default defineSchema({
   buyoutItems: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("projects"),
+    estimateId: v.optional(v.id("estimates")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceRfqId: v.optional(v.string()),
+    sourceQuoteId: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
     category: v.string(), // Concrete, Steel, Pipe, Electrical, Equipment Rental, Misc
     description: v.string(),
     budgetAmount: v.number(), // from estimate
@@ -1422,11 +1427,17 @@ export default defineSchema({
     createdAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
   }).index("by_company", ["companyId"])
-    .index("by_project", ["companyId", "projectId"]),
+    .index("by_project", ["companyId", "projectId"])
+    .index("by_estimate_item", ["companyId", "estimateItemId"]),
 
   buyoutQuotes: defineTable({
     companyId: v.id("companies"),
     buyoutItemId: v.id("buyoutItems"),
+    estimateId: v.optional(v.id("estimates")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceRfqId: v.optional(v.string()),
+    sourceQuoteId: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
     vendorName: v.string(),
     contactName: v.optional(v.string()),
     phone: v.optional(v.string()),
@@ -1440,7 +1451,8 @@ export default defineSchema({
     status: v.string(), // pending, selected, rejected, expired
     createdAt: v.optional(v.string()),
   }).index("by_company", ["companyId"])
-    .index("by_item", ["buyoutItemId"]),
+    .index("by_item", ["buyoutItemId"])
+    .index("by_estimate_item", ["companyId", "estimateItemId"]),
 
   // Decision Intelligence
   decisionLog: defineTable({

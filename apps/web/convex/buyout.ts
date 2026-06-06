@@ -12,16 +12,40 @@ export const listItems = query({
   },
 });
 
+export const listItemsByEstimateItem = query({
+  args: { companyId: v.id("companies"), estimateItemId: v.id("estimateItems") },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("buyoutItems")
+      .withIndex("by_estimate_item", (q) => q.eq("companyId", args.companyId).eq("estimateItemId", args.estimateItemId))
+      .collect();
+  },
+});
+
 export const createItem = mutation({
   args: {
     companyId: v.id("companies"),
     projectId: v.id("projects"),
+    estimateId: v.optional(v.id("estimates")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceRfqId: v.optional(v.string()),
+    sourceQuoteId: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
     category: v.string(),
     description: v.string(),
     budgetAmount: v.number(),
     quantity: v.optional(v.number()),
     unit: v.optional(v.string()),
+    awardedVendor: v.optional(v.string()),
+    awardedAmount: v.optional(v.number()),
+    awardedDate: v.optional(v.string()),
+    poNumber: v.optional(v.string()),
     status: v.string(),
+    quotesReceived: v.optional(v.number()),
+    leadTime: v.optional(v.string()),
+    deliveryDate: v.optional(v.string()),
+    savings: v.optional(v.number()),
+    savingsPercent: v.optional(v.number()),
     scope: v.optional(v.string()),
     notes: v.optional(v.string()),
   },
@@ -37,6 +61,11 @@ export const createItem = mutation({
 export const updateItem = mutation({
   args: {
     id: v.id("buyoutItems"),
+    estimateId: v.optional(v.id("estimates")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceRfqId: v.optional(v.string()),
+    sourceQuoteId: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
     category: v.optional(v.string()),
     description: v.optional(v.string()),
     budgetAmount: v.optional(v.number()),
@@ -104,6 +133,11 @@ export const createQuote = mutation({
   args: {
     companyId: v.id("companies"),
     buyoutItemId: v.id("buyoutItems"),
+    estimateId: v.optional(v.id("estimates")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceRfqId: v.optional(v.string()),
+    sourceQuoteId: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
     vendorName: v.string(),
     contactName: v.optional(v.string()),
     phone: v.optional(v.string()),
@@ -134,6 +168,11 @@ export const createQuote = mutation({
 export const updateQuote = mutation({
   args: {
     id: v.id("buyoutQuotes"),
+    estimateId: v.optional(v.id("estimates")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceRfqId: v.optional(v.string()),
+    sourceQuoteId: v.optional(v.string()),
+    sourceType: v.optional(v.string()),
     vendorName: v.optional(v.string()),
     contactName: v.optional(v.string()),
     phone: v.optional(v.string()),
