@@ -2622,6 +2622,16 @@ function SnippetModal({
   );
 }
 
+type CiceroPanelAction = {
+  id: string;
+  label: string;
+  detail: string;
+  cta: string;
+  source: "Internal Fact" | "External Market Signal" | "Strategic Recommendation";
+  confidence: DataCenterRecordSummary["confidence"];
+  run: () => void;
+};
+
 function CiceroCommandPanel({
   estimate,
   items,
@@ -2633,6 +2643,8 @@ function CiceroCommandPanel({
   onGoToRfq,
   onGoToProduction,
   onCreateAction,
+  onApproveRecommendation,
+  onDismissRecommendation,
 }: {
   estimate?: Record<string, unknown>;
   items: Array<Record<string, unknown>>;
@@ -2644,6 +2656,8 @@ function CiceroCommandPanel({
   onGoToRfq: () => void;
   onGoToProduction: () => void;
   onCreateAction: (action: string) => void;
+  onApproveRecommendation: (action: CiceroPanelAction) => void;
+  onDismissRecommendation: (action: CiceroPanelAction) => void;
 }) {
   const metrics = estimatorCoverageMetrics({ estimate, items, rfqSummary });
   const predictiveModel = buildPredictiveEstimatorModel({
@@ -2657,11 +2671,12 @@ function CiceroCommandPanel({
   const zeroCost = metrics.pricedItems.filter((item) => Number(item.unitCost || 0) <= 0).length;
   const noMilestone = metrics.pricedItems.length - metrics.withMilestone;
   const actions = [
-    zeroCost ? { label: "Price placeholders", detail: `${zeroCost} item${zeroCost === 1 ? "" : "s"} need real cost or RFQ coverage.`, cta: "Create pricing action", source: "Internal Fact", confidence: zeroCost > 3 ? "Strong" : "Likely", run: () => onCreateAction("Review zero-cost placeholders and either price them or send RFQs.") } : null,
-    rfqSummary.open ? { label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", source: "Internal Fact", confidence: "Strong", run: onGoToRfq } : null,
-    noMilestone ? { label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", source: "Internal Fact", confidence: scheduleScore < 60 ? "Strong" : "Likely", run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
-    scheduleScore < 80 ? { label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", source: "Internal Fact", confidence: "Likely", run: onGoToProduction } : null,
+    zeroCost ? { id: "price-placeholders", label: "Price placeholders", detail: `${zeroCost} item${zeroCost === 1 ? "" : "s"} need real cost or RFQ coverage.`, cta: "Create pricing action", source: "Internal Fact", confidence: zeroCost > 3 ? "Strong" : "Likely", run: () => onCreateAction("Review zero-cost placeholders and either price them or send RFQs.") } : null,
+    rfqSummary.open ? { id: "rfqs-open", label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", source: "Internal Fact", confidence: "Strong", run: onGoToRfq } : null,
+    noMilestone ? { id: "loose-schedule-handoff", label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", source: "Internal Fact", confidence: scheduleScore < 60 ? "Strong" : "Likely", run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
+    scheduleScore < 80 ? { id: "production-assumptions", label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", source: "Internal Fact", confidence: "Likely", run: onGoToProduction } : null,
     ...predictiveModel.recommendedDraftActions.slice(0, 3).map((action) => ({
+      id: `strategic-${action.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`,
       label: "Cicero recommendation",
       detail: action,
       cta: "Create draft action",
@@ -2669,7 +2684,7 @@ function CiceroCommandPanel({
       confidence: confidenceForRecord(predictiveModel.survivalScore),
       run: () => onCreateAction(action),
     })),
-  ].filter(Boolean) as Array<{ label: string; detail: string; cta: string; source: "Internal Fact" | "External Market Signal" | "Strategic Recommendation"; confidence: DataCenterRecordSummary["confidence"]; run: () => void }>;
+  ].filter(Boolean) as CiceroPanelAction[];
 
   return (
     <section className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-4">
@@ -2722,16 +2737,27 @@ function CiceroCommandPanel({
           <Badge className="w-fit bg-orange-500/20 text-orange-100">{predictiveModel.similarEstimateMatches.length} similar bids</Badge>
         </div>
         <div className="mt-3 grid gap-2 lg:grid-cols-2">
-          {predictiveModel.recommendedDraftActions.length ? predictiveModel.recommendedDraftActions.map((action) => (
-            <button
-              key={action}
-              type="button"
-              onClick={() => onCreateAction(action)}
-              className="rounded-md border border-orange-500/20 bg-background/50 px-3 py-2 text-left text-xs font-bold text-blue-100 hover:border-orange-400 hover:text-white"
-            >
-              {action}
-            </button>
-          )) : (
+          {predictiveModel.recommendedDraftActions.length ? predictiveModel.recommendedDraftActions.map((action) => {
+            const recommendation: CiceroPanelAction = {
+              id: `recommended-${action.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`,
+              label: "Cicero recommendation",
+              detail: action,
+              cta: "Create draft action",
+              source: "Strategic Recommendation",
+              confidence: confidenceForRecord(predictiveModel.survivalScore),
+              run: () => onCreateAction(action),
+            };
+            return (
+              <div key={action} className="rounded-md border border-orange-500/20 bg-background/50 p-3">
+                <div className="text-xs font-bold text-blue-100">{action}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={recommendation.run}>Create draft action</Button>
+                  <Button size="sm" onClick={() => onApproveRecommendation(recommendation)}>Approve Recommendation</Button>
+                  <Button size="sm" variant="outline" onClick={() => onDismissRecommendation(recommendation)}>Dismiss Recommendation</Button>
+                </div>
+              </div>
+            );
+          }) : (
             <div className="rounded-md border border-green-500/20 bg-green-500/10 px-3 py-2 text-xs font-bold text-green-200">No predictive cleanup action is required yet.</div>
           )}
         </div>
@@ -2747,7 +2773,11 @@ function CiceroCommandPanel({
               <div className="font-bold text-white">{action.label}</div>
               <div className="text-xs text-muted-foreground">{action.detail}</div>
             </div>
-            <Button size="sm" variant="outline" onClick={action.run}>{action.cta}</Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={action.run}>{action.cta}</Button>
+              <Button size="sm" onClick={() => onApproveRecommendation(action)}>Approve Recommendation</Button>
+              <Button size="sm" variant="outline" onClick={() => onDismissRecommendation(action)}>Dismiss Recommendation</Button>
+            </div>
           </div>
         )) : (
           <div className="rounded-lg border border-green-500/25 bg-green-500/10 p-3 text-sm text-green-200">No critical estimator actions right now. Keep building the bid, then run production and RFQ review before submission.</div>
@@ -3593,6 +3623,7 @@ function EstimatingWorkspace() {
   const createBuyoutQuote = useMutation(api.buyout.createQuote);
   const createPredictionRun = useMutation(api.estimatePredictionMemory.createPredictionRun);
   const recordEstimateOutcome = useMutation(api.estimatePredictionMemory.recordEstimateOutcome);
+  const recordEstimatorFeedback = useMutation(api.estimatePredictionMemory.recordEstimatorFeedback);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const predictionRunSignatureRef = useRef("");
@@ -3656,6 +3687,9 @@ function EstimatingWorkspace() {
     exclusions: "",
     alternates: "",
   });
+  const [dismissRecommendationModal, setDismissRecommendationModal] = useState<CiceroPanelAction | null>(null);
+  const [dismissRecommendationReason, setDismissRecommendationReason] = useState("Not in scope");
+  const [dismissRecommendationLearningNote, setDismissRecommendationLearningNote] = useState("");
 
   const selectedItems = useMemo(() => {
     return (estimateItems || []).filter((item) => selectedItemIds.includes(String(item._id)));
@@ -4176,6 +4210,51 @@ function EstimatingWorkspace() {
       notes: appendNoteLine(selectedEstimate.notes, `${ESTIMATOR_ACTION_PREFIX} ${JSON.stringify(actionNote)}`),
     });
     if (typeof window !== "undefined") window.alert("Cicero action saved to this estimate.");
+  }
+
+  async function approveCiceroRecommendation(action: CiceroPanelAction) {
+    if (!user || !selectedEstimate?._id) {
+      if (typeof window !== "undefined") window.alert("Open an estimate before approving Cicero recommendations.");
+      return;
+    }
+    await recordEstimatorFeedback({
+      companyId: user.companyId,
+      estimateId: selectedEstimate._id as Id<"estimates">,
+      projectId: selectedProject?._id as Id<"projects"> | undefined,
+      feedbackType: "accepted_recommendation",
+      targetType: "cicero_action",
+      targetId: action.id,
+      action: `${action.label}: ${action.detail}`,
+      accepted: true,
+      reason: "Estimator approved Cicero recommendation",
+      note: `Source: ${action.source}; confidence: ${action.confidence}`,
+    });
+    await createCiceroAction(action.detail);
+  }
+
+  function openDismissRecommendation(action: CiceroPanelAction) {
+    setDismissRecommendationModal(action);
+    setDismissRecommendationReason("Not in scope");
+    setDismissRecommendationLearningNote("");
+  }
+
+  async function submitDismissRecommendation() {
+    if (!dismissRecommendationModal || !user || !selectedEstimate?._id) return;
+    await recordEstimatorFeedback({
+      companyId: user.companyId,
+      estimateId: selectedEstimate._id as Id<"estimates">,
+      projectId: selectedProject?._id as Id<"projects"> | undefined,
+      feedbackType: "dismissed_recommendation",
+      targetType: "cicero_action",
+      targetId: dismissRecommendationModal.id,
+      action: `${dismissRecommendationModal.label}: ${dismissRecommendationModal.detail}`,
+      accepted: false,
+      reason: dismissRecommendationReason,
+      note: dismissRecommendationLearningNote || `Dismissed from Cicero command panel. Source: ${dismissRecommendationModal.source}; confidence: ${dismissRecommendationModal.confidence}`,
+    });
+    setDismissRecommendationModal(null);
+    setDismissRecommendationLearningNote("");
+    if (typeof window !== "undefined") window.alert("Cicero dismissal saved to estimator memory.");
   }
 
   async function createRfiFromEstimateItem(item: Record<string, unknown>) {
@@ -4994,6 +5073,8 @@ function EstimatingWorkspace() {
         onGoToRfq={() => setActiveTool("rfq")}
         onGoToProduction={() => setActiveTool("production-breakdown")}
         onCreateAction={(action) => void createCiceroAction(action)}
+        onApproveRecommendation={(action) => void approveCiceroRecommendation(action)}
+        onDismissRecommendation={openDismissRecommendation}
       />
       <HandoffPipelinePanel
         estimate={selectedEstimate}
@@ -5211,6 +5292,52 @@ function EstimatingWorkspace() {
           onCancel={() => setSnippetItem(null)}
           onSave={() => void saveSnippetToItem()}
         />
+        {dismissRecommendationModal ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+            <div className="w-full max-w-3xl rounded-lg border border-border bg-card p-6 shadow-2xl">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-black text-white">Dismiss Recommendation</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">{dismissRecommendationModal.detail}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDismissRecommendationModal(null)}
+                  className="rounded-md border border-border px-3 py-1 text-sm text-muted-foreground hover:text-white"
+                >
+                  x
+                </button>
+              </div>
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Reason</label>
+                  <select
+                    value={dismissRecommendationReason}
+                    onChange={(event) => setDismissRecommendationReason(event.target.value)}
+                    className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+                  >
+                    {["Not in scope", "Already covered", "Bad assumption", "Too risky", "Low confidence", "Other"].map((reason) => (
+                      <option key={reason}>{reason}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Learning Note</label>
+                  <textarea
+                    value={dismissRecommendationLearningNote}
+                    onChange={(event) => setDismissRecommendationLearningNote(event.target.value)}
+                    className="mt-1 min-h-28 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+                    placeholder="Teach Cicero why this recommendation should not come back on this bid..."
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDismissRecommendationModal(null)}>Cancel</Button>
+                <Button onClick={() => void submitDismissRecommendation()}>Dismiss Recommendation</Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <div className="xl:hidden">
           <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimator Command Center</label>
           <select
