@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -830,6 +830,49 @@ function buildPredictiveEstimatorModel({
     learnedFrom: `${historicalEstimates.length} historical estimate${historicalEstimates.length === 1 ? "" : "s"}, ${historicalItems.length} historical/active bid line${historicalItems.length === 1 ? "" : "s"}, ${rfqSummary.total} RFQ record${rfqSummary.total === 1 ? "" : "s"}`,
     modelVersion: "Cicero Predictive Estimator v1",
   };
+}
+
+function HistoricalEstimateItemsProbe({
+  estimateId,
+  onItemsChange,
+}: {
+  estimateId: string;
+  onItemsChange: (estimateId: string, items: Array<Record<string, unknown>>) => void;
+}) {
+  const items = useQuery(
+    api.estimating.listEstimateItems,
+    estimateId ? { estimateId: estimateId as Id<"estimates"> } : "skip"
+  ) as Array<Record<string, unknown>> | undefined;
+
+  useEffect(() => {
+    if (!estimateId || !items) return;
+    onItemsChange(estimateId, items);
+  }, [estimateId, items, onItemsChange]);
+
+  return null;
+}
+
+function HistoricalEstimateItemsCollector({
+  estimates,
+  onItemsChange,
+}: {
+  estimates: Array<Record<string, unknown>>;
+  onItemsChange: (estimateId: string, items: Array<Record<string, unknown>>) => void;
+}) {
+  return (
+    <>
+      {estimates.map((estimate) => {
+        const estimateId = String(estimate._id || "");
+        return estimateId ? (
+          <HistoricalEstimateItemsProbe
+            key={estimateId}
+            estimateId={estimateId}
+            onItemsChange={onItemsChange}
+          />
+        ) : null;
+      })}
+    </>
+  );
 }
 
 function productionCategoryForItem(item: Record<string, unknown>) {
@@ -2422,6 +2465,7 @@ function EstimatingWorkspace() {
   const [newItemLeadTime, setNewItemLeadTime] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedEstimateId, setSelectedEstimateId] = useState("");
+  const [historicalItemsByEstimate, setHistoricalItemsByEstimate] = useState<Record<string, Array<Record<string, unknown>>>>({});
   const projectFilteredEstimates = useMemo(() => {
     if (!selectedProjectId) return estimates || [];
     return (estimates || []).filter((estimate) => String(estimate.projectId || "") === selectedProjectId);
@@ -2437,10 +2481,6 @@ function EstimatingWorkspace() {
   const estimateItems = useQuery(
     api.estimating.listEstimateItems,
     estimateId ? { estimateId: estimateId as Id<"estimates"> } : "skip"
-  ) as any[] | undefined;
-  const historicalEstimateItems = useQuery(
-    api.estimating.listCompanyEstimateItems,
-    user ? { companyId: user.companyId, limit: 2000 } : "skip"
   ) as any[] | undefined;
   const rfqs = useQuery(
     api.estimating.listRfqs,
@@ -2514,6 +2554,24 @@ function EstimatingWorkspace() {
   const selectedItems = useMemo(() => {
     return (estimateItems || []).filter((item) => selectedItemIds.includes(String(item._id)));
   }, [estimateItems, selectedItemIds]);
+  const rememberHistoricalEstimateItems = useCallback((nextEstimateId: string, items: Array<Record<string, unknown>>) => {
+    const signatureFor = (records: Array<Record<string, unknown>>) => records
+      .map((item) => `${String(item._id || "")}:${String(item._creationTime || "")}:${String(item.description || "")}:${String(item.unitCost || "")}`)
+      .join("|");
+    setHistoricalItemsByEstimate((current) => {
+      if (signatureFor(current[nextEstimateId] || []) === signatureFor(items)) return current;
+      return { ...current, [nextEstimateId]: items };
+    });
+  }, []);
+  useEffect(() => {
+    const liveEstimateIds = new Set((estimates || []).map((estimate) => String(estimate._id || "")).filter(Boolean));
+    setHistoricalItemsByEstimate((current) => {
+      const entries = Object.entries(current).filter(([key]) => liveEstimateIds.has(key));
+      if (entries.length === Object.keys(current).length) return current;
+      return Object.fromEntries(entries);
+    });
+  }, [estimates]);
+  const historicalEstimateItems = useMemo(() => Object.values(historicalItemsByEstimate).flat(), [historicalItemsByEstimate]);
 
   const rfqsWithNotes = useMemo(() => {
     return (rfqs || []).map((rfq) => ({ ...rfq, parsedNotes: safeRfqNotes(rfq.notes) }));
@@ -3584,6 +3642,10 @@ function EstimatingWorkspace() {
     <div className="flex gap-5">
       <EstimatorCommandCenter activeTool={activeTool} onSelect={setActiveTool} />
       <main className="min-w-0 flex-1 space-y-5">
+        <HistoricalEstimateItemsCollector
+          estimates={estimates || []}
+          onItemsChange={rememberHistoricalEstimateItems}
+        />
         {showBidActionToolbar ? (
           <>
             {bidActionToolbar}
