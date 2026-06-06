@@ -661,9 +661,9 @@ type DataCenterTab = "overview" | "estimator-memory" | "market-intelligence" | "
 
 type DataCenterRecordSummary = {
   id: string;
-  sourceApp: "estimating" | "rfq" | "buyout" | "production" | "project-management" | "prediction";
+  sourceApp: "estimating" | "rfq" | "buyout" | "production" | "project-management" | "prediction" | "market";
   sourceRecordId: string;
-  sourceType: "estimate_item" | "rfq_quote" | "buyout_award" | "actual_outcome" | "prediction_run" | "estimator_feedback" | "accepted_recommendation" | "dismissed_recommendation";
+  sourceType: "estimate_item" | "rfq_quote" | "buyout_award" | "actual_outcome" | "prediction_run" | "estimator_feedback" | "accepted_recommendation" | "dismissed_recommendation" | "market_signal";
   title: string;
   category: string;
   status: string;
@@ -672,6 +672,26 @@ type DataCenterRecordSummary = {
   estimateId?: string;
   estimateItemId?: string;
   sourceDate?: string;
+  notes?: string;
+};
+
+type MarketIntelligenceRecord = {
+  _id?: string;
+  sourceName?: string;
+  sourceType?: string;
+  sourceUrl?: string;
+  collectedAt?: string;
+  refreshDate?: string;
+  region?: string;
+  ownerAgency?: string;
+  workCategory?: string;
+  title?: string;
+  summary?: string;
+  unit?: string;
+  unitCost?: number;
+  totalCost?: number;
+  confidence?: string;
+  status?: string;
   notes?: string;
 };
 
@@ -1433,15 +1453,131 @@ function EstimatorMemoryView({
   );
 }
 
+function marketCategoryLabel(sourceType?: string) {
+  const clean = String(sourceType || "market_signal").replaceAll("_", " ").trim();
+  return clean ? clean.charAt(0).toUpperCase() + clean.slice(1) : "Market Signal";
+}
+
+function MarketIntelligenceView({
+  records,
+  onBack,
+}: {
+  records: MarketIntelligenceRecord[];
+  onBack: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const categories = ["Public Bid Results", "Prevailing Wage", "Commodity Indexes", "Owner Procurement History"];
+  const shownRecords = records.filter((record) => {
+    if (!normalizedQuery) return true;
+    return [
+      record.title,
+      record.summary,
+      record.sourceName,
+      record.sourceType,
+      record.region,
+      record.ownerAgency,
+      record.workCategory,
+      record.notes,
+    ].join(" ").toLowerCase().includes(normalizedQuery);
+  });
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Badge className="bg-cyan-500/15 text-cyan-200">Market Intelligence</Badge>
+            <h1 className="mt-3 text-3xl font-black text-white">Market Intelligence</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Read-only intake for outside bid results, wage pressure, commodity movement, owner patterns, and regional pricing signals.
+            </p>
+          </div>
+          <Button type="button" variant="outline" onClick={onBack}>Back to Data Center</Button>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          {categories.map((category) => (
+            <div key={category} className="rounded-lg border border-border bg-background/45 p-4">
+              <div className="text-sm font-black text-white">{category}</div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {category === "Public Bid Results" && "Awarded bids, unit pricing, competitor spread, and letting history."}
+                {category === "Prevailing Wage" && "Labor classifications, wage pressure, fringes, and region changes."}
+                {category === "Commodity Indexes" && "Fuel, diesel, asphalt, lumber, steel, copper, and escalation pressure."}
+                {category === "Owner Procurement History" && "Owner timing, award behavior, alternates, and low-bid patterns."}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <input
+          market-intelligence-search="true"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search market records, agencies, regions, commodities..."
+          className="mt-5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+        />
+      </section>
+
+      <section className="rounded-lg border border-border bg-card">
+        <div className="grid grid-cols-[1.1fr_0.8fr_0.7fr_0.7fr_0.7fr] gap-3 border-b border-border bg-background/35 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-blue-100">
+          <div>Signal</div>
+          <div>Source</div>
+          <div>Region</div>
+          <div>Refresh</div>
+          <div>Source URL</div>
+        </div>
+        <div className="divide-y divide-border">
+          {shownRecords.map((record, index) => (
+            <div key={record._id || `${record.title}-${index}`} className="grid grid-cols-[1.1fr_0.8fr_0.7fr_0.7fr_0.7fr] gap-3 px-4 py-4 text-sm">
+              <div>
+                <div className="font-black text-white">{record.title || "Market signal"}</div>
+                <p className="mt-1 text-xs text-muted-foreground">{record.summary || "No summary recorded yet."}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge className="bg-cyan-500/15 text-cyan-200">{marketCategoryLabel(record.sourceType)}</Badge>
+                  <Badge className="bg-secondary text-muted-foreground">{record.confidence || "Needs Review"}</Badge>
+                  {record.status && <Badge className="bg-secondary text-muted-foreground">{record.status}</Badge>}
+                </div>
+              </div>
+              <div>
+                <div className="font-bold text-white">{record.sourceName || "Unassigned source"}</div>
+                <div className="text-xs text-muted-foreground">{record.ownerAgency || "No owner/agency"}</div>
+              </div>
+              <div className="text-muted-foreground">{record.region || "No region"}</div>
+              <div className="text-muted-foreground">{record.refreshDate || record.collectedAt || "Not set"}</div>
+              <div>
+                {record.sourceUrl ? (
+                  <a href={record.sourceUrl} target="_blank" rel="noreferrer" className="text-cyan-200 underline-offset-4 hover:underline">
+                    Open Source
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">No Source URL</span>
+                )}
+              </div>
+            </div>
+          ))}
+          {!shownRecords.length && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              No market intelligence records yet. Phase 3 has the storage and review surface ready for approved source intake.
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function DataCenterView({
   activeTab,
   onTabChange,
   records,
+  marketRecords,
   predictiveEstimatorModel,
 }: {
   activeTab: DataCenterTab;
   onTabChange: (tab: DataCenterTab) => void;
   records: DataCenterRecordSummary[];
+  marketRecords: MarketIntelligenceRecord[];
   predictiveEstimatorModel: Record<string, unknown>;
 }) {
   const [query, setQuery] = useState("");
@@ -1461,6 +1597,15 @@ function DataCenterView({
       <EstimatorMemoryView
         records={records}
         predictiveEstimatorModel={predictiveEstimatorModel}
+        onBack={() => onTabChange("overview")}
+      />
+    );
+  }
+
+  if (activeTab === "market-intelligence") {
+    return (
+      <MarketIntelligenceView
+        records={marketRecords}
         onBack={() => onTabChange("overview")}
       />
     );
@@ -3210,6 +3355,10 @@ function EstimatingWorkspace() {
     api.estimatePredictionMemory.listEstimatorFeedback,
     user && estimateId ? { companyId: user.companyId, estimateId: estimateId as Id<"estimates">, limit: 50 } : "skip"
   ) as any[] | undefined;
+  const marketIntelligenceRecords = useQuery(
+    api.marketIntelligence.listMarketRecords,
+    user ? { companyId: user.companyId, limit: 100 } : "skip"
+  ) as MarketIntelligenceRecord[] | undefined;
 
   const createRfq = useMutation(api.estimating.createRfq);
   const updateRfq = useMutation(api.estimating.updateRfq);
@@ -5136,6 +5285,7 @@ function EstimatingWorkspace() {
             activeTab={dataCenterTab}
             onTabChange={setDataCenterTab}
             records={dataCenterRecords}
+            marketRecords={marketIntelligenceRecords || []}
             predictiveEstimatorModel={predictiveEstimatorModel as Record<string, unknown>}
           />
         ) : activeTool === "war-room" ? aiToolsWorkspace : activeTool !== "rfq" ? stagedTool : (

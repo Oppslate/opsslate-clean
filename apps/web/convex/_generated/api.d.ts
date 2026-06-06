@@ -79,6 +79,7 @@ import type * as inboundEmailAddresses from "../inboundEmailAddresses.js";
 import type * as incidents from "../incidents.js";
 import type * as insuranceRequirements from "../insuranceRequirements.js";
 import type * as legalAI from "../legalAI.js";
+import type * as marketIntelligence from "../marketIntelligence.js";
 import type * as notificationProfiles from "../notificationProfiles.js";
 import type * as paymentRules from "../paymentRules.js";
 import type * as personalCalendar from "../personalCalendar.js";
@@ -195,6 +196,7 @@ declare const fullApi: ApiFromModules<{
   incidents: typeof incidents;
   insuranceRequirements: typeof insuranceRequirements;
   legalAI: typeof legalAI;
+  marketIntelligence: typeof marketIntelligence;
   notificationProfiles: typeof notificationProfiles;
   paymentRules: typeof paymentRules;
   personalCalendar: typeof personalCalendar;

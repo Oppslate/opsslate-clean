@@ -1378,6 +1378,32 @@ export default defineSchema({
     .index("by_prediction_key", ["companyId", "predictionKey"])
     .index("by_source_user", ["companyId", "sourceUserId"]),
 
+  marketIntelligenceRecords: defineTable({
+    companyId: v.id("companies"),
+    sourceName: v.string(),
+    sourceType: v.string(),
+    sourceUrl: v.optional(v.string()),
+    sourceFileId: v.optional(v.string()),
+    collectedAt: v.string(),
+    refreshDate: v.optional(v.string()),
+    region: v.optional(v.string()),
+    ownerAgency: v.optional(v.string()),
+    workCategory: v.optional(v.string()),
+    title: v.string(),
+    summary: v.string(),
+    unit: v.optional(v.string()),
+    unitCost: v.optional(v.number()),
+    totalCost: v.optional(v.number()),
+    confidence: v.string(),
+    status: v.string(),
+    notes: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index("by_company", ["companyId"])
+    .index("by_source_type", ["companyId", "sourceType"])
+    .index("by_region", ["companyId", "region"])
+    .index("by_owner", ["companyId", "ownerAgency"]),
+
   udigTickets: defineTable({
     companyId: v.string(),
     projectId: v.optional(v.string()),
