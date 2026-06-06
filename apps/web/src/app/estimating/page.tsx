@@ -695,6 +695,16 @@ type MarketIntelligenceRecord = {
   notes?: string;
 };
 
+type StrategicPlaybook = {
+  name: string;
+  trigger: string;
+  recommendedAction: string;
+  riskLevel: "Low" | "Medium" | "High";
+  confidence: DataCenterRecordSummary["confidence"];
+  sourceMix: "Company" | "Market" | "Mixed";
+  category: "Bid Posture" | "Quote Strategy" | "Risk Defense" | "Schedule" | "Value Engineering" | "No-Bid";
+};
+
 type DataCenterCategory = {
   group: "Company Intelligence" | "Market Intelligence" | "Strategic Playbooks";
   name: string;
@@ -730,6 +740,108 @@ const DATA_CENTER_CATEGORIES: DataCenterCategory[] = [
   { group: "Strategic Playbooks", name: "Owner Strategy Notes", description: "Owner-specific bidding posture and communication memory.", status: "starter", tab: "strategic-playbooks" },
   { group: "Strategic Playbooks", name: "Market Timing Notes", description: "When to chase, wait, qualify, or walk away.", status: "starter", tab: "strategic-playbooks" },
   { group: "Strategic Playbooks", name: "Cicero Recommendations", description: "Estimator-facing action memory and recommendation history.", status: "active", tab: "estimator-memory" },
+];
+
+const STRATEGIC_PLAYBOOKS: StrategicPlaybook[] = [
+  {
+    name: "Fast Strike Bid",
+    trigger: "Clean scope, short bid window, known owner, and high confidence on production rates.",
+    recommendedAction: "Lock major quotes early, keep qualifications lean, and protect bid-day review time for final spread analysis.",
+    riskLevel: "Low",
+    confidence: "Likely",
+    sourceMix: "Company",
+    category: "Bid Posture",
+  },
+  {
+    name: "Margin Defense Bid",
+    trigger: "Estimate delta is tight, scope contains unresolved RFQs, or bid survival score is weak.",
+    recommendedAction: "Hold margin, qualify volatile scopes, and avoid buying work before vendor coverage and production proof are solid.",
+    riskLevel: "High",
+    confidence: "Strong",
+    sourceMix: "Mixed",
+    category: "Bid Posture",
+  },
+  {
+    name: "Market Dip Opportunity",
+    trigger: "Commodity or vendor pricing signals trend below company historical averages.",
+    recommendedAction: "Push quote refreshes, compare alternates, and test a sharper number only where source confidence is strong.",
+    riskLevel: "Medium",
+    confidence: "Needs Review",
+    sourceMix: "Market",
+    category: "Value Engineering",
+  },
+  {
+    name: "Quote Lock Strategy",
+    trigger: "Material-heavy scope, volatile commodities, or multiple RFQs waiting on supplier coverage.",
+    recommendedAction: "Create vendor quote deadlines, request hold periods, flag exclusions, and record price expiration before bid submission.",
+    riskLevel: "Medium",
+    confidence: "Strong",
+    sourceMix: "Company",
+    category: "Quote Strategy",
+  },
+  {
+    name: "Owner Drag Risk",
+    trigger: "Owner history shows delayed awards, heavy addenda, or recurring unanswered scope questions.",
+    recommendedAction: "Carry schedule/price validity qualifications and protect escalation, mobilization, and remobilization language.",
+    riskLevel: "High",
+    confidence: "Needs Review",
+    sourceMix: "Mixed",
+    category: "Risk Defense",
+  },
+  {
+    name: "Schedule Compression Trap",
+    trigger: "Bid date, milestones, phasing, or working-hour restrictions create production pressure.",
+    recommendedAction: "Check crew stacking, overtime exposure, lead times, and weather windows before accepting the apparent low number.",
+    riskLevel: "High",
+    confidence: "Strong",
+    sourceMix: "Company",
+    category: "Schedule",
+  },
+  {
+    name: "Spec Gap Exposure",
+    trigger: "Line items lack spec proof, submittal requirements, testing language, or plan references.",
+    recommendedAction: "Open the spec section, attach proof, create RFIs/RFQs where needed, and qualify anything not priced.",
+    riskLevel: "High",
+    confidence: "Strong",
+    sourceMix: "Company",
+    category: "Risk Defense",
+  },
+  {
+    name: "Commodity Escalation Watch",
+    trigger: "Fuel, diesel, asphalt, lumber, steel, or copper trend signals are moving faster than quote coverage.",
+    recommendedAction: "Refresh vendor pricing, add escalation review notes, and avoid stale unit costs on exposed line items.",
+    riskLevel: "Medium",
+    confidence: "Needs Review",
+    sourceMix: "Market",
+    category: "Quote Strategy",
+  },
+  {
+    name: "Labor Availability Watch",
+    trigger: "Prevailing wage pressure, peak season, or crew availability threatens planned production.",
+    recommendedAction: "Validate crew assumptions, compare actual production memory, and add schedule risk notes for constrained scopes.",
+    riskLevel: "Medium",
+    confidence: "Likely",
+    sourceMix: "Mixed",
+    category: "Schedule",
+  },
+  {
+    name: "VE Opportunity",
+    trigger: "Spec allows alternates, substitutions, or equal products and the estimate carries a high-cost scope.",
+    recommendedAction: "Draft a value engineering option with source section, price delta, schedule impact, and owner acceptance risk.",
+    riskLevel: "Medium",
+    confidence: "Likely",
+    sourceMix: "Mixed",
+    category: "Value Engineering",
+  },
+  {
+    name: "No-Bid Warning",
+    trigger: "Low source confidence, severe schedule pressure, unresolved owner risk, or insufficient quote coverage.",
+    recommendedAction: "Escalate to go/no-go review before more estimating time is spent. Document the blocker and decision owner.",
+    riskLevel: "High",
+    confidence: "Strong",
+    sourceMix: "Mixed",
+    category: "No-Bid",
+  },
 ];
 
 const INSPIRATION_LINES = [
@@ -1567,6 +1679,100 @@ function MarketIntelligenceView({
   );
 }
 
+function StrategicPlaybooksView({
+  playbooks,
+  onBack,
+}: {
+  playbooks: StrategicPlaybook[];
+  onBack: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const shownPlaybooks = playbooks.filter((playbook) => {
+    if (!normalizedQuery) return true;
+    return [
+      playbook.name,
+      playbook.trigger,
+      playbook.recommendedAction,
+      playbook.riskLevel,
+      playbook.confidence,
+      playbook.sourceMix,
+      playbook.category,
+    ].join(" ").toLowerCase().includes(normalizedQuery);
+  });
+  const categoryCounts = playbooks.reduce<Record<string, number>>((counts, playbook) => {
+    counts[playbook.category] = (counts[playbook.category] || 0) + 1;
+    return counts;
+  }, {});
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-lg border border-border bg-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Badge className="bg-purple-500/15 text-purple-200">Strategic Playbooks</Badge>
+            <h1 className="mt-3 text-3xl font-black text-white">Strategic Playbooks</h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Cicero starter strategies for bid posture, quote locks, schedule traps, spec exposure, VE, and go/no-go discipline.
+            </p>
+          </div>
+          <Button type="button" variant="outline" onClick={onBack}>Back to Data Center</Button>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+          {Object.entries(categoryCounts).map(([category, count]) => (
+            <div key={category} className="rounded-lg border border-border bg-background/45 p-3">
+              <div className="text-2xl font-black text-white">{count}</div>
+              <div className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">{category}</div>
+            </div>
+          ))}
+        </div>
+
+        <input
+          strategic-playbook-search="true"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search playbooks, triggers, risk posture, or source mix..."
+          className="mt-5 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white"
+        />
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-2">
+        {shownPlaybooks.map((playbook) => (
+          <article key={playbook.name} className="rounded-lg border border-border bg-card p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-lg font-black text-white">{playbook.name}</div>
+                <div className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100">{playbook.category}</div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge className={playbook.riskLevel === "High" ? "bg-red-500/15 text-red-200" : playbook.riskLevel === "Medium" ? "bg-orange-500/15 text-orange-200" : "bg-green-500/15 text-green-200"}>
+                  {playbook.riskLevel} Risk
+                </Badge>
+                <CiceroConfidenceBadge confidence={playbook.confidence} />
+                <Badge className="bg-secondary text-muted-foreground">{playbook.sourceMix} sourceMix</Badge>
+              </div>
+            </div>
+            <div className="mt-4 rounded-md border border-border bg-background/45 p-3">
+              <div className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Trigger</div>
+              <p className="mt-1 text-sm text-blue-100">{playbook.trigger}</p>
+            </div>
+            <div className="mt-3 rounded-md border border-orange-500/25 bg-orange-500/5 p-3">
+              <div className="text-xs font-bold uppercase tracking-[0.12em] text-orange-200">Recommended Action</div>
+              <p className="mt-1 text-sm text-white">{playbook.recommendedAction}</p>
+            </div>
+          </article>
+        ))}
+        {!shownPlaybooks.length && (
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground xl:col-span-2">
+            No playbooks match this search.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function DataCenterView({
   activeTab,
   onTabChange,
@@ -1606,6 +1812,15 @@ function DataCenterView({
     return (
       <MarketIntelligenceView
         records={marketRecords}
+        onBack={() => onTabChange("overview")}
+      />
+    );
+  }
+
+  if (activeTab === "strategic-playbooks") {
+    return (
+      <StrategicPlaybooksView
+        playbooks={STRATEGIC_PLAYBOOKS}
         onBack={() => onTabChange("overview")}
       />
     );
