@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -2500,8 +2500,10 @@ function EstimatingWorkspace() {
   const createRfi = useMutation(api.rfis.create);
   const createSubmittal = useMutation(api.submittals.create);
   const createTask = useMutation(api.tasks.create);
+  const createPredictionRun = useMutation(api.estimatePredictionMemory.createPredictionRun);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const predictionRunSignatureRef = useRef("");
   const [proofItem, setProofItem] = useState<Record<string, unknown> | null>(null);
   const [editingItem, setEditingItem] = useState<Record<string, unknown> | null>(null);
   const [editItemSection, setEditItemSection] = useState("");
@@ -2612,6 +2614,69 @@ function EstimatingWorkspace() {
     historicalEstimates: estimates || [],
     historicalItems: historicalEstimateItems || [],
   }), [selectedEstimate, estimateItems, rfqSummary, productionRows, estimates, historicalEstimateItems]);
+  const predictionOutputSnapshot = useMemo(() => ({
+    modelVersion: predictiveEstimatorModel.modelVersion,
+    bidSurvivalScore: predictiveEstimatorModel.bidSurvivalScore,
+    survivalScore: predictiveEstimatorModel.survivalScore,
+    predictedOutcome: predictiveEstimatorModel.predictedOutcome,
+    scopeGapRisk: predictiveEstimatorModel.scopeGapRisk,
+    marginRisk: predictiveEstimatorModel.marginRisk,
+    rfqExposure: predictiveEstimatorModel.rfqExposure,
+    productionConfidence: predictiveEstimatorModel.productionConfidence,
+    historicalSimilarity: predictiveEstimatorModel.historicalSimilarity,
+    historicalWinRate: predictiveEstimatorModel.historicalWinRate,
+    similarEstimateMatches: predictiveEstimatorModel.similarEstimateMatches,
+    recommendedDraftActions: predictiveEstimatorModel.recommendedDraftActions,
+    learnedFrom: predictiveEstimatorModel.learnedFrom,
+  }), [predictiveEstimatorModel]);
+  useEffect(() => {
+    if (!user || !selectedEstimate?._id || !estimateItems || !estimates) return;
+    const pricedItems = (estimateItems || []).filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item));
+    const inputSnapshot = {
+      estimateId: String(selectedEstimate._id),
+      projectId: selectedEstimate.projectId ? String(selectedEstimate.projectId) : selectedProject?._id ? String(selectedProject._id) : "",
+      estimateName: String(selectedEstimate.name || ""),
+      itemCount: pricedItems.length,
+      historicalItemCount: historicalEstimateItems.length,
+      historicalEstimateCount: estimates.length,
+      estimateTotal: selectedEstimateTotal,
+      rfqSummary,
+      productionRowCount: productionRows.length,
+      scheduleScore,
+      bidDate: bidDateValue(selectedEstimate, selectedProject),
+      itemSignature: pricedItems.map((item) => `${recordId(item)}:${String(item.section || "")}:${String(item.description || "")}:${Number(item.quantity || 0)}:${String(item.unit || "")}:${Number(item.unitCost || 0)}`).join("|"),
+    };
+    const signature = JSON.stringify({
+      estimateId: inputSnapshot.estimateId,
+      itemSignature: inputSnapshot.itemSignature,
+      historicalItemCount: inputSnapshot.historicalItemCount,
+      rfqOpen: rfqSummary.open,
+      score: predictiveEstimatorModel.survivalScore,
+    });
+    if (predictionRunSignatureRef.current === signature) return;
+    predictionRunSignatureRef.current = signature;
+    void createPredictionRun({
+      companyId: user.companyId,
+      estimateId: selectedEstimate._id as Id<"estimates">,
+      projectId: selectedEstimate.projectId as Id<"projects"> | undefined,
+      modelVersion: predictiveEstimatorModel.modelVersion,
+      predictionType: "estimating",
+      predictionKey: "bid-survival",
+      predictionValue: {
+        inputSnapshot,
+        outputSnapshot: predictionOutputSnapshot,
+        outcomeSnapshot: null,
+      },
+      confidence: predictiveEstimatorModel.survivalScore,
+      status: "awaiting-outcome",
+      explanation: predictiveEstimatorModel.predictedOutcome,
+      sourceDataSummary: predictiveEstimatorModel.learnedFrom,
+      createdBy: user._id as Id<"users">,
+    }).catch((error) => {
+      console.warn("Could not record prediction run", error);
+      predictionRunSignatureRef.current = "";
+    });
+  }, [user, selectedEstimate, selectedProject, estimateItems, estimates, historicalEstimateItems, selectedEstimateTotal, rfqSummary, productionRows, scheduleScore, predictiveEstimatorModel, predictionOutputSnapshot, createPredictionRun]);
   const activeBids = projectFilteredEstimates.filter((estimate) => !["won", "lost", "archived"].includes(String(estimate.status || "").toLowerCase())).length;
   const draftBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "draft").length;
   const wonBids = projectFilteredEstimates.filter((estimate) => String(estimate.status || "").toLowerCase() === "won").length;

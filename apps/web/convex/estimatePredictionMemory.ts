@@ -10,6 +10,10 @@ export const createPredictionRun = mutation({
     predictionType: v.string(),
     predictionKey: v.string(),
     predictionValue: v.any(),
+    inputSnapshot: v.optional(v.any()),
+    outputSnapshot: v.optional(v.any()),
+    outcomeSnapshot: v.optional(v.any()),
+    outcomeRecordedAt: v.optional(v.number()),
     confidence: v.optional(v.number()),
     status: v.optional(v.string()),
     explanation: v.optional(v.string()),
@@ -21,6 +25,21 @@ export const createPredictionRun = mutation({
       ...args,
       status: args.status || "recorded",
       createdAt: Date.now(),
+    });
+  },
+});
+
+export const updatePredictionRunOutcome = mutation({
+  args: {
+    predictionRunId: v.id("estimatePredictionRuns"),
+    outcomeSnapshot: v.any(),
+    status: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.predictionRunId, {
+      outcomeSnapshot: args.outcomeSnapshot,
+      outcomeRecordedAt: Date.now(),
+      status: args.status || "outcome-recorded",
     });
   },
 });
