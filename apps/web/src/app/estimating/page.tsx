@@ -675,6 +675,15 @@ type DataCenterRecordSummary = {
   notes?: string;
 };
 
+type CiceroRecommendationSourceRecord = {
+  sourceApp: DataCenterRecordSummary["sourceApp"];
+  sourceRecordId: DataCenterRecordSummary["sourceRecordId"];
+  sourceType: DataCenterRecordSummary["sourceType"];
+  title: DataCenterRecordSummary["title"];
+  category: DataCenterRecordSummary["category"];
+  confidence: DataCenterRecordSummary["confidence"];
+};
+
 type MarketIntelligenceRecord = {
   _id?: string;
   sourceName?: string;
@@ -1383,6 +1392,38 @@ function buildEstimatorMemoryRecords({
   }
 
   return records;
+}
+
+function sourceRecordTrailForAction(actionKey: string, records: DataCenterRecordSummary[]): CiceroRecommendationSourceRecord[] {
+  const normalized = actionKey.toLowerCase();
+  const preferredTypes = normalized.includes("rfq") || normalized.includes("quote")
+    ? ["rfq_quote", "buyout_award", "estimate_item"]
+    : normalized.includes("schedule") || normalized.includes("production")
+      ? ["actual_outcome", "estimate_item", "prediction_run"]
+      : normalized.includes("price") || normalized.includes("cost") || normalized.includes("margin")
+        ? ["estimate_item", "rfq_quote", "actual_outcome", "prediction_run"]
+        : ["prediction_run", "estimate_item", "rfq_quote", "actual_outcome"];
+  const scored = records
+    .map((record) => ({
+      record,
+      score: preferredTypes.includes(record.sourceType) ? 2 : normalized.includes(record.category.toLowerCase()) || normalized.includes(record.title.toLowerCase()) ? 1 : 0,
+    }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, 4).map(({ record }) => ({
+    sourceApp: record.sourceApp,
+    sourceRecordId: record.sourceRecordId,
+    sourceType: record.sourceType,
+    title: record.title,
+    category: record.category,
+    confidence: record.confidence,
+  }));
+}
+
+function formatSourceTrail(sourceRecords: CiceroRecommendationSourceRecord[]) {
+  return sourceRecords.length
+    ? sourceRecords.map((record) => `${record.sourceType}:${record.sourceRecordId}`).join(", ")
+    : "No direct source records linked";
 }
 
 export default function EstimatingPage() {
@@ -2629,6 +2670,7 @@ type CiceroPanelAction = {
   cta: string;
   source: "Internal Fact" | "External Market Signal" | "Strategic Recommendation";
   confidence: DataCenterRecordSummary["confidence"];
+  sourceRecords: CiceroRecommendationSourceRecord[];
   run: () => void;
 };
 
@@ -2640,6 +2682,7 @@ function CiceroCommandPanel({
   productionRows,
   historicalEstimates,
   historicalItems,
+  memoryRecords,
   onGoToRfq,
   onGoToProduction,
   onCreateAction,
@@ -2653,6 +2696,7 @@ function CiceroCommandPanel({
   productionRows: ReturnType<typeof productionRowsForItems>;
   historicalEstimates: Array<Record<string, unknown>>;
   historicalItems: Array<Record<string, unknown>>;
+  memoryRecords: DataCenterRecordSummary[];
   onGoToRfq: () => void;
   onGoToProduction: () => void;
   onCreateAction: (action: string) => void;
@@ -2671,10 +2715,10 @@ function CiceroCommandPanel({
   const zeroCost = metrics.pricedItems.filter((item) => Number(item.unitCost || 0) <= 0).length;
   const noMilestone = metrics.pricedItems.length - metrics.withMilestone;
   const actions = [
-    zeroCost ? { id: "price-placeholders", label: "Price placeholders", detail: `${zeroCost} item${zeroCost === 1 ? "" : "s"} need real cost or RFQ coverage.`, cta: "Create pricing action", source: "Internal Fact", confidence: zeroCost > 3 ? "Strong" : "Likely", run: () => onCreateAction("Review zero-cost placeholders and either price them or send RFQs.") } : null,
-    rfqSummary.open ? { id: "rfqs-open", label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", source: "Internal Fact", confidence: "Strong", run: onGoToRfq } : null,
-    noMilestone ? { id: "loose-schedule-handoff", label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", source: "Internal Fact", confidence: scheduleScore < 60 ? "Strong" : "Likely", run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
-    scheduleScore < 80 ? { id: "production-assumptions", label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", source: "Internal Fact", confidence: "Likely", run: onGoToProduction } : null,
+    zeroCost ? { id: "price-placeholders", label: "Price placeholders", detail: `${zeroCost} item${zeroCost === 1 ? "" : "s"} need real cost or RFQ coverage.`, cta: "Create pricing action", source: "Internal Fact", confidence: zeroCost > 3 ? "Strong" : "Likely", sourceRecords: sourceRecordTrailForAction("price placeholders cost", memoryRecords), run: () => onCreateAction("Review zero-cost placeholders and either price them or send RFQs.") } : null,
+    rfqSummary.open ? { id: "rfqs-open", label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", source: "Internal Fact", confidence: "Strong", sourceRecords: sourceRecordTrailForAction("rfq quote vendor pricing", memoryRecords), run: onGoToRfq } : null,
+    noMilestone ? { id: "loose-schedule-handoff", label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", source: "Internal Fact", confidence: scheduleScore < 60 ? "Strong" : "Likely", sourceRecords: sourceRecordTrailForAction("schedule production estimate item", memoryRecords), run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
+    scheduleScore < 80 ? { id: "production-assumptions", label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", source: "Internal Fact", confidence: "Likely", sourceRecords: sourceRecordTrailForAction("production actual outcome", memoryRecords), run: onGoToProduction } : null,
     ...predictiveModel.recommendedDraftActions.slice(0, 3).map((action) => ({
       id: `strategic-${action.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`,
       label: "Cicero recommendation",
@@ -2682,6 +2726,7 @@ function CiceroCommandPanel({
       cta: "Create draft action",
       source: "Strategic Recommendation",
       confidence: confidenceForRecord(predictiveModel.survivalScore),
+      sourceRecords: sourceRecordTrailForAction(action, memoryRecords),
       run: () => onCreateAction(action),
     })),
   ].filter(Boolean) as CiceroPanelAction[];
@@ -2745,11 +2790,20 @@ function CiceroCommandPanel({
               cta: "Create draft action",
               source: "Strategic Recommendation",
               confidence: confidenceForRecord(predictiveModel.survivalScore),
+              sourceRecords: sourceRecordTrailForAction(action, memoryRecords),
               run: () => onCreateAction(action),
             };
             return (
               <div key={action} className="rounded-md border border-orange-500/20 bg-background/50 p-3">
                 <div className="text-xs font-bold text-blue-100">{action}</div>
+                <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Source Records</div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {recommendation.sourceRecords.length ? recommendation.sourceRecords.map((record) => (
+                    <span key={`${record.sourceType}-${record.sourceRecordId}`} className="rounded-full border border-border bg-background px-2 py-1 text-[11px] text-blue-100">
+                      {record.sourceType}: {record.title}
+                    </span>
+                  )) : <span className="text-[11px] text-muted-foreground">No direct source records linked.</span>}
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={recommendation.run}>Create draft action</Button>
                   <Button size="sm" onClick={() => onApproveRecommendation(recommendation)}>Approve Recommendation</Button>
@@ -2772,6 +2826,14 @@ function CiceroCommandPanel({
               </div>
               <div className="font-bold text-white">{action.label}</div>
               <div className="text-xs text-muted-foreground">{action.detail}</div>
+              <div className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Source Records</div>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {action.sourceRecords.length ? action.sourceRecords.map((record) => (
+                  <span key={`${record.sourceType}-${record.sourceRecordId}`} className="rounded-full border border-border bg-background px-2 py-1 text-[11px] text-blue-100">
+                    {record.sourceType}: {record.title}
+                  </span>
+                )) : <span className="text-[11px] text-muted-foreground">No direct source records linked.</span>}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={action.run}>{action.cta}</Button>
@@ -4227,7 +4289,7 @@ function EstimatingWorkspace() {
       action: `${action.label}: ${action.detail}`,
       accepted: true,
       reason: "Estimator approved Cicero recommendation",
-      note: `Source: ${action.source}; confidence: ${action.confidence}`,
+      note: `Source: ${action.source}; confidence: ${action.confidence}. Source Trail: ${formatSourceTrail(action.sourceRecords)}`,
     });
     await createCiceroAction(action.detail);
   }
@@ -4250,7 +4312,7 @@ function EstimatingWorkspace() {
       action: `${dismissRecommendationModal.label}: ${dismissRecommendationModal.detail}`,
       accepted: false,
       reason: dismissRecommendationReason,
-      note: dismissRecommendationLearningNote || `Dismissed from Cicero command panel. Source: ${dismissRecommendationModal.source}; confidence: ${dismissRecommendationModal.confidence}`,
+      note: `${dismissRecommendationLearningNote || "Dismissed from Cicero command panel."} Source: ${dismissRecommendationModal.source}; confidence: ${dismissRecommendationModal.confidence}. Source Trail: ${formatSourceTrail(dismissRecommendationModal.sourceRecords)}`,
     });
     setDismissRecommendationModal(null);
     setDismissRecommendationLearningNote("");
@@ -5070,6 +5132,7 @@ function EstimatingWorkspace() {
         productionRows={productionRows}
         historicalEstimates={estimates || []}
         historicalItems={historicalEstimateItems || []}
+        memoryRecords={dataCenterRecords}
         onGoToRfq={() => setActiveTool("rfq")}
         onGoToProduction={() => setActiveTool("production-breakdown")}
         onCreateAction={(action) => void createCiceroAction(action)}
