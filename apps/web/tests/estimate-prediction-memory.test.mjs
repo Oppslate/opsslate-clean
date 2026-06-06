@@ -104,6 +104,12 @@ assert.match(estimatingPage, /outputSnapshot:\s*predictionOutputSnapshot/, "pred
 assert.match(estimatingPage, /predictionValue:\s*\{[\s\S]*inputSnapshot,[\s\S]*outputSnapshot:[\s\S]*predictionOutputSnapshot,[\s\S]*outcomeSnapshot:\s*null/, "prediction run writes should remain compatible with the deployed predictionValue contract");
 assert.match(estimatingPage, /confidence:\s*predictiveEstimatorModel\.survivalScore/, "prediction run writes should store confidence");
 assert.match(estimatingPage, /useMutation\(api\.estimatePredictionMemory\.recordEstimateOutcome\)/, "estimating page should persist item actual outcomes through deployed outcome memory");
+assert.match(memory, /listPredictionRuns/, "Prediction memory should list prediction runs");
+assert.match(memory, /listOutcomeMemory/, "Prediction memory should list outcome memory");
+assert.match(memory, /listEstimatorFeedback/, "Prediction memory should list estimator feedback");
+assert.match(estimatingPage, /api\.estimatePredictionMemory\.listPredictionRuns/, "Estimating should query prediction runs for memory");
+assert.match(estimatingPage, /api\.estimatePredictionMemory\.listOutcomeMemory/, "Estimating should query outcome memory for memory");
+assert.match(estimatingPage, /api\.estimatePredictionMemory\.listEstimatorFeedback/, "Estimating should query estimator feedback for memory");
 assert.match(estimatingPage, /ItemOutcomeModal/, "estimating page should expose item-level actual cost and production outcome capture");
 assert.match(estimatingPage, /outcomeType:\s*"estimate_item_actual"/, "item outcome writes should identify estimate item actuals");
 assert.match(estimatingPage, /outcomeKey:\s*String\(outcomeItem\._id\)/, "item outcome writes should link to the estimate item");

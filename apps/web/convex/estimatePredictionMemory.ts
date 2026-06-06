@@ -234,6 +234,27 @@ export const listEstimateOutcomes = query({
   },
 });
 
+export const listOutcomeMemory = query({
+  args: {
+    companyId: v.id("companies"),
+    estimateId: v.optional(v.id("estimates")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit || 50, 200);
+    if (args.estimateId) {
+      return ctx.db.query("estimateOutcomeMemory")
+        .withIndex("by_estimate", (q) => q.eq("estimateId", args.estimateId!))
+        .order("desc")
+        .take(limit);
+    }
+    return ctx.db.query("estimateOutcomeMemory")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .order("desc")
+      .take(limit);
+  },
+});
+
 export const listItemOutcomes = query({
   args: {
     companyId: v.id("companies"),
@@ -245,6 +266,27 @@ export const listItemOutcomes = query({
       .withIndex("by_estimate_item", (q) => q.eq("companyId", args.companyId).eq("estimateItemId", args.estimateItemId))
       .order("desc")
       .take(Math.min(args.limit || 20, 100));
+  },
+});
+
+export const listEstimatorFeedback = query({
+  args: {
+    companyId: v.id("companies"),
+    estimateId: v.optional(v.id("estimates")),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(args.limit || 50, 200);
+    if (args.estimateId) {
+      return ctx.db.query("estimatorFeedback")
+        .withIndex("by_estimate", (q) => q.eq("estimateId", args.estimateId!))
+        .order("desc")
+        .take(limit);
+    }
+    return ctx.db.query("estimatorFeedback")
+      .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
+      .order("desc")
+      .take(limit);
   },
 });
 

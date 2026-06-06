@@ -661,9 +661,9 @@ type DataCenterTab = "overview" | "estimator-memory" | "market-intelligence" | "
 
 type DataCenterRecordSummary = {
   id: string;
-  sourceApp: "estimating" | "rfq" | "buyout" | "production" | "project-management";
+  sourceApp: "estimating" | "rfq" | "buyout" | "production" | "project-management" | "prediction";
   sourceRecordId: string;
-  sourceType: "estimate_item" | "rfq_quote" | "buyout_award" | "actual_outcome" | "accepted_recommendation" | "dismissed_recommendation";
+  sourceType: "estimate_item" | "rfq_quote" | "buyout_award" | "actual_outcome" | "prediction_run" | "estimator_feedback" | "accepted_recommendation" | "dismissed_recommendation";
   title: string;
   category: string;
   status: string;
@@ -1059,6 +1059,9 @@ function buildEstimatorMemoryRecords({
   rfqs,
   predictiveEstimatorModel,
   historicalItems,
+  predictionRuns,
+  outcomeMemory,
+  estimatorFeedback,
 }: {
   estimate?: Record<string, unknown>;
   items: Array<Record<string, unknown>>;
@@ -1067,6 +1070,9 @@ function buildEstimatorMemoryRecords({
   predictiveEstimatorModel: Record<string, unknown>;
   productionRows: Array<Record<string, unknown>>;
   historicalItems: Array<Record<string, unknown>>;
+  predictionRuns?: Array<Record<string, unknown>>;
+  outcomeMemory?: Array<Record<string, unknown>>;
+  estimatorFeedback?: Array<Record<string, unknown>>;
 }): DataCenterRecordSummary[] {
   const estimateId = String(estimate?._id || "");
   const projectId = String(estimate?.projectId || "");
@@ -1074,6 +1080,59 @@ function buildEstimatorMemoryRecords({
   const pricedItems = items.filter((item) => !isSectionParentItem(item) && !isMilestoneParentItem(item));
   const estimatorActions = ciceroActionsForEstimate(estimate);
   const survivalScore = Number(predictiveEstimatorModel.survivalScore || predictiveEstimatorModel.bidSurvivalScore || 0);
+
+  (predictionRuns || []).forEach((run) => {
+    records.push({
+      id: `prediction-run-${String(run._id || run.predictionKey || records.length)}`,
+      sourceApp: "prediction",
+      sourceRecordId: String(run._id || ""),
+      sourceType: "prediction_run",
+      title: String(run.predictionKey || run.predictionType || "Prediction run"),
+      category: "Prediction Runs",
+      status: String(run.status || "recorded"),
+      confidence: confidenceForRecord(Number(run.confidence || 0)),
+      projectId: String(run.projectId || projectId),
+      estimateId: String(run.estimateId || estimateId),
+      sourceDate: String(run.createdAt || ""),
+      notes: String(run.explanation || run.sourceDataSummary || "").slice(0, 220),
+    });
+  });
+
+  (outcomeMemory || []).forEach((outcome) => {
+    records.push({
+      id: `outcome-memory-${String(outcome._id || outcome.outcomeKey || records.length)}`,
+      sourceApp: "production",
+      sourceRecordId: String(outcome._id || outcome.outcomeKey || ""),
+      sourceType: "actual_outcome",
+      title: String(outcome.outcomeKey || outcome.outcomeType || "Actual outcome"),
+      category: "Outcome Memory",
+      status: String(outcome.outcomeStatus || "captured"),
+      confidence: "Strong",
+      projectId: String(outcome.projectId || projectId),
+      estimateId: String(outcome.estimateId || estimateId),
+      estimateItemId: String(outcome.estimateItemId || ""),
+      sourceDate: String(outcome.createdAt || ""),
+      notes: String(outcome.notes || `Cost variance ${money(outcome.costVariance || 0)}. Production variance ${String(outcome.productionVariance || 0)}.`).slice(0, 220),
+    });
+  });
+
+  (estimatorFeedback || []).forEach((feedback) => {
+    const accepted = Boolean(feedback.accepted);
+    records.push({
+      id: `estimator-feedback-${String(feedback._id || records.length)}`,
+      sourceApp: "estimating",
+      sourceRecordId: String(feedback._id || ""),
+      sourceType: accepted ? "accepted_recommendation" : String(feedback.feedbackType || "").toLowerCase().includes("dismiss") ? "dismissed_recommendation" : "estimator_feedback",
+      title: String(feedback.action || feedback.targetType || "Estimator feedback"),
+      category: "Estimator Feedback",
+      status: String(feedback.feedbackType || (accepted ? "accepted" : "recorded")),
+      confidence: "Likely",
+      projectId: String(feedback.projectId || projectId),
+      estimateId: String(feedback.estimateId || estimateId),
+      sourceDate: String(feedback.createdAt || ""),
+      notes: String(feedback.reason || feedback.note || "").slice(0, 220),
+    });
+  });
 
   pricedItems.forEach((item) => {
     const total = itemLineTotal(item);
@@ -1257,6 +1316,24 @@ function CockpitMetricCard({ label, value, sub, tone = "orange" }: { label: stri
   );
 }
 
+function CiceroSourceBadge({ source }: { source: "Internal Fact" | "External Market Signal" | "Strategic Recommendation" | string }) {
+  const tone = source === "Internal Fact"
+    ? "border-blue-500/25 bg-blue-500/10 text-blue-100"
+    : source === "External Market Signal"
+      ? "border-purple-500/25 bg-purple-500/10 text-purple-100"
+      : "border-orange-500/25 bg-orange-500/10 text-orange-100";
+  return <Badge variant="outline" className={tone}>{source}</Badge>;
+}
+
+function CiceroConfidenceBadge({ confidence }: { confidence: DataCenterRecordSummary["confidence"] }) {
+  const tone = confidence === "Strong"
+    ? "bg-green-500/15 text-green-200"
+    : confidence === "Likely"
+      ? "bg-blue-500/15 text-blue-200"
+      : "bg-orange-500/15 text-orange-200";
+  return <Badge className={tone}>{confidence}</Badge>;
+}
+
 function EstimatorMemoryView({
   records,
   predictiveEstimatorModel,
@@ -1267,7 +1344,7 @@ function EstimatorMemoryView({
   onBack: () => void;
 }) {
   const counts = {
-    predictionRuns: records.filter((record) => record.sourceType === "estimate_item").length,
+    predictionRuns: records.filter((record) => record.sourceType === "prediction_run").length,
     estimatorFeedback: records.filter((record) => record.category === "Estimator Feedback").length,
     outcomeMemory: records.filter((record) => record.sourceType === "actual_outcome").length,
     acceptedRecommendations: records.filter((record) => record.sourceType === "accepted_recommendation").length,
@@ -1333,6 +1410,10 @@ function EstimatorMemoryView({
                 <td className="p-3 text-blue-100">{record.sourceType.replaceAll("_", " ")}</td>
                 <td className="p-3">
                   <div className="font-bold text-white">{record.title}</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <CiceroSourceBadge source={record.sourceType === "prediction_run" || record.sourceType === "accepted_recommendation" || record.sourceType === "dismissed_recommendation" ? "Strategic Recommendation" : "Internal Fact"} />
+                    <CiceroConfidenceBadge confidence={record.confidence} />
+                  </div>
                   {record.notes ? <div className="mt-1 text-xs text-muted-foreground">{record.notes}</div> : null}
                 </td>
                 <td className="p-3 text-muted-foreground">{record.category}</td>
@@ -2216,17 +2297,19 @@ function CiceroCommandPanel({
   const zeroCost = metrics.pricedItems.filter((item) => Number(item.unitCost || 0) <= 0).length;
   const noMilestone = metrics.pricedItems.length - metrics.withMilestone;
   const actions = [
-    zeroCost ? { label: "Price placeholders", detail: `${zeroCost} item${zeroCost === 1 ? "" : "s"} need real cost or RFQ coverage.`, cta: "Create pricing action", run: () => onCreateAction("Review zero-cost placeholders and either price them or send RFQs.") } : null,
-    rfqSummary.open ? { label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", run: onGoToRfq } : null,
-    noMilestone ? { label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
-    scheduleScore < 80 ? { label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", run: onGoToProduction } : null,
+    zeroCost ? { label: "Price placeholders", detail: `${zeroCost} item${zeroCost === 1 ? "" : "s"} need real cost or RFQ coverage.`, cta: "Create pricing action", source: "Internal Fact", confidence: zeroCost > 3 ? "Strong" : "Likely", run: () => onCreateAction("Review zero-cost placeholders and either price them or send RFQs.") } : null,
+    rfqSummary.open ? { label: "RFQs open", detail: `${rfqSummary.open} RFQ package${rfqSummary.open === 1 ? "" : "s"} need follow-up or quote logging.`, cta: "Open RFQ desk", source: "Internal Fact", confidence: "Strong", run: onGoToRfq } : null,
+    noMilestone ? { label: "Loose schedule handoff", detail: `${noMilestone} item${noMilestone === 1 ? "" : "s"} are not tied to a milestone.`, cta: "Create schedule action", source: "Internal Fact", confidence: scheduleScore < 60 ? "Strong" : "Likely", run: () => onCreateAction("Tie loose estimate items to milestones before scheduler handoff.") } : null,
+    scheduleScore < 80 ? { label: "Production assumptions", detail: "Production days need review before this estimate goes downstream.", cta: "Open production", source: "Internal Fact", confidence: "Likely", run: onGoToProduction } : null,
     ...predictiveModel.recommendedDraftActions.slice(0, 3).map((action) => ({
       label: "Cicero recommendation",
       detail: action,
       cta: "Create draft action",
+      source: "Strategic Recommendation",
+      confidence: confidenceForRecord(predictiveModel.survivalScore),
       run: () => onCreateAction(action),
     })),
-  ].filter(Boolean) as Array<{ label: string; detail: string; cta: string; run: () => void }>;
+  ].filter(Boolean) as Array<{ label: string; detail: string; cta: string; source: "Internal Fact" | "External Market Signal" | "Strategic Recommendation"; confidence: DataCenterRecordSummary["confidence"]; run: () => void }>;
 
   return (
     <section className="rounded-lg border border-cyan-500/30 bg-cyan-500/5 p-4">
@@ -2297,6 +2380,10 @@ function CiceroCommandPanel({
         {actions.length ? actions.map((action) => (
           <div key={action.label} className="flex flex-col gap-3 rounded-lg border border-border bg-background/55 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
+              <div className="mb-2 flex flex-wrap gap-2">
+                <CiceroSourceBadge source={action.source} />
+                <CiceroConfidenceBadge confidence={action.confidence} />
+              </div>
               <div className="font-bold text-white">{action.label}</div>
               <div className="text-xs text-muted-foreground">{action.detail}</div>
             </div>
@@ -3111,6 +3198,18 @@ function EstimatingWorkspace() {
     api.estimating.listRfqs,
     user && estimateId ? { companyId: user.companyId, estimateId: estimateId as Id<"estimates"> } : "skip"
   ) as any[] | undefined;
+  const predictionRuns = useQuery(
+    api.estimatePredictionMemory.listPredictionRuns,
+    user && estimateId ? { companyId: user.companyId, estimateId: estimateId as Id<"estimates">, limit: 50 } : "skip"
+  ) as any[] | undefined;
+  const outcomeMemory = useQuery(
+    api.estimatePredictionMemory.listOutcomeMemory,
+    user && estimateId ? { companyId: user.companyId, estimateId: estimateId as Id<"estimates">, limit: 50 } : "skip"
+  ) as any[] | undefined;
+  const estimatorFeedback = useQuery(
+    api.estimatePredictionMemory.listEstimatorFeedback,
+    user && estimateId ? { companyId: user.companyId, estimateId: estimateId as Id<"estimates">, limit: 50 } : "skip"
+  ) as any[] | undefined;
 
   const createRfq = useMutation(api.estimating.createRfq);
   const updateRfq = useMutation(api.estimating.updateRfq);
@@ -3263,7 +3362,10 @@ function EstimatingWorkspace() {
     predictiveEstimatorModel,
     productionRows,
     historicalItems: historicalEstimateItems || [],
-  }), [selectedEstimate, estimateItems, rfqsWithNotes, predictiveSignals, predictiveEstimatorModel, productionRows, historicalEstimateItems]);
+    predictionRuns: predictionRuns || [],
+    outcomeMemory: outcomeMemory || [],
+    estimatorFeedback: estimatorFeedback || [],
+  }), [selectedEstimate, estimateItems, rfqsWithNotes, predictiveSignals, predictiveEstimatorModel, productionRows, historicalEstimateItems, predictionRuns, outcomeMemory, estimatorFeedback]);
   const predictionOutputSnapshot = useMemo(() => ({
     modelVersion: predictiveEstimatorModel.modelVersion,
     bidSurvivalScore: predictiveEstimatorModel.bidSurvivalScore,
