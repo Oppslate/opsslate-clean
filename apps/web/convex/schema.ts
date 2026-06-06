@@ -1301,11 +1301,32 @@ export default defineSchema({
     estimateId: v.id("estimates"),
     projectId: v.optional(v.id("projects")),
     predictionRunId: v.optional(v.id("estimatePredictionRuns")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceItemId: v.optional(v.string()),
     outcomeType: v.string(),
     outcomeKey: v.optional(v.string()),
     expectedValue: v.optional(v.any()),
     actualValue: v.optional(v.any()),
     variance: v.optional(v.number()),
+    estimatedQuantity: v.optional(v.number()),
+    actualQuantity: v.optional(v.number()),
+    estimatedUnitCost: v.optional(v.number()),
+    actualUnitCost: v.optional(v.number()),
+    estimatedTotalCost: v.optional(v.number()),
+    actualTotalCost: v.optional(v.number()),
+    estimatedProductionDays: v.optional(v.number()),
+    actualProductionDays: v.optional(v.number()),
+    estimatedManHours: v.optional(v.number()),
+    actualManHours: v.optional(v.number()),
+    estimatedEquipmentHours: v.optional(v.number()),
+    actualEquipmentHours: v.optional(v.number()),
+    crewSize: v.optional(v.number()),
+    costVariance: v.optional(v.number()),
+    productionVariance: v.optional(v.number()),
+    linkedTaskId: v.optional(v.string()),
+    linkedDailyLogId: v.optional(v.string()),
+    linkedCostRecordId: v.optional(v.string()),
+    outcomeStatus: v.optional(v.string()),
     wonLost: v.optional(v.string()),
     finalMargin: v.optional(v.number()),
     actualCost: v.optional(v.number()),
@@ -1316,6 +1337,7 @@ export default defineSchema({
   }).index("by_estimate", ["estimateId"])
     .index("by_company", ["companyId"])
     .index("by_project", ["companyId", "projectId"])
+    .index("by_estimate_item", ["companyId", "estimateItemId"])
     .index("by_prediction_run", ["predictionRunId"]),
 
   estimatorFeedback: defineTable({

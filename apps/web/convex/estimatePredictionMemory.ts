@@ -102,11 +102,32 @@ export const recordEstimateOutcome = mutation({
     estimateId: v.id("estimates"),
     projectId: v.optional(v.id("projects")),
     predictionRunId: v.optional(v.id("estimatePredictionRuns")),
+    estimateItemId: v.optional(v.id("estimateItems")),
+    sourceItemId: v.optional(v.string()),
     outcomeType: v.string(),
     outcomeKey: v.optional(v.string()),
     expectedValue: v.optional(v.any()),
     actualValue: v.optional(v.any()),
     variance: v.optional(v.number()),
+    estimatedQuantity: v.optional(v.number()),
+    actualQuantity: v.optional(v.number()),
+    estimatedUnitCost: v.optional(v.number()),
+    actualUnitCost: v.optional(v.number()),
+    estimatedTotalCost: v.optional(v.number()),
+    actualTotalCost: v.optional(v.number()),
+    estimatedProductionDays: v.optional(v.number()),
+    actualProductionDays: v.optional(v.number()),
+    estimatedManHours: v.optional(v.number()),
+    actualManHours: v.optional(v.number()),
+    estimatedEquipmentHours: v.optional(v.number()),
+    actualEquipmentHours: v.optional(v.number()),
+    crewSize: v.optional(v.number()),
+    costVariance: v.optional(v.number()),
+    productionVariance: v.optional(v.number()),
+    linkedTaskId: v.optional(v.string()),
+    linkedDailyLogId: v.optional(v.string()),
+    linkedCostRecordId: v.optional(v.string()),
+    outcomeStatus: v.optional(v.string()),
     wonLost: v.optional(v.string()),
     finalMargin: v.optional(v.number()),
     actualCost: v.optional(v.number()),
@@ -116,6 +137,76 @@ export const recordEstimateOutcome = mutation({
   handler: async (ctx, args) => {
     return ctx.db.insert("estimateOutcomeMemory", {
       ...args,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const recordItemOutcome = mutation({
+  args: {
+    companyId: v.id("companies"),
+    estimateId: v.id("estimates"),
+    estimateItemId: v.id("estimateItems"),
+    projectId: v.optional(v.id("projects")),
+    predictionRunId: v.optional(v.id("estimatePredictionRuns")),
+    outcomeType: v.optional(v.string()),
+    outcomeKey: v.optional(v.string()),
+    estimatedQuantity: v.optional(v.number()),
+    actualQuantity: v.optional(v.number()),
+    estimatedUnitCost: v.optional(v.number()),
+    actualUnitCost: v.optional(v.number()),
+    estimatedTotalCost: v.optional(v.number()),
+    actualTotalCost: v.optional(v.number()),
+    estimatedProductionDays: v.optional(v.number()),
+    actualProductionDays: v.optional(v.number()),
+    estimatedManHours: v.optional(v.number()),
+    actualManHours: v.optional(v.number()),
+    estimatedEquipmentHours: v.optional(v.number()),
+    actualEquipmentHours: v.optional(v.number()),
+    crewSize: v.optional(v.number()),
+    linkedTaskId: v.optional(v.string()),
+    linkedDailyLogId: v.optional(v.string()),
+    linkedCostRecordId: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    outcomeStatus: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const estimatedTotalCost = args.estimatedTotalCost || 0;
+    const actualTotalCost = args.actualTotalCost || 0;
+    const estimatedProductionDays = args.estimatedProductionDays || 0;
+    const actualProductionDays = args.actualProductionDays || 0;
+    const costVariance = actualTotalCost - estimatedTotalCost;
+    const productionVariance = actualProductionDays - estimatedProductionDays;
+    return ctx.db.insert("estimateOutcomeMemory", {
+      ...args,
+      sourceItemId: String(args.estimateItemId),
+      outcomeType: args.outcomeType || "estimate_item_actual",
+      outcomeKey: args.outcomeKey || String(args.estimateItemId),
+      expectedValue: {
+        estimatedQuantity: args.estimatedQuantity,
+        estimatedUnitCost: args.estimatedUnitCost,
+        estimatedTotalCost: args.estimatedTotalCost,
+        estimatedProductionDays: args.estimatedProductionDays,
+        estimatedManHours: args.estimatedManHours,
+        estimatedEquipmentHours: args.estimatedEquipmentHours,
+      },
+      actualValue: {
+        actualQuantity: args.actualQuantity,
+        actualUnitCost: args.actualUnitCost,
+        actualTotalCost: args.actualTotalCost,
+        actualProductionDays: args.actualProductionDays,
+        actualManHours: args.actualManHours,
+        actualEquipmentHours: args.actualEquipmentHours,
+        crewSize: args.crewSize,
+        linkedTaskId: args.linkedTaskId,
+        linkedDailyLogId: args.linkedDailyLogId,
+        linkedCostRecordId: args.linkedCostRecordId,
+      },
+      variance: costVariance,
+      costVariance,
+      productionVariance,
+      actualCost: args.actualTotalCost,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
@@ -140,6 +231,20 @@ export const listEstimateOutcomes = query({
       .withIndex("by_company", (q) => q.eq("companyId", args.companyId))
       .order("desc")
       .take(limit);
+  },
+});
+
+export const listItemOutcomes = query({
+  args: {
+    companyId: v.id("companies"),
+    estimateItemId: v.id("estimateItems"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return ctx.db.query("estimateOutcomeMemory")
+      .withIndex("by_estimate_item", (q) => q.eq("companyId", args.companyId).eq("estimateItemId", args.estimateItemId))
+      .order("desc")
+      .take(Math.min(args.limit || 20, 100));
   },
 });
 

@@ -1920,6 +1920,149 @@ function SectionGlyph() {
   );
 }
 
+function ItemOutcomeModal({
+  item,
+  actualQuantity,
+  actualUnitCost,
+  actualTotalCost,
+  actualProductionDays,
+  actualManHours,
+  actualEquipmentHours,
+  linkedTaskId,
+  linkedDailyLogId,
+  linkedCostRecordId,
+  notes,
+  saving,
+  onActualQuantityChange,
+  onActualUnitCostChange,
+  onActualTotalCostChange,
+  onActualProductionDaysChange,
+  onActualManHoursChange,
+  onActualEquipmentHoursChange,
+  onLinkedTaskIdChange,
+  onLinkedDailyLogIdChange,
+  onLinkedCostRecordIdChange,
+  onNotesChange,
+  onCancel,
+  onSave,
+}: {
+  item: Record<string, unknown> | null;
+  actualQuantity: string;
+  actualUnitCost: string;
+  actualTotalCost: string;
+  actualProductionDays: string;
+  actualManHours: string;
+  actualEquipmentHours: string;
+  linkedTaskId: string;
+  linkedDailyLogId: string;
+  linkedCostRecordId: string;
+  notes: string;
+  saving: boolean;
+  onActualQuantityChange: (value: string) => void;
+  onActualUnitCostChange: (value: string) => void;
+  onActualTotalCostChange: (value: string) => void;
+  onActualProductionDaysChange: (value: string) => void;
+  onActualManHoursChange: (value: string) => void;
+  onActualEquipmentHoursChange: (value: string) => void;
+  onLinkedTaskIdChange: (value: string) => void;
+  onLinkedDailyLogIdChange: (value: string) => void;
+  onLinkedCostRecordIdChange: (value: string) => void;
+  onNotesChange: (value: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  if (!item) return null;
+  const estimatedQuantity = Number(item.quantity || 0) || 0;
+  const estimatedUnitCost = Number(item.unitCost || 0) || 0;
+  const estimatedTotalCost = itemLineTotal(item);
+  const actualQuantityNumber = Number(actualQuantity || 0) || 0;
+  const actualUnitCostNumber = Number(actualUnitCost || 0) || 0;
+  const displayedActualTotal = Number(actualTotalCost || 0) || actualQuantityNumber * actualUnitCostNumber;
+  const costVariance = displayedActualTotal - estimatedTotalCost;
+  const varianceTone = costVariance > 0 ? "text-red-300" : costVariance < 0 ? "text-green-300" : "text-blue-100";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-5xl rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <Badge className="bg-cyan-500/15 text-cyan-200">Actual Outcome Link</Badge>
+            <h2 className="mt-2 text-2xl font-black text-white">{String(item.description || "Estimate item")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Link actual cost and production results back to this estimate line so Cicero can learn bid-to-field performance.
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-sm">
+            <div className="rounded-lg border border-border bg-background/60 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Estimated</div>
+              <div className="mt-1 font-black text-white">{money(estimatedTotalCost)}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/60 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Actual</div>
+              <div className="mt-1 font-black text-green-400">{money(displayedActualTotal)}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-background/60 p-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Variance</div>
+              <div className={`mt-1 font-black ${varianceTone}`}>{money(costVariance)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-4">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Actual Quantity</label>
+            <input value={actualQuantity} onChange={(event) => onActualQuantityChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder={String(estimatedQuantity || 0)} />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Actual Unit Cost</label>
+            <input value={actualUnitCost} onChange={(event) => onActualUnitCostChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder={String(estimatedUnitCost || 0)} />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Actual Total Cost</label>
+            <input value={actualTotalCost} onChange={(event) => onActualTotalCostChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder={String(estimatedTotalCost || 0)} />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Actual Production Days</label>
+            <input value={actualProductionDays} onChange={(event) => onActualProductionDaysChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="e.g. 2.5" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Actual Man-Hours</label>
+            <input value={actualManHours} onChange={(event) => onActualManHoursChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="e.g. 48" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Actual Equipment Hours</label>
+            <input value={actualEquipmentHours} onChange={(event) => onActualEquipmentHoursChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="e.g. 16" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Linked Schedule Task</label>
+            <input value={linkedTaskId} onChange={(event) => onLinkedTaskIdChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Task id or name" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Linked Cost Record</label>
+            <input value={linkedCostRecordId} onChange={(event) => onLinkedCostRecordIdChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Cost record id" />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_2fr]">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Linked Daily Log</label>
+            <input value={linkedDailyLogId} onChange={(event) => onLinkedDailyLogIdChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="Daily log id or date" />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Outcome Notes</label>
+            <input value={notes} onChange={(event) => onNotesChange(event.target.value)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white" placeholder="What changed in the field, what Cicero should learn..." />
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save Outcome"}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EstimateDetailView({
   estimate,
   project,
@@ -1941,6 +2084,7 @@ function EstimateDetailView({
   onCreateRfi,
   onCreateSubmittal,
   onPushToSchedule,
+  onRecordOutcome,
   onEditDetails,
   onGoToRfq,
   onGoToProduction,
@@ -1972,6 +2116,7 @@ function EstimateDetailView({
   onCreateRfi: (item: Record<string, unknown>) => void;
   onCreateSubmittal: (item: Record<string, unknown>) => void;
   onPushToSchedule: (item: Record<string, unknown>) => void;
+  onRecordOutcome: (item: Record<string, unknown>) => void;
   onEditDetails: () => void;
   onGoToRfq: () => void;
   onGoToProduction: () => void;
@@ -2158,6 +2303,7 @@ function EstimateDetailView({
                                 onMoveDown={() => onMoveLine(item, pricedItems, "down")}
                               />
                               <Button size="sm" variant="outline" onClick={() => onPushToSchedule(item)}>Schedule</Button>
+                              <Button size="sm" variant="outline" onClick={() => onRecordOutcome(item)}>Outcome</Button>
                               <Button size="sm" variant="outline" onClick={() => onEditItem(item)}>Edit</Button>
                               <Button size="sm" variant="destructive" onClick={() => onDeleteItem(item)}>x</Button>
                             </div>
@@ -2501,11 +2647,24 @@ function EstimatingWorkspace() {
   const createSubmittal = useMutation(api.submittals.create);
   const createTask = useMutation(api.tasks.create);
   const createPredictionRun = useMutation(api.estimatePredictionMemory.createPredictionRun);
+  const recordEstimateOutcome = useMutation(api.estimatePredictionMemory.recordEstimateOutcome);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const predictionRunSignatureRef = useRef("");
   const [proofItem, setProofItem] = useState<Record<string, unknown> | null>(null);
   const [editingItem, setEditingItem] = useState<Record<string, unknown> | null>(null);
+  const [outcomeItem, setOutcomeItem] = useState<Record<string, unknown> | null>(null);
+  const [outcomeActualQuantity, setOutcomeActualQuantity] = useState("");
+  const [outcomeActualUnitCost, setOutcomeActualUnitCost] = useState("");
+  const [outcomeActualTotalCost, setOutcomeActualTotalCost] = useState("");
+  const [outcomeActualProductionDays, setOutcomeActualProductionDays] = useState("");
+  const [outcomeActualManHours, setOutcomeActualManHours] = useState("");
+  const [outcomeActualEquipmentHours, setOutcomeActualEquipmentHours] = useState("");
+  const [outcomeLinkedTaskId, setOutcomeLinkedTaskId] = useState("");
+  const [outcomeLinkedDailyLogId, setOutcomeLinkedDailyLogId] = useState("");
+  const [outcomeLinkedCostRecordId, setOutcomeLinkedCostRecordId] = useState("");
+  const [outcomeNotes, setOutcomeNotes] = useState("");
+  const [outcomeSaving, setOutcomeSaving] = useState(false);
   const [editItemSection, setEditItemSection] = useState("");
   const [editItemDescriptionType, setEditItemDescriptionType] = useState(COMMON_ESTIMATE_ITEM_DESCRIPTIONS[0]);
   const [editItemCustomDescription, setEditItemCustomDescription] = useState("");
@@ -3122,6 +3281,88 @@ function EstimatingWorkspace() {
       }),
     });
     if (typeof window !== "undefined") window.alert("Submittal draft created from this estimate line.");
+  }
+
+  function openItemOutcomeRecorder(item: Record<string, unknown>) {
+    const estimatedQuantity = Number(item.quantity || 0) || 0;
+    const estimatedUnitCost = Number(item.unitCost || 0) || 0;
+    setOutcomeItem(item);
+    setOutcomeActualQuantity(String(estimatedQuantity || ""));
+    setOutcomeActualUnitCost(String(estimatedUnitCost || ""));
+    setOutcomeActualTotalCost(String(itemLineTotal(item) || ""));
+    setOutcomeActualProductionDays(String(item.productionDays || ""));
+    setOutcomeActualManHours("");
+    setOutcomeActualEquipmentHours("");
+    setOutcomeLinkedTaskId("");
+    setOutcomeLinkedDailyLogId("");
+    setOutcomeLinkedCostRecordId("");
+    setOutcomeNotes("");
+  }
+
+  async function saveItemOutcome() {
+    if (!user || !selectedEstimate?._id || !outcomeItem?._id) return;
+    const estimatedQuantity = Number(outcomeItem.quantity || 0) || 0;
+    const estimatedUnitCost = Number(outcomeItem.unitCost || 0) || 0;
+    const estimatedTotalCost = itemLineTotal(outcomeItem);
+    const estimatedProductionDays = Number(outcomeItem.productionDays || 0) || 0;
+    const estimatedManHours = Number(outcomeItem.manHours || 0) || 0;
+    const estimatedEquipmentHours = Number(outcomeItem.equipmentHours || 0) || 0;
+    const actualQuantity = Number(outcomeActualQuantity || 0) || 0;
+    const actualUnitCost = Number(outcomeActualUnitCost || 0) || 0;
+    const actualTotalCost = Number(outcomeActualTotalCost || 0) || actualQuantity * actualUnitCost;
+    const actualProductionDays = Number(outcomeActualProductionDays || 0) || 0;
+    const actualManHours = Number(outcomeActualManHours || 0) || 0;
+    const actualEquipmentHours = Number(outcomeActualEquipmentHours || 0) || 0;
+    const variance = actualTotalCost - estimatedTotalCost;
+    setOutcomeSaving(true);
+    try {
+      await recordEstimateOutcome({
+        companyId: user.companyId,
+        estimateId: selectedEstimate._id as Id<"estimates">,
+        projectId: selectedProject?._id as Id<"projects"> | undefined,
+        outcomeType: "estimate_item_actual",
+        outcomeKey: String(outcomeItem._id),
+        expectedValue: {
+          estimateItemId: String(outcomeItem._id),
+          description: outcomeItem.description,
+          section: outcomeItem.section,
+          estimatedQuantity: estimatedQuantity,
+          estimatedUnitCost: estimatedUnitCost,
+          estimatedTotalCost: estimatedTotalCost,
+          estimatedProductionDays: estimatedProductionDays,
+          estimatedManHours: estimatedManHours,
+          estimatedEquipmentHours: estimatedEquipmentHours,
+        },
+        actualValue: {
+          estimateItemId: String(outcomeItem._id),
+          actualQuantity: actualQuantity,
+          actualUnitCost: actualUnitCost,
+          actualTotalCost: actualTotalCost,
+          actualProductionDays: actualProductionDays,
+          actualManHours: actualManHours,
+          actualEquipmentHours: actualEquipmentHours,
+          linkedTaskId: outcomeLinkedTaskId.trim() || undefined,
+          linkedDailyLogId: outcomeLinkedDailyLogId.trim() || undefined,
+          linkedCostRecordId: outcomeLinkedCostRecordId.trim() || undefined,
+        },
+        variance,
+        actualCost: actualTotalCost,
+        notes: JSON.stringify({
+          estimateItemId: String(outcomeItem._id),
+          itemDescription: outcomeItem.description,
+          linkedTaskId: outcomeLinkedTaskId.trim() || undefined,
+          linkedDailyLogId: outcomeLinkedDailyLogId.trim() || undefined,
+          linkedCostRecordId: outcomeLinkedCostRecordId.trim() || undefined,
+          note: outcomeNotes.trim() || undefined,
+        }),
+      });
+      setOutcomeItem(null);
+      if (typeof window !== "undefined") window.alert("Actual cost and production outcome saved to estimating memory.");
+    } catch (error) {
+      if (typeof window !== "undefined") window.alert(`Could not save item outcome: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setOutcomeSaving(false);
+    }
   }
 
   async function pushEstimateItemToSchedule(item: Record<string, unknown>) {
@@ -3859,6 +4100,32 @@ function EstimatingWorkspace() {
           onCancel={() => setEditingItem(null)}
           onContinue={() => void saveEditedItemLine()}
         />
+        <ItemOutcomeModal
+          item={outcomeItem}
+          actualQuantity={outcomeActualQuantity}
+          actualUnitCost={outcomeActualUnitCost}
+          actualTotalCost={outcomeActualTotalCost}
+          actualProductionDays={outcomeActualProductionDays}
+          actualManHours={outcomeActualManHours}
+          actualEquipmentHours={outcomeActualEquipmentHours}
+          linkedTaskId={outcomeLinkedTaskId}
+          linkedDailyLogId={outcomeLinkedDailyLogId}
+          linkedCostRecordId={outcomeLinkedCostRecordId}
+          notes={outcomeNotes}
+          saving={outcomeSaving}
+          onActualQuantityChange={setOutcomeActualQuantity}
+          onActualUnitCostChange={setOutcomeActualUnitCost}
+          onActualTotalCostChange={setOutcomeActualTotalCost}
+          onActualProductionDaysChange={setOutcomeActualProductionDays}
+          onActualManHoursChange={setOutcomeActualManHours}
+          onActualEquipmentHoursChange={setOutcomeActualEquipmentHours}
+          onLinkedTaskIdChange={setOutcomeLinkedTaskId}
+          onLinkedDailyLogIdChange={setOutcomeLinkedDailyLogId}
+          onLinkedCostRecordIdChange={setOutcomeLinkedCostRecordId}
+          onNotesChange={setOutcomeNotes}
+          onCancel={() => setOutcomeItem(null)}
+          onSave={() => void saveItemOutcome()}
+        />
         <ProofModal
           item={proofItem}
           rfqStatus={proofItem ? rfqStatusForItem(proofItem) : "No RFQ"}
@@ -4141,6 +4408,7 @@ function EstimatingWorkspace() {
             onCreateRfi={(item) => void createRfiFromEstimateItem(item)}
             onCreateSubmittal={(item) => void createSubmittalFromEstimateItem(item)}
             onPushToSchedule={(item) => void pushEstimateItemToSchedule(item)}
+            onRecordOutcome={openItemOutcomeRecorder}
             onEditDetails={() => setActiveTool("estimates")}
             onGoToRfq={() => setActiveTool("rfq")}
             onGoToProduction={() => setActiveTool("production-breakdown")}
