@@ -23,7 +23,7 @@ points.
 
 | Milestone | Date started | Status | Pending before checkpoint |
 | --- | --- | --- | --- |
-| Foundation item 3B: working cockpit and secure PDF intake | 2026-07-23 | Implemented and locally verified; live integration review pending | Run isolated cross-tenant, upload, responsive, accessibility, and visual acceptance tests before approval or deployment |
+| Foundation item 3B: working cockpit and secure PDF intake | 2026-07-23 | Implemented and locally verified at `fb54209`; live integration review pending | Run isolated cross-tenant, upload, responsive, accessibility, and visual acceptance tests before approval or deployment |
 
 ### Foundation item 2 evidence
 
