@@ -1,3 +1,4 @@
+import { ToastProvider } from "@opsslate/suite-ui/toast";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
@@ -23,7 +24,7 @@ export default function RootLayout({
       <body
         className={`${inter.className} min-h-screen bg-background text-foreground`}
       >
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

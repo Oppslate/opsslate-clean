@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@opsslate/helios-domain": "file:../../packages/helios-domain",
     "@opsslate/suite-config": "file:../../packages/suite-config",
     "@opsslate/suite-ui": "file:../../packages/suite-ui",
     "class-variance-authority": "^0.7.1",

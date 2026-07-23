@@ -17,12 +17,13 @@ points.
 | Milestone | Date | Status | Commit | Git tag | Verification |
 | --- | --- | --- | --- | --- | --- |
 | Foundation item 2: shared OpsSlate UI and responsive Helios application boundary | 2026-07-23 | Approved and verified | `89c51ef` | `helios-foundation-item-2` | Local and Vercel production builds passed; shared-ownership drift check passed; desktop, tablet, mobile, drawer, focus, assets, and styles verified |
+| Foundation item 3A: identity, session, and company authorization boundary | 2026-07-23 | Implemented and locally verified; live integration pending | `cac34c6` | Not tagged | Domain/security tests, lint, type checks, and builds passed; live issuer/tenant tests pending |
 
 ## Milestones in progress
 
 | Milestone | Date started | Status | Pending before checkpoint |
 | --- | --- | --- | --- |
-| Foundation item 3A: identity, session, and company authorization boundary | 2026-07-23 | Implemented and locally verified; integration pending | Deploy Convex schema/gateway, configure isolated secrets, confirm issuer claims, run live active/disabled/unknown/cross-tenant tests, review and approve |
+| Foundation item 3B: working cockpit and secure PDF intake | 2026-07-23 | Implemented and locally verified; live integration review pending | Run isolated cross-tenant, upload, responsive, accessibility, and visual acceptance tests before approval or deployment |
 
 ### Foundation item 2 evidence
 

@@ -77,6 +77,74 @@ export default defineSchema({
     contingencyPercent: v.optional(v.number()),
   }).index("by_company", ["companyId"]),
 
+  heliosProjects: defineTable({
+    companyId: v.id("companies"),
+    createdBy: v.id("users"),
+    name: v.string(),
+    projectNumber: v.optional(v.string()),
+    ownerClient: v.optional(v.string()),
+    engineer: v.optional(v.string()),
+    bidDate: v.optional(v.string()),
+    location: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("intake"),
+      v.literal("documents_ready"),
+      v.literal("archived"),
+    ),
+    intelligenceStatus: v.union(
+      v.literal("awaiting_documents"),
+      v.literal("ready_for_intelligence"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_company_updated", ["companyId", "updatedAt"])
+    .index("by_company_status", ["companyId", "status"]),
+
+  heliosDocuments: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    uploadedBy: v.id("users"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    canonicalFileName: v.string(),
+    contentType: v.literal("application/pdf"),
+    size: v.number(),
+    sha256: v.string(),
+    status: v.union(
+      v.literal("ready_for_intelligence"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    version: v.number(),
+    supersedesDocumentId: v.optional(v.id("heliosDocuments")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId", "createdAt"])
+    .index("by_project_hash", ["projectId", "sha256"])
+    .index("by_company_updated", ["companyId", "updatedAt"]),
+
+  heliosUploadIntents: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    createdBy: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("consumed"),
+      v.literal("failed"),
+    ),
+    failureReason: v.optional(v.string()),
+    duplicateDocumentId: v.optional(v.id("heliosDocuments")),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId", "createdAt"])
+    .index("by_company_status", ["companyId", "status"]),
+
   equipment: defineTable({
     companyId: v.id("companies"),
     name: v.string(),

@@ -1,5 +1,7 @@
-import { HeliosApplicationBoundary } from "@/components/helios-application-boundary";
 import { HeliosAccessBoundary } from "@/components/helios-access-boundary";
+import { Cockpit } from "@/components/cockpit";
+import { HeliosShell } from "@/components/helios-shell";
+import { getCockpit } from "@/lib/helios-data";
 import { readHeliosPrincipal } from "@/lib/helios-session";
 
 export const dynamic = "force-dynamic";
@@ -15,5 +17,10 @@ export default async function Home({
   ]);
 
   if (!principal) return <HeliosAccessBoundary state={params.auth} />;
-  return <HeliosApplicationBoundary principal={principal} />;
+  const data = await getCockpit(principal);
+  return (
+    <HeliosShell principal={principal}>
+      <Cockpit data={data} />
+    </HeliosShell>
+  );
 }
