@@ -1,4 +1,4 @@
-export type SuiteAppKey = "projectManagement" | "estimating" | "scheduler" | "books" | "takeoff" | "cad" | "crm";
+export type SuiteAppKey = "projectManagement" | "estimating" | "helios" | "scheduler" | "books" | "takeoff" | "cad" | "crm";
 
 export type SuiteApp = {
   key: SuiteAppKey;
@@ -46,6 +46,21 @@ export const suiteApps: SuiteApp[] = [
     summary: "Bid intake, AI extraction, scope comparison, RFQs, cost history, and bid-to-budget handoff.",
     capabilities: ["Bid tracker", "AI extraction", "RFQs", "Cost history"],
     handoff: "Sends bid totals, scope notes, alternates, and buyout assumptions into the job record.",
+  },
+  {
+    key: "helios",
+    name: "Helios",
+    shortName: "AI",
+    icon: "AI",
+    lane: "Construction Intelligence",
+    href: "/helios",
+    appHref: process.env.NEXT_PUBLIC_HELIOS_APP_URL || "/helios",
+    localHref: "/",
+    domain: "helios.opsslate.app",
+    status: "local",
+    summary: "Evidence-first construction intelligence for heavy-highway bid understanding, estimating decisions, and controlled OpsSlate handoff.",
+    capabilities: ["Document intelligence", "Cited findings", "Estimate guidance", "Bid readiness"],
+    handoff: "Returns reviewed findings, estimate decisions, RFQ context, and source evidence to OpsSlate.",
   },
   {
     key: "scheduler",
@@ -145,13 +160,13 @@ export const suiteBundles: SuiteBundle[] = [
   {
     name: "Precon Pack",
     tagline: "Move from plans to proposal to project baseline.",
-    appKeys: ["crm", "cad", "takeoff", "estimating", "projectManagement"],
+    appKeys: ["crm", "cad", "takeoff", "helios", "estimating", "projectManagement"],
     bestFor: "Teams that win work from drawings and need quantity, bid, and awarded-scope handoff in one flow.",
   },
   {
     name: "Full Suite",
     tagline: "Connect sales, drawings, bid, build, schedule, and money.",
-    appKeys: ["crm", "cad", "takeoff", "estimating", "projectManagement", "scheduler", "books"],
+    appKeys: ["crm", "cad", "takeoff", "helios", "estimating", "projectManagement", "scheduler", "books"],
     bestFor: "Contractors who want one operating layer from first lead through WIP, billing, payroll, and closeout.",
   },
 ];

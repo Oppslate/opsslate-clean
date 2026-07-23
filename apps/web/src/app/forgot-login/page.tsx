@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
 import Link from "next/link";
 
 export default function ForgotLoginPage() {

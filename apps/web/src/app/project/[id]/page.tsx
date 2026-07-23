@@ -11,11 +11,11 @@ import { EstimateRequirementsPanel } from "@/components/estimate-requirements-pa
 import { ScheduleIntelligencePanel } from "@/components/schedule-intelligence-panel";
 import { SpecIntelligenceCommandCenter } from "@/components/spec-intelligence-command-center";
 import { SpecDNAPanel } from "@/components/spec-dna-panel";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
+import { Label } from "@opsslate/suite-ui/label";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +23,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@opsslate/suite-ui/dialog";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import Link from "next/link";
 

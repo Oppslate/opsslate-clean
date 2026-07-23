@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@opsslate/suite-ui/card";
+import { Button } from "@opsslate/suite-ui/button";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Input } from "@opsslate/suite-ui/input";
 import Link from "next/link";
 
 type SignerField = {

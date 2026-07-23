@@ -7,6 +7,7 @@ export type SuiteToolbarUser = {
 
 export type SuiteToolbarProps = {
   activePathname: string;
+  activeApp?: SuiteAppKey;
   user: SuiteToolbarUser;
   plan: string;
   showActions?: boolean;

@@ -1,0 +1,92 @@
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: #070d16;
+  --color-foreground: #eef4ff;
+  --color-card: #101923;
+  --color-card-foreground: #eef4ff;
+  --color-popover: #101923;
+  --color-popover-foreground: #eef4ff;
+  --color-primary: #f97316;
+  --color-primary-foreground: #0b0f14;
+  --color-secondary: #17212d;
+  --color-secondary-foreground: #eef4ff;
+  --color-muted: #17212d;
+  --color-muted-foreground: #8fa0b6;
+  --color-accent: #fb923c;
+  --color-accent-foreground: #0b0f14;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #1f2b38;
+  --color-input: #263445;
+  --color-ring: #f97316;
+
+  --color-ai-foreground: #fdba74;
+  --color-ai-base: #f97316;
+  --color-ai-surface: rgba(249, 115, 22, 0.1);
+  --color-ai-border: rgba(249, 115, 22, 0.3);
+  --color-selected-surface: rgba(249, 115, 22, 0.18);
+  --color-selected-ring: rgba(249, 115, 22, 0.2);
+  --color-success-foreground: #86efac;
+  --color-success: #22c55e;
+  --color-success-surface: rgba(34, 197, 94, 0.1);
+  --color-warning-foreground: #fcd34d;
+  --color-warning: #f59e0b;
+  --color-warning-surface: rgba(245, 158, 11, 0.1);
+  --color-danger-foreground: #fca5a5;
+  --color-danger: #ef4444;
+  --color-danger-surface: rgba(239, 68, 68, 0.1);
+  --color-info-foreground: #93c5fd;
+  --color-info: #3b82f6;
+  --color-secondary-ai-foreground: #67e8f9;
+  --color-secondary-ai: #06b6d4;
+
+  --radius: 0.75rem;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-right {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out;
+}
+
+.animate-slide-right {
+  animation: slide-right 0.2s ease-out;
+}
+
+input[type="date"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(1);
+}
+
+@media (max-width: 1023px) {
+  [data-suite-main] {
+    padding-top: 3.5rem !important;
+  }
+}

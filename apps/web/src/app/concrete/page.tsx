@@ -6,12 +6,12 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@opsslate/suite-ui/table";
+import { Badge } from "@opsslate/suite-ui/badge";
 import { CrudModal, FieldDef } from "@/components/crud-modal";
-import { SkeletonTable } from "@/components/skeleton";
-import { EmptyState } from "@/components/empty-state";
-import { TableToolbar, exportCSV } from "@/components/table-toolbar";
+import { SkeletonTable } from "@opsslate/suite-ui/skeleton";
+import { EmptyState } from "@opsslate/suite-ui/empty-state";
+import { TableToolbar, exportCSV } from "@opsslate/suite-ui/table-toolbar";
 import { Id } from "../../../convex/_generated/dataModel";
 import Link from "next/link";
 

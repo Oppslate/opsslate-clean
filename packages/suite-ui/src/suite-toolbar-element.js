@@ -1,5 +1,5 @@
 (() => {
-  const SCRIPT_VERSION = "2026-05-09.2";
+  const SCRIPT_VERSION = "2026-07-23.1";
   const sameOriginPath = (path) => new URL(path, window.location.origin).toString();
   const SESSION_URL = sameOriginPath("/api/auth/suite-session");
   const AUTH_LOGOUT_URL = "https://opsslate-auth.vercel.app/api/auth/logout";
@@ -10,6 +10,7 @@
   const apps = [
     {
       key: "project-management",
+      configKey: "projectManagement",
       short: "PM",
       label: "Project Management",
       appHref: sameOriginPath("/"),
@@ -18,6 +19,7 @@
     },
     {
       key: "estimating",
+      configKey: "estimating",
       short: "Bid",
       label: "Estimating",
       appHref: sameOriginPath("/estimating"),
@@ -25,7 +27,17 @@
       ready: true,
     },
     {
+      key: "helios",
+      configKey: "helios",
+      short: "AI",
+      label: "Helios",
+      appHref: sameOriginPath("/helios"),
+      salesHref: sameOriginPath("/helios"),
+      ready: false,
+    },
+    {
       key: "scheduler",
+      configKey: "scheduler",
       short: "Plan",
       label: "Scheduler",
       appHref: sameOriginPath("/scheduler"),
@@ -34,6 +46,7 @@
     },
     {
       key: "books",
+      configKey: "books",
       short: "Books",
       label: "Books",
       appHref: sameOriginPath("/books"),
@@ -42,6 +55,7 @@
     },
     {
       key: "takeoff",
+      configKey: "takeoff",
       short: "Qty",
       label: "Takeoff",
       appHref: sameOriginPath("/takeoff"),
@@ -50,6 +64,7 @@
     },
     {
       key: "cad",
+      configKey: "cad",
       short: "CAD",
       label: "CAD",
       appHref: sameOriginPath("/cad"),
@@ -58,6 +73,7 @@
     },
     {
       key: "crm",
+      configKey: "crm",
       short: "CRM",
       label: "CRM",
       appHref: sameOriginPath("/crm"),
@@ -298,6 +314,7 @@
     const path = window.location.pathname;
 
     if (host === "estimating.opsslate.app" || path.startsWith("/estimating")) return "estimating";
+    if (host === "helios.opsslate.app" || path.startsWith("/helios")) return "helios";
     if (host === "scheduler.opsslate.app" || path.startsWith("/scheduler")) return "scheduler";
     if (host === "books.opsslate.app" || path.startsWith("/books")) return "books";
     if (host === "takeoff.opsslate.app" || path.startsWith("/takeoff")) return "takeoff";
@@ -344,7 +361,7 @@
     }
 
     static get observedAttributes() {
-      return ["active", "is-logged-in", "show-actions"];
+      return ["active", "is-logged-in", "show-actions", "app-hrefs"];
     }
 
     connectedCallback() {
@@ -379,6 +396,13 @@
     }
 
     async logout() {
+      const logoutEvent = new CustomEvent("opsslate:logout", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      if (!this.dispatchEvent(logoutEvent)) return;
+
       let sharedToken = "";
       try {
         sharedToken = localStorage.getItem("opsslate_token") || "";
@@ -410,8 +434,14 @@
 
     renderLink(app) {
       const active = app.key === this.active;
-      const enabled = app.ready;
-      const href = this.loggedIn ? app.appHref : app.salesHref;
+      let overrides = {};
+      try {
+        overrides = JSON.parse(this.getAttribute("app-hrefs") || "{}");
+      } catch {
+      }
+      const overrideHref = overrides[app.configKey || app.key];
+      const enabled = app.ready || Boolean(overrideHref);
+      const href = this.loggedIn ? (overrideHref || app.appHref) : app.salesHref;
       const content = `<small>${app.short}</small><span>${app.label}</span>${enabled ? "" : '<span class="pill">Soon</span>'}`;
 
       if (active) return `<span class="link active">${content}</span>`;
@@ -464,3 +494,5 @@
     customElements.define("opsslate-suite-toolbar", OpsSlateSuiteToolbar);
   }
 })();
+
+export {};

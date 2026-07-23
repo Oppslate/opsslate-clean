@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@opsslate/suite-ui/button";
+import { Textarea } from "@opsslate/suite-ui/textarea";
 
 export function FeedbackWidget() {
   const { user } = useAuth();

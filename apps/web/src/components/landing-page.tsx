@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Button } from "@opsslate/suite-ui/button";
 import { SuiteNav } from "@/components/suite-nav";
 import { getSuiteAppsByKeys, suiteApps, suiteBundles } from "@/lib/suite-apps";
 

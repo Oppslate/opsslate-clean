@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/components/toast";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
+import { Textarea } from "@opsslate/suite-ui/textarea";
+import { useToast } from "@opsslate/suite-ui/toast";
 
 export interface FieldDef {
   key: string;

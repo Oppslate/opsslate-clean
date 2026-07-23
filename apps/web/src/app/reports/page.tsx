@@ -4,8 +4,8 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
 import Link from "next/link";
 
 function healthColor(score: number) {

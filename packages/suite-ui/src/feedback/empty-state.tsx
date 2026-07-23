@@ -1,9 +1,11 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
+
+import { Button } from "../ui/button";
 
 interface EmptyStateProps {
-  icon: string;
+  icon: ReactNode;
   title: string;
   description: string;
   actionLabel?: string;

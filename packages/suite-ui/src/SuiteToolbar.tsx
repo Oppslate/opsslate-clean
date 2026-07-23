@@ -1,6 +1,6 @@
 "use client";
 
-import { createElement, useEffect } from "react";
+import { createElement, useEffect, useRef } from "react";
 import type { SuiteToolbarProps } from "./types";
 
 function normalizeBundle(plan: string) {
@@ -18,28 +18,45 @@ function activeFromPath(pathname: string) {
   return "project-management";
 }
 
+function activeFromApp(app: NonNullable<SuiteToolbarProps["activeApp"]>) {
+  return app === "projectManagement" ? "project-management" : app;
+}
+
 export function SuiteToolbar({
   activePathname,
+  activeApp,
   user,
   plan,
   showActions = true,
+  onLogout,
+  appUrlOverrides,
 }: SuiteToolbarProps) {
-  useEffect(() => {
-    if (!document.querySelector('script[data-opsslate-suite-toolbar="true"]')) {
-      const script = document.createElement("script");
-      script.src = "/suite-toolbar.js?v=2026-05-09.2";
-      script.defer = true;
-      script.dataset.opsslateSuiteToolbar = "true";
-      document.head.appendChild(script);
-    }
+  const elementRef = useRef<HTMLElement | null>(null);
 
+  useEffect(() => {
+    void import("./suite-toolbar-element.js");
     if (user) localStorage.setItem("opsslate_bundle", normalizeBundle(plan));
   }, [plan, user]);
 
+  useEffect(() => {
+    const element = elementRef.current;
+    if (!element || !onLogout) return;
+
+    const handleLogout = (event: Event) => {
+      event.preventDefault();
+      onLogout();
+    };
+
+    element.addEventListener("opsslate:logout", handleLogout);
+    return () => element.removeEventListener("opsslate:logout", handleLogout);
+  }, [onLogout]);
+
   return createElement("opsslate-suite-toolbar", {
-    active: activeFromPath(activePathname),
+    ref: elementRef,
+    active: activeApp ? activeFromApp(activeApp) : activeFromPath(activePathname),
     plan: normalizeBundle(plan),
     "is-logged-in": user ? "true" : "false",
     "show-actions": showActions ? "true" : "false",
+    "app-hrefs": JSON.stringify(appUrlOverrides ?? {}),
   });
 }

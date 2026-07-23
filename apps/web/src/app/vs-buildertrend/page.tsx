@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@opsslate/suite-ui/button";
 import { SuiteNav } from "@/components/suite-nav";
 
 const COMPARISON = [

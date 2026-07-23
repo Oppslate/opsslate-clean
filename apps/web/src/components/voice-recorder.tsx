@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@opsslate/suite-ui/button";
 
 interface VoiceRecorderProps {
   onTranscript: (text: string) => void;

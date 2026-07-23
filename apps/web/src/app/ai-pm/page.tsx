@@ -6,10 +6,10 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@opsslate/suite-ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
 import Link from "next/link";
 import type { Id } from "../../../convex/_generated/dataModel";
 

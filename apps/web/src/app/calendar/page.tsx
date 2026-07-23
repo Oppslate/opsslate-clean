@@ -5,16 +5,16 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Button } from "@opsslate/suite-ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@opsslate/suite-ui/select";
 import Link from "next/link";
 
 type WeekPlanResult = { plan: string };

@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "@/lib/auth-context";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
 import { Id } from "../../convex/_generated/dataModel";
 
 const PROJECT_TYPES = [

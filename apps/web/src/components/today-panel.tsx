@@ -4,9 +4,9 @@ import { useState, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@opsslate/suite-ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@opsslate/suite-ui/table";
 
 const STORAGE_KEY = "opsslate_today_panel_sections";
 

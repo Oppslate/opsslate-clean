@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@opsslate/suite-ui/badge";
 
 interface Alert {
   id: string;

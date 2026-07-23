@@ -4,13 +4,13 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
 import { LoginForm } from "@/components/login-form";
 import { Onboarding } from "@/components/onboarding";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Button } from "@opsslate/suite-ui/button";
 import { CrudModal, FieldDef } from "@/components/crud-modal";
 import type { Id } from "../../convex/_generated/dataModel";
 

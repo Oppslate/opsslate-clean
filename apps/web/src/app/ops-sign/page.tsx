@@ -5,11 +5,11 @@ import { useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@opsslate/suite-ui/card";
+import { Button } from "@opsslate/suite-ui/button";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Input } from "@opsslate/suite-ui/input";
+import { useToast } from "@opsslate/suite-ui/toast";
 import Link from "next/link";
 
 type Recipient = {

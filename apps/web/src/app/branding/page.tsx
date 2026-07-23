@@ -5,10 +5,10 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/components/toast";
+import { Card, CardContent, CardHeader, CardTitle } from "@opsslate/suite-ui/card";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
+import { useToast } from "@opsslate/suite-ui/toast";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const COLOR_PRESETS = [

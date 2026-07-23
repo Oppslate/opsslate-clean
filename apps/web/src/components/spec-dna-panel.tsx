@@ -4,10 +4,10 @@ import { useMemo, useRef, useState } from "react";
 import { Brain, Check, FileText, Filter, RefreshCw, Upload, X } from "lucide-react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Button } from "@opsslate/suite-ui/button";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Input } from "@opsslate/suite-ui/input";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const CATEGORY_TABS = [

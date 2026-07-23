@@ -9,8 +9,8 @@ import type { Id } from "../../../convex/_generated/dataModel";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/lib/auth-context";
 import { ScheduleIntelligencePanel } from "@/components/schedule-intelligence-panel";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Button } from "@opsslate/suite-ui/button";
 
 interface Project {
   _id: Id<"projects">;

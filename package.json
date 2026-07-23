@@ -8,8 +8,11 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
+    "check:ui-boundary": "node scripts/check-shared-ui-boundary.mjs",
     "vercel-build": "npm run build -w @opsslate/web",
+    "vercel-build:helios": "npm run build -w @opsslate/helios",
     "dev:web": "npm run dev -w @opsslate/web",
+    "dev:helios": "npm run dev -w @opsslate/helios",
     "dev:scheduler": "npm run dev -w @opsslate/scheduler",
     "dev:books": "npm run dev -w @opsslate/books",
     "dev:takeoff": "npm run dev -w @opsslate/takeoff"

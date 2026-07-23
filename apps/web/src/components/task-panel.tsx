@@ -3,10 +3,10 @@
 import { useState, useMemo } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const PHASES = ["Pre-Construction", "Foundation", "Framing", "Rough-In", "Finish", "Closeout"];

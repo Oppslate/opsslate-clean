@@ -3,8 +3,8 @@
 import { BookOpenCheck } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
 import type { Id } from "../../convex/_generated/dataModel";
 
 function ruleTypeLabel(value?: string) {

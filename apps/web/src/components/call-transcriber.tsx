@@ -3,10 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
+import { Badge } from "@opsslate/suite-ui/badge";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
 import { Id } from "../../convex/_generated/dataModel";
 
 interface Contact {

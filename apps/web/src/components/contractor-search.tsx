@@ -3,11 +3,11 @@
 import { useState, useMemo } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@opsslate/suite-ui/card";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
+import { Textarea } from "@opsslate/suite-ui/textarea";
+import { Badge } from "@opsslate/suite-ui/badge";
 import { Id } from "../../convex/_generated/dataModel";
 
 interface Contractor {

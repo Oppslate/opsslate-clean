@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@opsslate/suite-ui/button";
+import { Input } from "@opsslate/suite-ui/input";
+import { Textarea } from "@opsslate/suite-ui/textarea";
+import { Badge } from "@opsslate/suite-ui/badge";
 import { jsPDF } from "jspdf";
 
 interface SowContact {

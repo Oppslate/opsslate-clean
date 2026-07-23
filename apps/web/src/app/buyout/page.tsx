@@ -6,7 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { AppShell } from "@/components/app-shell";
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@opsslate/suite-ui/badge";
 import { Id } from "../../../convex/_generated/dataModel";
 import Link from "next/link";
 import {

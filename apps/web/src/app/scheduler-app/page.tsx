@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { SuiteNav } from "@/components/suite-nav";
-import { Button } from "@/components/ui/button";
+import { Button } from "@opsslate/suite-ui/button";
 
 const FEATURES = [
   { icon: "📊", title: "Interactive Gantt Charts", desc: "Drag-and-drop scheduling with task dependencies. See your entire project timeline at a glance with critical path highlighting." },
