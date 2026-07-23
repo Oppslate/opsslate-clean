@@ -5,6 +5,7 @@ import {
   SuiteToolbar,
   suiteUiFoundationContract,
 } from "@opsslate/suite-ui";
+import type { HeliosPrincipal } from "@opsslate/suite-auth/types";
 import { Badge } from "@opsslate/suite-ui/badge";
 import {
   Card,
@@ -20,8 +21,20 @@ import { heliosNavigation } from "@/lib/navigation";
 
 const ownershipRows = Object.entries(suiteUiFoundationContract.ownership);
 
-export function HeliosApplicationBoundary() {
+export function HeliosApplicationBoundary({
+  principal,
+}: {
+  principal: HeliosPrincipal;
+}) {
   const pathname = usePathname();
+
+  async function logout() {
+    await fetch("/api/auth/session", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+    window.location.assign("/");
+  }
 
   return (
     <SuiteAppShell
@@ -45,9 +58,10 @@ export function HeliosApplicationBoundary() {
         <SuiteToolbar
           activePathname={pathname}
           activeApp="helios"
-          user={null}
+          user={{ email: principal.email, name: principal.name }}
           plan="suite_biz"
           showActions={false}
+          onLogout={logout}
           appUrlOverrides={{
             ...(process.env.NEXT_PUBLIC_OPSSLATE_APP_URL
               ? {
@@ -77,7 +91,7 @@ export function HeliosApplicationBoundary() {
         />
       }
       topActions={
-        <Badge variant="secondary">Foundation item 2</Badge>
+        <Badge variant="secondary">Foundation item 3A</Badge>
       }
     >
       <div className="mx-auto w-full max-w-[1500px] space-y-5">
@@ -86,20 +100,22 @@ export function HeliosApplicationBoundary() {
             variant="outline"
             className="mb-2 border-orange-500/35 text-orange-300"
           >
-            Shared boundary active
+            Secure tenant boundary active
           </Badge>
           <h1 className="text-3xl font-bold leading-9">
-            Helios application foundation
+            Helios security foundation
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-5 text-muted-foreground">
-            This responsive web application is consuming the versioned
-            OpsSlate shell, tokens, and primitives from
+            The authenticated principal and company boundary were derived on
+            the server for
             {" "}
             <span className="font-medium text-foreground">
-              @opsslate/suite-ui {SUITE_UI_VERSION}
+              {principal.email}
             </span>
-            . Cockpit and workflow features are intentionally outside this
-            foundation item.
+            . The interface continues to consume @opsslate/suite-ui
+            {" "}
+            {SUITE_UI_VERSION}. Cockpit and workflow features remain outside
+            this foundation item.
           </p>
         </header>
 
@@ -132,18 +148,19 @@ export function HeliosApplicationBoundary() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Scope boundary</CardTitle>
+              <CardTitle>Security boundary</CardTitle>
               <CardDescription>
-                Item 2 establishes architecture without beginning product
-                features.
+                Item 3A establishes identity and tenancy without beginning
+                product features.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
                 <div>
-                  <div className="font-medium">Responsive application</div>
+                  <div className="font-medium">Verified identity</div>
                   <div className="text-muted-foreground">
-                    Next.js App Router boundary with shared OpsSlate chrome.
+                    Server-issued, HTTP-only Helios session with a bounded
+                    lifetime.
                   </div>
                 </div>
                 <Badge className="bg-green-500/15 text-green-300">
@@ -152,18 +169,22 @@ export function HeliosApplicationBoundary() {
               </div>
               <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
                 <div>
-                  <div className="font-medium">Cockpit feature code</div>
+                  <div className="font-medium">Company access</div>
                   <div className="text-muted-foreground">
-                    No estimating, document, RFQ, or AI workflow is present.
+                    Company ID is resolved from the existing OpsSlate account,
+                    never supplied by the browser.
                   </div>
                 </div>
-                <Badge variant="outline">Not started</Badge>
+                <Badge className="bg-green-500/15 text-green-300">
+                  Enforced
+                </Badge>
               </div>
               <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
                 <div>
-                  <div className="font-medium">Authoritative data</div>
+                  <div className="font-medium">Product features</div>
                   <div className="text-muted-foreground">
-                    No OpsSlate record integration or mutation exists.
+                    No cockpit, document, AI, estimating, or project mutation
+                    exists.
                   </div>
                 </div>
                 <Badge variant="outline">Not connected</Badge>

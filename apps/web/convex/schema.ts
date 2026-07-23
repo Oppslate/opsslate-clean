@@ -31,12 +31,16 @@ export default defineSchema({
     email: v.string(),
     name: v.string(),
     role: v.optional(v.string()),
+    identityIssuer: v.optional(v.string()),
+    identitySubject: v.optional(v.string()),
+    identityLinkedAt: v.optional(v.number()),
     passwordHash: v.string(),
     sessionToken: v.optional(v.string()),
     resetToken: v.optional(v.string()),
     resetTokenExpiry: v.optional(v.number()),
     mustChangePassword: v.optional(v.boolean()),
   }).index("by_email", ["email"])
+    .index("by_identity", ["identityIssuer", "identitySubject"])
     .index("by_session", ["sessionToken"]),
 
   projects: defineTable({

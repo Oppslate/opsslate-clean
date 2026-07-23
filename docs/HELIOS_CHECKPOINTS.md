@@ -18,6 +18,12 @@ points.
 | --- | --- | --- | --- | --- | --- |
 | Foundation item 2: shared OpsSlate UI and responsive Helios application boundary | 2026-07-23 | Approved and verified | `89c51ef` | `helios-foundation-item-2` | Local and Vercel production builds passed; shared-ownership drift check passed; desktop, tablet, mobile, drawer, focus, assets, and styles verified |
 
+## Milestones in progress
+
+| Milestone | Date started | Status | Pending before checkpoint |
+| --- | --- | --- | --- |
+| Foundation item 3A: identity, session, and company authorization boundary | 2026-07-23 | Implemented and locally verified; integration pending | Deploy Convex schema/gateway, configure isolated secrets, confirm issuer claims, run live active/disabled/unknown/cross-tenant tests, review and approve |
+
 ### Foundation item 2 evidence
 
 - [Foundation handoff](./HELIOS_FOUNDATION_ITEM_2.md)

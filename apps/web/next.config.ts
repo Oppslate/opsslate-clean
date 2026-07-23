@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const nextConfig: NextConfig = {
+  images: {
+    unoptimized: true,
+  },
   outputFileTracingRoot: repoRoot,
   transpilePackages: ["@opsslate/suite-config", "@opsslate/suite-ui"],
   turbopack: {
