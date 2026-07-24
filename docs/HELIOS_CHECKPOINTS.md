@@ -24,7 +24,7 @@ points.
 | Milestone | Date started | Status | Pending before checkpoint |
 | --- | --- | --- | --- |
 | Foundation item 3B: working cockpit and secure PDF intake | 2026-07-23 | Implemented and locally verified at `fb54209`; live integration review pending | Run isolated cross-tenant, upload, responsive, accessibility, and visual acceptance tests before approval or deployment |
-| Foundation item 3C: AI document and project intelligence | 2026-07-24 | Implemented at `e14d773`; isolated Convex schema/functions and local verification passed; live OpenAI acceptance blocked by invalid development credential | Correct `OPENAI_API_KEY`, repeat live PDF/evidence test, verify signed-session workflow and responsive accessibility before approval or deployment |
+| Foundation item 3C: AI document and project intelligence | 2026-07-24 | Implemented at `e14d773`; isolated Convex schema/functions, production builds, automated checks, and live GPT-5.6 Sol PDF/evidence validation passed | Verify a signed-session real-document workflow and responsive accessibility before approval or deployment |
 
 ### Foundation item 2 evidence
 

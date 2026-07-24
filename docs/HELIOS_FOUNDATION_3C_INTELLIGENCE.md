@@ -1,7 +1,6 @@
 # Helios Foundation Item 3C — AI Document Intelligence
 
-Status: implementation complete; live OpenAI acceptance blocked by invalid
-development credential
+Status: implementation complete; live OpenAI PDF validation passed
 
 ## Scope
 
@@ -181,18 +180,15 @@ Completed:
 Live OpenAI smoke test:
 
 - The internal-only smoke action generated a one-page heavy-highway PDF and
-  attempted the real file-input path.
-- OpenAI rejected the request before processing with HTTP 401 because the value
-  stored as `OPENAI_API_KEY` was command text rather than an API key.
-- No project document was sent.
-- The temporary smoke action was removed from the codebase.
-- Live evidence extraction must be repeated after the deployment credential is
-  corrected.
+  exercised the real file-input and structured-output path.
+- GPT-5.6 Sol returned four evidence records and six findings.
+- Every returned finding cited accepted evidence.
+- The OpenAI response and uploaded file were deleted after validation.
+- The temporary smoke action was removed from the codebase and the clean
+  function set was redeployed.
 
 ## Acceptance remaining
 
-- Replace the invalid Convex development value with an actual OpenAI API key.
-- Repeat the internal PDF smoke test and confirm cited structured output.
 - Exercise a signed Helios session with a real registered PDF.
 - Verify automatic state progression, project synthesis, retry, and cleanup.
 - Visually inspect desktop, tablet, and mobile intelligence states.
