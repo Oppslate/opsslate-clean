@@ -29,6 +29,7 @@ points.
 
 | Foundation item 3D: human finding review and correction lifecycle | 2026-07-24 | Preview ready at `9e2d731`; tagged `helios-foundation-3d`; approval pending | Authenticated human visual review of the review queue and dialogs on the preview |
 | Foundation item 3D.1: option-3 cockpit alignment | 2026-07-24 | Approved; locally verified at `a88c050`; tagged `helios-foundation-3d.1` | Create and verify a preview-only Vercel deployment; do not promote to production |
+| Foundation item 3D.1.1: above-fold decision dock | 2026-07-24 | Locally verified at `576a728`; tagged `helios-foundation-3d.1.1`; preview pending | Deploy and verify the raised cockpit at the Edge-equivalent viewport |
 
 ### Foundation item 2 evidence
 
@@ -129,6 +130,20 @@ points.
 - Deployed navigation drawer scroll lock, close, and focus restoration: Passed
 - Deployed browser page errors: None
 - Production promotion and domain changes: Not performed
+
+### Foundation item 3D.1.1 above-fold evidence
+
+- Application checkpoint: `576a728`
+- Annotated Git tag: `helios-foundation-3d.1.1`
+- [Before/after comparison](./evidence/helios-3d1-card-top-comparison.png)
+- Edge-equivalent `1908 × 915` viewport: all five decision actions visible
+  without scrolling
+- Account controls: Visible with no collision
+- Tablet and mobile horizontal overflow: None
+- Automated Helios tests: 30 passed
+- Helios lint, Helios TypeScript, shared UI TypeScript, shared ownership
+  boundary, and local production build: Passed
+- Vercel preview: Pending
 
 ### Foundation item 3A-R standalone preview evidence
 
