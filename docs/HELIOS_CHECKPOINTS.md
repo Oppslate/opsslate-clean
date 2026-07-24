@@ -28,7 +28,7 @@ points.
 | Foundation item 3C.1–3C.3: bid-package intake, durable project intelligence, and cited PDF review | 2026-07-24 | Preview ready at `f3166a2`; tagged `helios-foundation-3c.3`; approval pending | Authenticated human review of citation-to-page navigation on the preview |
 
 | Foundation item 3D: human finding review and correction lifecycle | 2026-07-24 | Preview ready at `9e2d731`; tagged `helios-foundation-3d`; approval pending | Authenticated human visual review of the review queue and dialogs on the preview |
-| Foundation item 3D.1: option-3 cockpit alignment | 2026-07-24 | Locally verified at `a88c050`; tagged `helios-foundation-3d.1`; visual approval pending | Review the authenticated local cockpit and approve it before creating a new Vercel preview |
+| Foundation item 3D.1: option-3 cockpit alignment | 2026-07-24 | Approved; locally verified at `a88c050`; tagged `helios-foundation-3d.1` | Create and verify a preview-only Vercel deployment; do not promote to production |
 
 ### Foundation item 2 evidence
 
@@ -118,6 +118,7 @@ points.
 - Clean authenticated browser page errors: None
 - Side-by-side comparison with approved option 3:
   `evidence/helios-3d1-comparison.png`
+- Authenticated human visual review: Approved on 2026-07-24
 - Vercel deployment, production promotion, and domain changes: Not performed
 
 ### Foundation item 3A-R standalone preview evidence
