@@ -28,6 +28,7 @@ points.
 | Foundation item 3C.1–3C.3: bid-package intake, durable project intelligence, and cited PDF review | 2026-07-24 | Preview ready at `f3166a2`; tagged `helios-foundation-3c.3`; approval pending | Authenticated human review of citation-to-page navigation on the preview |
 
 | Foundation item 3D: human finding review and correction lifecycle | 2026-07-24 | Preview ready at `9e2d731`; tagged `helios-foundation-3d`; approval pending | Authenticated human visual review of the review queue and dialogs on the preview |
+| Foundation item 3D.1: option-3 cockpit alignment | 2026-07-24 | Locally verified at `a88c050`; tagged `helios-foundation-3d.1`; visual approval pending | Review the authenticated local cockpit and approve it before creating a new Vercel preview |
 
 ### Foundation item 2 evidence
 
@@ -101,6 +102,23 @@ points.
 - Authenticated human review of the queue, correction dialog, and source
   transition: Pending
 - Production promotion and custom domain changes: Not performed
+
+### Foundation item 3D.1 cockpit alignment evidence
+
+- [Foundation alignment handoff](./HELIOS_FOUNDATION_3D_1_COCKPIT_ALIGNMENT.md)
+- [Design QA report](../design-qa.md)
+- Application checkpoint: `a88c050`
+- Annotated Git tag: `helios-foundation-3d.1`
+- Automated Helios boundary tests: 30 passed
+- Lint, TypeScript, shared UI boundary, and local production build: Passed
+- Authenticated protected PDF and decision controls: Passed
+- Finding selection, search, correction dialog, and focus restoration: Passed
+- Mobile navigation drawer, scroll lock, close, and focus restoration: Passed
+- Desktop, tablet, and mobile horizontal overflow: None
+- Clean authenticated browser page errors: None
+- Side-by-side comparison with approved option 3:
+  `evidence/helios-3d1-comparison.png`
+- Vercel deployment, production promotion, and domain changes: Not performed
 
 ### Foundation item 3A-R standalone preview evidence
 
