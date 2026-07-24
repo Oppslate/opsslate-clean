@@ -4,9 +4,10 @@ import {
   canonicalPdfFileName,
   normalizeProjectInput,
 } from "@opsslate/helios-domain";
+import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
@@ -17,6 +18,12 @@ import {
   heliosPrincipalValidator,
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
+
+const queueDocumentReference = makeFunctionReference<
+  "mutation",
+  { documentId: Id<"heliosDocuments"> },
+  Id<"heliosIntelligenceJobs"> | null
+>("heliosIntelligence:queueDocument");
 
 const projectInputValidator = v.object({
   name: v.string(),
@@ -58,6 +65,10 @@ function documentSummary(document: Doc<"heliosDocuments">) {
     size: document.size,
     sha256: document.sha256,
     status: document.status,
+    attemptCount: document.attemptCount || 0,
+    lastError: document.lastError,
+    processingStartedAt: document.processingStartedAt,
+    processingCompletedAt: document.processingCompletedAt,
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
   };
@@ -107,7 +118,15 @@ export const listCockpit = internalQuery({
     const processingQueue = projectRows
       .flatMap(({ project, documents }) =>
         documents
-          .filter((document) => document.status === "ready_for_intelligence")
+          .filter((document) =>
+            [
+              "ready_for_intelligence",
+              "queued",
+              "uploading_to_openai",
+              "analyzing",
+              "failed",
+            ].includes(document.status),
+          )
           .map((document) => ({
             document: documentSummary(document),
             projectName: project.name,
@@ -165,9 +184,62 @@ export const getProject = internalQuery({
       )
       .order("desc")
       .collect();
+    const intelligence = await ctx.db
+      .query("heliosProjectIntelligence")
+      .withIndex("by_project", (query) =>
+        query.eq("projectId", project._id),
+      )
+      .order("desc")
+      .first();
+    const evidence = intelligence
+      ? await ctx.db
+          .query("heliosEvidence")
+          .withIndex("by_project", (query) =>
+            query.eq("projectId", project._id),
+          )
+          .collect()
+      : [];
+    const documentsById = new Map(
+      documents.map((document) => [document._id, document]),
+    );
     return {
       project: projectSummary(project, documents.length),
       documents: documents.map(documentSummary),
+      intelligence: intelligence
+        ? {
+            id: intelligence._id,
+            projectId: project._id,
+            model: intelligence.model,
+            schemaVersion: intelligence.schemaVersion,
+            summary: intelligence.summary,
+            summaryEvidenceIds: intelligence.summaryEvidenceIds.map(String),
+            projectType: {
+              ...intelligence.projectType,
+              evidenceIds: intelligence.projectType.evidenceIds.map(String),
+            },
+            fundingSource: {
+              ...intelligence.fundingSource,
+              evidenceIds: intelligence.fundingSource.evidenceIds.map(String),
+            },
+            confidence: intelligence.confidence,
+            findings: intelligence.findings.map((finding, index) => ({
+              id: `${intelligence._id}:finding:${index}`,
+              ...finding,
+              evidenceIds: finding.evidenceIds.map(String),
+            })),
+            evidence: evidence.map((row) => ({
+              id: row._id,
+              documentId: row.documentId,
+              documentName:
+                documentsById.get(row.documentId)?.fileName ||
+                "Project document",
+              pageNumber: row.pageNumber,
+              locator: row.locator,
+              excerpt: row.excerpt,
+            })),
+            generatedAt: intelligence.generatedAt,
+          }
+        : undefined,
     };
   },
 });
@@ -323,6 +395,7 @@ export const registerDocument = internalMutation({
       size: metadata.size,
       sha256: metadata.sha256,
       status: "ready_for_intelligence",
+      attemptCount: 0,
       version: 1,
       createdAt: now,
       updatedAt: now,
@@ -335,6 +408,7 @@ export const registerDocument = internalMutation({
     });
     const document = await ctx.db.get(documentId);
     if (!document) throw new Error("Document could not be registered.");
+    await ctx.scheduler.runAfter(0, queueDocumentReference, { documentId });
     return { kind: "created" as const, document: documentSummary(document) };
   },
 });

@@ -212,7 +212,7 @@ export function Cockpit({ data }: { data: HeliosCockpitData }) {
           <CardHeader>
             <CardTitle>Active processing queue</CardTitle>
             <CardDescription>
-              Documents securely stored and waiting for the approved 3C intelligence engine.
+              Live document intelligence status, including items that need attention.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -221,7 +221,7 @@ export function Cockpit({ data }: { data: HeliosCockpitData }) {
                 <FileClock className="mb-3 size-10 text-muted-foreground" aria-hidden="true" />
                 <h2 className="font-semibold">Nothing waiting</h2>
                 <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                  Uploaded PDFs will appear here with their real intake status.
+                  Uploaded PDFs appear here while Helios reads and validates their evidence.
                 </p>
               </div>
             ) : (

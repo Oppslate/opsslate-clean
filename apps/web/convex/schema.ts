@@ -96,6 +96,11 @@ export default defineSchema({
     intelligenceStatus: v.union(
       v.literal("awaiting_documents"),
       v.literal("ready_for_intelligence"),
+      v.literal("queued"),
+      v.literal("processing"),
+      v.literal("ready_for_review"),
+      v.literal("partially_ready"),
+      v.literal("failed"),
     ),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -115,9 +120,17 @@ export default defineSchema({
     sha256: v.string(),
     status: v.union(
       v.literal("ready_for_intelligence"),
+      v.literal("queued"),
+      v.literal("uploading_to_openai"),
+      v.literal("analyzing"),
+      v.literal("completed"),
       v.literal("failed"),
       v.literal("superseded"),
     ),
+    attemptCount: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    processingStartedAt: v.optional(v.number()),
+    processingCompletedAt: v.optional(v.number()),
     version: v.number(),
     supersedesDocumentId: v.optional(v.id("heliosDocuments")),
     createdAt: v.number(),
@@ -144,6 +157,138 @@ export default defineSchema({
   })
     .index("by_project", ["projectId", "createdAt"])
     .index("by_company_status", ["companyId", "status"]),
+
+  heliosIntelligenceJobs: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    documentId: v.optional(v.id("heliosDocuments")),
+    kind: v.union(v.literal("document"), v.literal("project")),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("uploading"),
+      v.literal("analyzing"),
+      v.literal("synthesizing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    attempt: v.number(),
+    openaiFileId: v.optional(v.string()),
+    openaiResponseId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_document", ["documentId", "createdAt"])
+    .index("by_project_status", ["projectId", "status", "createdAt"])
+    .index("by_company_updated", ["companyId", "updatedAt"]),
+
+  heliosEvidence: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    documentId: v.id("heliosDocuments"),
+    evidenceKey: v.string(),
+    pageNumber: v.optional(v.number()),
+    locator: v.string(),
+    excerpt: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_document", ["documentId", "createdAt"])
+    .index("by_document_key", ["documentId", "evidenceKey"])
+    .index("by_project", ["projectId", "createdAt"]),
+
+  heliosDocumentIntelligence: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    documentId: v.id("heliosDocuments"),
+    model: v.string(),
+    schemaVersion: v.number(),
+    documentType: v.string(),
+    summary: v.string(),
+    summaryEvidenceIds: v.array(v.id("heliosEvidence")),
+    confidence: v.number(),
+    findings: v.array(
+      v.object({
+        category: v.union(
+          v.literal("project_metadata"),
+          v.literal("contract_requirements"),
+          v.literal("required_forms"),
+          v.literal("addenda"),
+          v.literal("drawing_index"),
+          v.literal("specification_sections"),
+          v.literal("bid_items"),
+          v.literal("allowances"),
+          v.literal("alternates"),
+          v.literal("unit_price_items"),
+          v.literal("known_risks"),
+          v.literal("missing_information"),
+          v.literal("required_subcontractors"),
+          v.literal("required_suppliers"),
+        ),
+        title: v.string(),
+        detail: v.string(),
+        confidence: v.number(),
+        severity: v.union(
+          v.literal("information"),
+          v.literal("warning"),
+          v.literal("critical"),
+        ),
+        evidenceIds: v.array(v.id("heliosEvidence")),
+      }),
+    ),
+    generatedAt: v.number(),
+  }).index("by_document", ["documentId"]),
+
+  heliosProjectIntelligence: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    model: v.string(),
+    schemaVersion: v.number(),
+    summary: v.string(),
+    summaryEvidenceIds: v.array(v.id("heliosEvidence")),
+    projectType: v.object({
+      value: v.string(),
+      confidence: v.number(),
+      evidenceIds: v.array(v.id("heliosEvidence")),
+    }),
+    fundingSource: v.object({
+      value: v.string(),
+      confidence: v.number(),
+      evidenceIds: v.array(v.id("heliosEvidence")),
+    }),
+    confidence: v.number(),
+    findings: v.array(
+      v.object({
+        category: v.union(
+          v.literal("project_metadata"),
+          v.literal("contract_requirements"),
+          v.literal("required_forms"),
+          v.literal("addenda"),
+          v.literal("drawing_index"),
+          v.literal("specification_sections"),
+          v.literal("bid_items"),
+          v.literal("allowances"),
+          v.literal("alternates"),
+          v.literal("unit_price_items"),
+          v.literal("known_risks"),
+          v.literal("missing_information"),
+          v.literal("required_subcontractors"),
+          v.literal("required_suppliers"),
+        ),
+        title: v.string(),
+        detail: v.string(),
+        confidence: v.number(),
+        severity: v.union(
+          v.literal("information"),
+          v.literal("warning"),
+          v.literal("critical"),
+        ),
+        evidenceIds: v.array(v.id("heliosEvidence")),
+      }),
+    ),
+    generatedAt: v.number(),
+  }).index("by_project", ["projectId"]),
 
   equipment: defineTable({
     companyId: v.id("companies"),

@@ -37,6 +37,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -45,6 +46,7 @@ import {
 
 import { formatDate, formatTimestamp } from "@/lib/format";
 import { HeliosShell } from "./helios-shell";
+import { ProjectIntelligencePanel } from "./project-intelligence-panel";
 import { StatusBadge } from "./status-badge";
 
 type UploadState =
@@ -117,7 +119,24 @@ export function ProjectIntake({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploads, setUploads] = useState<UploadRow[]>([]);
+  const [retryingDocument, setRetryingDocument] = useState<string>();
   const { project } = detail;
+  const processing =
+    ["queued", "processing"].includes(project.intelligenceStatus) ||
+    detail.documents.some((document) =>
+      [
+        "ready_for_intelligence",
+        "queued",
+        "uploading_to_openai",
+        "analyzing",
+      ].includes(document.status),
+    );
+
+  useEffect(() => {
+    if (!processing) return;
+    const timer = window.setInterval(() => router.refresh(), 5_000);
+    return () => window.clearInterval(timer);
+  }, [processing, router]);
 
   function patchUpload(id: string, patch: Partial<UploadRow>) {
     setUploads((current) =>
@@ -227,10 +246,33 @@ export function ProjectIntake({
     void acceptFiles(Array.from(event.dataTransfer.files));
   }
 
+  async function retryDocument(documentId: string) {
+    setRetryingDocument(documentId);
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/documents/${documentId}/retry`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Document retry failed.");
+      }
+      toast("Document intelligence was queued again.", "success");
+      router.refresh();
+    } catch (error) {
+      toast(
+        error instanceof Error ? error.message : "Document retry failed.",
+        "error",
+      );
+    } finally {
+      setRetryingDocument(undefined);
+    }
+  }
+
   return (
     <HeliosShell
       principal={principal}
-      topActions={<Badge variant="secondary">Foundation 3B</Badge>}
+      topActions={<Badge variant="secondary">Foundation 3C</Badge>}
     >
       <div className="space-y-5">
         <header>
@@ -299,7 +341,7 @@ export function ProjectIntake({
                     Drop PDF bid documents here
                   </h2>
                   <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                    Up to {HELIOS_MAX_UPLOAD_BATCH} files per batch, 250 MB
+                    Up to {HELIOS_MAX_UPLOAD_BATCH} files per batch, 50 MB
                     each. Exact file matches are detected within this project.
                   </p>
                   <Button
@@ -405,6 +447,7 @@ export function ProjectIntake({
                         <TableHead>Size</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Added</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -419,6 +462,42 @@ export function ProjectIntake({
                           </TableCell>
                           <TableCell>
                             {formatTimestamp(document.createdAt)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {document.status === "failed" ? (
+                              <div className="inline-flex flex-col items-end gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={retryingDocument === document.id}
+                                  onClick={() =>
+                                    void retryDocument(document.id)
+                                  }
+                                >
+                                  <RotateCcw
+                                    className="size-3.5"
+                                    aria-hidden="true"
+                                  />
+                                  {retryingDocument === document.id
+                                    ? "Retrying…"
+                                    : "Retry"}
+                                </Button>
+                                {document.lastError && (
+                                  <span
+                                    className="max-w-64 text-right text-xs text-red-300"
+                                    title={document.lastError}
+                                  >
+                                    {document.lastError}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {document.attemptCount > 0
+                                  ? `Attempt ${document.attemptCount}`
+                                  : "—"}
+                              </span>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -465,6 +544,12 @@ export function ProjectIntake({
             </CardContent>
           </Card>
         </div>
+
+        <ProjectIntelligencePanel
+          projectId={project.id}
+          status={project.intelligenceStatus}
+          intelligence={detail.intelligence}
+        />
       </div>
     </HeliosShell>
   );

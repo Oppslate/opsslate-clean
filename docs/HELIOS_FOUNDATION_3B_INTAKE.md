@@ -70,7 +70,9 @@ library.
 9. Before registration, the gateway reads the stored blob and verifies the
    `%PDF-` signature.
 10. The mutation verifies the storage-observed MIME type, nonzero size,
-    250 MB limit, filename extension, and storage-generated SHA-256.
+    50 MB limit, filename extension, and storage-generated SHA-256. Foundation
+    3C lowered the original intake limit so every accepted PDF fits OpenAI's
+    approved file-input boundary.
 11. Invalid blobs are deleted. Exact duplicate hashes within the same project
     are deleted and resolved to the existing document.
 12. 3B does not expose Convex storage bearer URLs to the browser, so protected

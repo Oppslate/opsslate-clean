@@ -7,6 +7,8 @@ import {
   listHeliosProjects,
   registerHeliosDocument,
   resolveIdentity,
+  retryHeliosDocument,
+  retryHeliosProject,
 } from "./heliosGateway";
 
 const http = httpRouter();
@@ -41,6 +43,16 @@ http.route({
   path: "/helios/v1/documents/register",
   method: "POST",
   handler: registerHeliosDocument,
+});
+http.route({
+  path: "/helios/v1/documents/retry",
+  method: "POST",
+  handler: retryHeliosDocument,
+});
+http.route({
+  path: "/helios/v1/intelligence/retry",
+  method: "POST",
+  handler: retryHeliosProject,
 });
 
 export default http;

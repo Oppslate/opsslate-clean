@@ -77,6 +77,23 @@ const registerDocumentReference = makeFunctionReference<
     document: HeliosDocumentSummary;
   }
 >("heliosProjects:registerDocument");
+const retryDocumentReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    documentId: string;
+  },
+  { jobId: string; status: "queued" }
+>("heliosIntelligence:retryDocument");
+const retryProjectReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+  },
+  { jobId: string; status: "synthesizing" }
+>("heliosIntelligence:retryProject");
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -372,5 +389,45 @@ export const registerHeliosDocument = httpAction(async (ctx, request) => {
     return json({ data }, 201);
   } catch {
     return json({ error: "PDF validation or registration failed." }, 400);
+  }
+});
+
+export const retryHeliosDocument = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (
+    !boundedString(payload.projectId) ||
+    !boundedString(payload.documentId)
+  ) {
+    return json({ error: "Invalid document retry request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(retryDocumentReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      documentId: payload.documentId,
+    });
+    return json({ data }, 202);
+  } catch {
+    return json({ error: "Document processing could not be retried." }, 400);
+  }
+});
+
+export const retryHeliosProject = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId)) {
+    return json({ error: "Invalid project retry request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(retryProjectReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+    });
+    return json({ data }, 202);
+  } catch {
+    return json({ error: "Project intelligence could not be retried." }, 400);
   }
 });
