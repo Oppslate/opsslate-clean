@@ -54,14 +54,17 @@ points.
 
 ### Foundation item 3A-R standalone preview evidence
 
-- [Vercel preview](https://helios-foundation-item-2-preview-nt8arqo81-oppslate.vercel.app)
-- Vercel deployment: `dpl_F3PUQjgfEfKZGcYdBV1doF1ufygo`
+- [Stable Vercel preview](https://helios-foundation-item-2-preview-oppslate-oppslate.vercel.app)
+- Vercel deployment: `dpl_B59pHereJ4CFPYqbo3swDryMe2Nu`
 - Vercel target: Preview
 - Vercel status: Ready
 - Deployed source checkpoint: `93b7be2`
 - Independent Clerk development instance: Available
 - Isolated Convex deployment: `kindly-tiger-289`
 - OpsSlate authentication dependency and preview environment variables: Removed
+- Helios-to-Convex gateway credential rotated after the first authenticated
+  request exposed a stale credential; direct isolated identity provisioning
+  returned `200` before the corrected preview was deployed
 - Remote and local production builds: Passed
 - Helios security tests: 12 passed
 - Shared UI boundary, lint, and browser console errors: Passed / none
