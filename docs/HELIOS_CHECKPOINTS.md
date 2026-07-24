@@ -119,7 +119,16 @@ points.
 - Side-by-side comparison with approved option 3:
   `evidence/helios-3d1-comparison.png`
 - Authenticated human visual review: Approved on 2026-07-24
-- Vercel deployment, production promotion, and domain changes: Not performed
+- [Unique Vercel preview](https://helios-foundation-item-2-preview-21eoszbyz-oppslate.vercel.app)
+- [Stable Vercel preview](https://helios-foundation-item-2-preview-oppslate-oppslate.vercel.app)
+- Vercel deployment: `dpl_9pBtTMznyf3CnWGnbBakRbRtWKRv`
+- Vercel target / status: Preview / Ready
+- Deployed source commit: `5966889`
+- Preview sign-in, authenticated cockpit, protected PDF, and logout: Passed
+- Deployed tablet and mobile layouts: Passed; no horizontal overflow
+- Deployed navigation drawer scroll lock, close, and focus restoration: Passed
+- Deployed browser page errors: None
+- Production promotion and domain changes: Not performed
 
 ### Foundation item 3A-R standalone preview evidence
 
