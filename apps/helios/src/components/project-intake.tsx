@@ -1,10 +1,7 @@
 "use client";
 
 import {
-  HELIOS_MAX_UPLOAD_BATCH,
   formatFileSize,
-  hasPdfMagicBytes,
-  validatePdfCandidate,
   type HeliosProjectDetail,
 } from "@opsslate/helios-domain";
 import type { HeliosPrincipal } from "@/lib/helios-principal";
@@ -27,86 +24,19 @@ import {
 } from "@opsslate/suite-ui/table";
 import { useToast } from "@opsslate/suite-ui/toast";
 import {
-  AlertCircle,
   ArrowLeft,
-  CheckCircle2,
   FileText,
   RotateCcw,
-  UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type DragEvent,
-} from "react";
+import { useEffect, useState } from "react";
 
 import { formatDate, formatTimestamp } from "@/lib/format";
+import { BidPackageIntake } from "./bid-package-intake";
 import { HeliosShell } from "./helios-shell";
 import { ProjectIntelligencePanel } from "./project-intelligence-panel";
 import { StatusBadge } from "./status-badge";
-
-type UploadState =
-  | "queued"
-  | "uploading"
-  | "registering"
-  | "ready"
-  | "duplicate"
-  | "failed";
-type UploadRow = {
-  id: string;
-  file: File;
-  progress: number;
-  state: UploadState;
-  error?: string;
-};
-const UPLOAD_CONCURRENCY = 3;
-
-function uploadToStorage(
-  uploadUrl: string,
-  file: File,
-  onProgress: (progress: number) => void,
-) {
-  return new Promise<string>((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open("POST", uploadUrl);
-    request.setRequestHeader("Content-Type", "application/pdf");
-    request.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        onProgress(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-    request.onerror = () => reject(new Error("The PDF upload was interrupted."));
-    request.onload = () => {
-      if (request.status < 200 || request.status >= 300) {
-        reject(new Error("Secure storage rejected the PDF."));
-        return;
-      }
-      try {
-        const payload = JSON.parse(request.responseText) as {
-          storageId?: unknown;
-        };
-        if (typeof payload.storageId !== "string") throw new Error();
-        resolve(payload.storageId);
-      } catch {
-        reject(new Error("Secure storage returned an invalid response."));
-      }
-    };
-    request.send(file);
-  });
-}
-
-function uploadLabel(row: UploadRow) {
-  if (row.state === "uploading") return `Uploading ${row.progress}%`;
-  if (row.state === "registering") return "Validating";
-  if (row.state === "ready") return "Ready";
-  if (row.state === "duplicate") return "Duplicate";
-  if (row.state === "failed") return "Needs attention";
-  return "Queued";
-}
 
 export function ProjectIntake({
   detail,
@@ -117,13 +47,13 @@ export function ProjectIntake({
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [uploads, setUploads] = useState<UploadRow[]>([]);
   const [retryingDocument, setRetryingDocument] = useState<string>();
   const { project } = detail;
   const processing =
     ["queued", "processing"].includes(project.intelligenceStatus) ||
+    detail.packages.some((bidPackage) =>
+      ["ready_for_analysis", "processing"].includes(bidPackage.status),
+    ) ||
     detail.documents.some((document) =>
       [
         "ready_for_intelligence",
@@ -138,118 +68,6 @@ export function ProjectIntake({
     const timer = window.setInterval(() => router.refresh(), 5_000);
     return () => window.clearInterval(timer);
   }, [processing, router]);
-
-  function patchUpload(id: string, patch: Partial<UploadRow>) {
-    setUploads((current) =>
-      current.map((row) => (row.id === id ? { ...row, ...patch } : row)),
-    );
-  }
-
-  async function processUpload(row: UploadRow) {
-    patchUpload(row.id, {
-      state: "uploading",
-      progress: 0,
-      error: undefined,
-    });
-    try {
-      validatePdfCandidate(row.file);
-      const header = new Uint8Array(await row.file.slice(0, 5).arrayBuffer());
-      if (!hasPdfMagicBytes(header)) {
-        throw new Error("The file does not contain a valid PDF signature.");
-      }
-
-      const intentResponse = await fetch(
-        `/api/projects/${project.id}/upload-url`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-      const intentPayload = await intentResponse.json();
-      if (!intentResponse.ok) {
-        throw new Error(
-          intentPayload.error || "Upload could not be authorized.",
-        );
-      }
-
-      const storageId = await uploadToStorage(
-        intentPayload.data.uploadUrl,
-        row.file,
-        (progress) => patchUpload(row.id, { progress }),
-      );
-      patchUpload(row.id, { state: "registering", progress: 100 });
-
-      const registerResponse = await fetch(
-        `/api/projects/${project.id}/documents`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            intentId: intentPayload.data.intentId,
-            storageId,
-            fileName: row.file.name,
-          }),
-        },
-      );
-      const registerPayload = await registerResponse.json();
-      if (!registerResponse.ok) {
-        throw new Error(
-          registerPayload.error || "PDF registration failed.",
-        );
-      }
-
-      const duplicate = registerPayload.data.kind === "duplicate";
-      patchUpload(row.id, {
-        state: duplicate ? "duplicate" : "ready",
-        progress: 100,
-      });
-      toast(
-        duplicate
-          ? `${row.file.name} already exists in this project.`
-          : `${row.file.name} is ready for intelligence.`,
-        duplicate ? "info" : "success",
-      );
-      router.refresh();
-    } catch (error) {
-      patchUpload(row.id, {
-        state: "failed",
-        error: error instanceof Error ? error.message : "Upload failed.",
-      });
-    }
-  }
-
-  async function acceptFiles(files: File[]) {
-    const limited = files.slice(0, HELIOS_MAX_UPLOAD_BATCH);
-    if (files.length > HELIOS_MAX_UPLOAD_BATCH) {
-      toast(
-        `Upload up to ${HELIOS_MAX_UPLOAD_BATCH} PDFs at a time.`,
-        "error",
-      );
-    }
-    const rows = limited.map((file, index) => ({
-      id: `${Date.now()}-${index}-${file.name}`,
-      file,
-      progress: 0,
-      state: "queued" as const,
-    }));
-    setUploads((current) => [...rows, ...current]);
-    for (let index = 0; index < rows.length; index += UPLOAD_CONCURRENCY) {
-      await Promise.all(
-        rows.slice(index, index + UPLOAD_CONCURRENCY).map(processUpload),
-      );
-    }
-  }
-
-  function onFileInput(event: ChangeEvent<HTMLInputElement>) {
-    void acceptFiles(Array.from(event.target.files || []));
-    event.target.value = "";
-  }
-
-  function onDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setDragging(false);
-    void acceptFiles(Array.from(event.dataTransfer.files));
-  }
 
   async function retryDocument(documentId: string) {
     setRetryingDocument(documentId);
@@ -277,7 +95,7 @@ export function ProjectIntake({
   return (
     <HeliosShell
       principal={principal}
-      topActions={<Badge variant="secondary">Foundation 3C</Badge>}
+      topActions={<Badge variant="secondary">Foundation 3C.1–3C.2</Badge>}
     >
       <div className="space-y-5">
         <header>
@@ -307,123 +125,10 @@ export function ProjectIntake({
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.5fr)]">
           <div className="space-y-5">
-            <Card>
-              <CardHeader>
-                <CardTitle>Bid document intake</CardTitle>
-                <CardDescription>
-                  Add plans, specifications, and addenda as PDFs. Files are
-                  validated before they enter the project record.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  multiple
-                  className="sr-only"
-                  onChange={onFileInput}
-                />
-                <div
-                  onDragEnter={(event) => {
-                    event.preventDefault();
-                    setDragging(true);
-                  }}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={onDrop}
-                  className={`flex min-h-52 flex-col items-center justify-center rounded-lg border border-dashed px-6 text-center transition-colors ${
-                    dragging
-                      ? "border-orange-500 bg-orange-500/10"
-                      : "border-border bg-muted/20"
-                  }`}
-                >
-                  <UploadCloud
-                    className="mb-3 size-10 text-orange-300"
-                    aria-hidden="true"
-                  />
-                  <h2 className="font-semibold">
-                    Drop PDF bid documents here
-                  </h2>
-                  <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                    Up to {HELIOS_MAX_UPLOAD_BATCH} files per batch, 50 MB
-                    each. Exact file matches are detected within this project.
-                  </p>
-                  <Button
-                    className="mt-4"
-                    variant="outline"
-                    onClick={() => inputRef.current?.click()}
-                  >
-                    Select PDFs
-                  </Button>
-                </div>
-
-                {uploads.length > 0 && (
-                  <div className="mt-5 space-y-2" aria-live="polite">
-                    {uploads.map((row) => (
-                      <div
-                        key={row.id}
-                        className="rounded-lg border border-border p-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-medium">
-                              {row.file.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {formatFileSize(row.file.size)}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {row.state === "failed" ? (
-                              <AlertCircle
-                                className="size-4 text-red-300"
-                                aria-hidden="true"
-                              />
-                            ) : row.state === "ready" ? (
-                              <CheckCircle2
-                                className="size-4 text-green-300"
-                                aria-hidden="true"
-                              />
-                            ) : null}
-                            <span className="text-xs text-muted-foreground">
-                              {uploadLabel(row)}
-                            </span>
-                          </div>
-                        </div>
-                        {(row.state === "uploading" ||
-                          row.state === "registering") && (
-                          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-                            <div
-                              className="h-full bg-orange-500 transition-[width]"
-                              style={{ width: `${row.progress}%` }}
-                            />
-                          </div>
-                        )}
-                        {row.error && (
-                          <div className="mt-2 flex items-center justify-between gap-3">
-                            <p className="text-xs text-red-300" role="alert">
-                              {row.error}
-                            </p>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void processUpload(row)}
-                            >
-                              <RotateCcw
-                                className="size-3.5"
-                                aria-hidden="true"
-                              />
-                              Retry
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <BidPackageIntake
+              projectId={project.id}
+              packages={detail.packages}
+            />
 
             <Card>
               <CardHeader>
@@ -458,8 +163,15 @@ export function ProjectIntake({
                     <TableBody>
                       {detail.documents.map((document) => (
                         <TableRow key={document.id}>
-                          <TableCell className="max-w-[360px] truncate font-medium">
-                            {document.fileName}
+                          <TableCell className="max-w-[360px]">
+                            <div className="truncate font-medium">
+                              {document.relativePath || document.fileName}
+                            </div>
+                            {document.documentType && (
+                              <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {document.documentType}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>{formatFileSize(document.size)}</TableCell>
                           <TableCell>
@@ -498,7 +210,7 @@ export function ProjectIntake({
                               </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">
-                                {document.attemptCount > 0
+                                {document.attemptCount > 1
                                   ? `Attempt ${document.attemptCount}`
                                   : "—"}
                               </span>
@@ -554,6 +266,7 @@ export function ProjectIntake({
           projectId={project.id}
           status={project.intelligenceStatus}
           intelligence={detail.intelligence}
+          latestError={detail.latestIntelligenceError}
         />
       </div>
     </HeliosShell>

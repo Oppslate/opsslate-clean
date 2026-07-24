@@ -2,8 +2,6 @@ import { callHeliosGateway } from "@/lib/helios-gateway";
 import { readHeliosPrincipal } from "@/lib/helios-session";
 import { apiJson, isSameOrigin } from "@/lib/request-security";
 
-type UploadIntent = { intentId: string; uploadUrl: string };
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
@@ -13,27 +11,35 @@ export async function POST(
   }
   const principal = await readHeliosPrincipal();
   if (!principal) return apiJson({ error: "Authentication required." }, 401);
+  const body = (await request.json().catch(() => null)) as {
+    name?: unknown;
+    sourceType?: unknown;
+    entries?: unknown;
+  } | null;
+  if (
+    !body ||
+    typeof body.name !== "string" ||
+    typeof body.sourceType !== "string" ||
+    !Array.isArray(body.entries)
+  ) {
+    return apiJson({ error: "Invalid bid package." }, 400);
+  }
   try {
     const { projectId } = await params;
-    const body = (await request.json().catch(() => ({}))) as {
-      packageId?: unknown;
-      packageEntryId?: unknown;
-    };
-    const data = await callHeliosGateway<UploadIntent>(
-      "/helios/v1/uploads/create",
+    const data = await callHeliosGateway(
+      "/helios/v1/packages/create",
       principal,
       {
         projectId,
-        packageId:
-          typeof body.packageId === "string" ? body.packageId : undefined,
-        packageEntryId:
-          typeof body.packageEntryId === "string"
-            ? body.packageEntryId
-            : undefined,
+        input: {
+          name: body.name,
+          sourceType: body.sourceType,
+          entries: body.entries,
+        },
       },
     );
     return apiJson({ data }, 201);
   } catch {
-    return apiJson({ error: "Upload could not be authorized." }, 403);
+    return apiJson({ error: "Bid package could not be created." }, 400);
   }
 }

@@ -20,6 +20,9 @@ import {
 const DOCUMENT_POLL_DELAY_MS = 5_000;
 const DOCUMENT_RETRY_DELAY_MS = 10_000;
 const DOCUMENT_TIMEOUT_MS = 9 * 60 * 1_000;
+const PROJECT_POLL_DELAY_MS = 5_000;
+const PROJECT_RETRY_DELAY_MS = 10_000;
+const PROJECT_TIMEOUT_MS = 12 * 60 * 1_000;
 const DEFAULT_MODEL = "gpt-5.6-sol";
 
 type DocumentJobContext = {
@@ -82,6 +85,10 @@ const completeProjectJobReference = makeFunctionReference<
     jobId: Id<"heliosIntelligenceJobs">;
     model: string;
     result: unknown;
+    responseId?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
   },
   null
 >("heliosIntelligence:completeProjectJob");
@@ -90,11 +97,25 @@ const failProjectJobReference = makeFunctionReference<
   { jobId: Id<"heliosIntelligenceJobs">; error: string },
   null
 >("heliosIntelligence:failProjectJob");
+const markProjectResponseReference = makeFunctionReference<
+  "mutation",
+  {
+    jobId: Id<"heliosIntelligenceJobs">;
+    responseId: string;
+    model: string;
+  },
+  boolean
+>("heliosIntelligence:markProjectResponse");
 const pollDocumentReference = makeFunctionReference<
   "action",
   { jobId: Id<"heliosIntelligenceJobs"> },
   null
 >("heliosIntelligenceActions:pollDocument");
+const pollProjectReference = makeFunctionReference<
+  "action",
+  { jobId: Id<"heliosIntelligenceJobs"> },
+  null
+>("heliosIntelligenceActions:pollProject");
 
 function modelName() {
   const configured = (process.env.HELIOS_OPENAI_MODEL || "").trim();
@@ -398,13 +419,23 @@ export const synthesizeProject = internalAction({
       return null;
     }
 
+    let client: OpenAI | undefined;
+    let responseId: string | undefined;
     try {
-      const client = openAIClient();
+      client = openAIClient();
       const model = modelName();
       const response = await client.responses.create({
         model,
-        store: false,
+        background: true,
+        store: true,
         safety_identifier: safetyIdentifier(context.job.companyId),
+        metadata: {
+          helios_job: String(context.job._id),
+          helios_project: String(context.project._id),
+          helios_package: context.job.packageId
+            ? String(context.job.packageId)
+            : "legacy",
+        },
         instructions: HELIOS_SYNTHESIS_PROMPT,
         input: projectSynthesisInput(context),
         reasoning: { effort: "high" },
@@ -414,9 +445,93 @@ export const synthesizeProject = internalAction({
         },
         max_output_tokens: 40_000,
       });
-      if (response.status !== "completed") {
-        throw new Error("Project synthesis did not complete.");
+      responseId = response.id;
+      const marked = await ctx.runMutation(markProjectResponseReference, {
+        jobId: args.jobId,
+        responseId,
+        model: response.model || model,
+      });
+      if (!marked) {
+        await cleanupOpenAI(client, undefined, responseId);
+        return null;
       }
+      await ctx.scheduler.runAfter(PROJECT_POLL_DELAY_MS, pollProjectReference, {
+        jobId: args.jobId,
+      });
+    } catch {
+      if (client && responseId) {
+        await cleanupOpenAI(client, undefined, responseId);
+      }
+      await ctx.runMutation(failProjectJobReference, {
+        jobId: args.jobId,
+        error:
+          "Project intelligence synthesis failed. Existing document evidence remains available for retry.",
+      });
+    }
+    return null;
+  },
+});
+
+export const pollProject = internalAction({
+  args: { jobId: v.id("heliosIntelligenceJobs") },
+  handler: async (ctx, args): Promise<null> => {
+    const context = await ctx.runQuery(loadProjectJobReference, args);
+    if (!context || !context.job.openaiResponseId) return null;
+    const client = openAIClient();
+    const elapsed =
+      Date.now() - (context.job.startedAt || context.job.createdAt);
+
+    let response;
+    try {
+      response = await client.responses.retrieve(
+        context.job.openaiResponseId,
+      );
+    } catch {
+      if (elapsed < PROJECT_TIMEOUT_MS) {
+        await ctx.scheduler.runAfter(
+          PROJECT_RETRY_DELAY_MS,
+          pollProjectReference,
+          args,
+        );
+        return null;
+      }
+      await ctx.runMutation(failProjectJobReference, {
+        jobId: args.jobId,
+        error:
+          "Project synthesis timed out while checking model progress. Existing intelligence remains available.",
+      });
+      return null;
+    }
+
+    if (response.status === "queued" || response.status === "in_progress") {
+      if (elapsed < PROJECT_TIMEOUT_MS) {
+        await ctx.scheduler.runAfter(
+          PROJECT_POLL_DELAY_MS,
+          pollProjectReference,
+          args,
+        );
+        return null;
+      }
+      await cleanupOpenAI(client, undefined, context.job.openaiResponseId);
+      await ctx.runMutation(failProjectJobReference, {
+        jobId: args.jobId,
+        error:
+          "Project synthesis exceeded the secure processing window. Existing intelligence remains available.",
+      });
+      return null;
+    }
+
+    if (response.status !== "completed") {
+      await cleanupOpenAI(client, undefined, context.job.openaiResponseId);
+      await ctx.runMutation(failProjectJobReference, {
+        jobId: args.jobId,
+        error:
+          "OpenAI did not complete project synthesis. Existing intelligence remains available for retry.",
+      });
+      return null;
+    }
+
+    try {
       const validEvidenceIds = context.evidence.map((row) => String(row._id));
       const result = parseProjectSynthesis(
         parsedOutput(response.output_text),
@@ -424,15 +539,22 @@ export const synthesizeProject = internalAction({
       );
       await ctx.runMutation(completeProjectJobReference, {
         jobId: args.jobId,
-        model: response.model || model,
+        model: response.model || context.job.model || modelName(),
         result,
+        responseId: response.id,
+        inputTokens: response.usage?.input_tokens,
+        outputTokens: response.usage?.output_tokens,
+        totalTokens: response.usage?.total_tokens,
       });
-    } catch {
+    } catch (error) {
       await ctx.runMutation(failProjectJobReference, {
         jobId: args.jobId,
-        error:
-          "Project intelligence synthesis failed. Existing document evidence remains available for retry.",
+        error: `Project evidence validation failed: ${
+          error instanceof Error ? error.message : "Unknown validation error."
+        } Existing intelligence remains available for retry.`,
       });
+    } finally {
+      await cleanupOpenAI(client, undefined, context.job.openaiResponseId);
     }
     return null;
   },

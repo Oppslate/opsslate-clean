@@ -23,8 +23,10 @@ import { useToast } from "@opsslate/suite-ui/toast";
 import {
   AlertTriangle,
   Bot,
+  ChevronDown,
   FileSearch,
   Info,
+  LoaderCircle,
   RotateCcw,
   ShieldCheck,
 } from "lucide-react";
@@ -36,6 +38,7 @@ import { StatusBadge } from "./status-badge";
 
 const categoryLabels: Record<HeliosIntelligenceCategory, string> = {
   project_metadata: "Project metadata",
+  document_control: "Document control",
   contract_requirements: "Contract requirements",
   required_forms: "Required forms",
   addenda: "Addenda",
@@ -49,12 +52,20 @@ const categoryLabels: Record<HeliosIntelligenceCategory, string> = {
   missing_information: "Missing information",
   required_subcontractors: "Required subcontractors",
   required_suppliers: "Required suppliers",
+  scope_conflicts: "Scope conflicts",
+  addendum_impacts: "Addendum impacts",
 };
 
 function confidenceLabel(value: number) {
   if (value >= 85) return "High confidence";
   if (value >= 65) return "Medium confidence";
   return "Low confidence";
+}
+
+function confidenceBadgeClass(value: number) {
+  if (value >= 85) return "border-green-500/30 bg-green-500/10 text-green-200";
+  if (value >= 65) return "border-amber-500/30 bg-amber-500/10 text-amber-100";
+  return "border-red-500/30 bg-red-500/10 text-red-200";
 }
 
 function CitationList({
@@ -97,10 +108,12 @@ export function ProjectIntelligencePanel({
   projectId,
   status,
   intelligence,
+  latestError,
 }: {
   projectId: string;
   status: string;
   intelligence?: HeliosProjectIntelligence;
+  latestError?: string;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -209,6 +222,18 @@ export function ProjectIntelligencePanel({
     const existing = grouped.get(finding.category) || [];
     grouped.set(finding.category, [...existing, finding]);
   }
+  const evidenceByDocument = new Map<
+    string,
+    HeliosProjectIntelligence["evidence"]
+  >();
+  for (const evidence of intelligence.evidence) {
+    const existing = evidenceByDocument.get(evidence.documentName) || [];
+    evidenceByDocument.set(evidence.documentName, [...existing, evidence]);
+  }
+  const isUpdating = ["queued", "processing"].includes(status);
+  const latestRefreshFailed = status === "failed";
+  const isStale = intelligence.isStale || latestRefreshFailed;
+  const needsConfidenceReview = intelligence.confidence < 65;
 
   return (
     <Card>
@@ -223,7 +248,10 @@ export function ProjectIntelligencePanel({
                 <Bot aria-hidden="true" />
                 AI-generated
               </Badge>
-              <Badge variant="secondary">
+              <Badge
+                variant="outline"
+                className={confidenceBadgeClass(intelligence.confidence)}
+              >
                 {confidenceLabel(intelligence.confidence)} ·{" "}
                 {intelligence.confidence}%
               </Badge>
@@ -234,20 +262,99 @@ export function ProjectIntelligencePanel({
               review required before downstream use.
             </CardDescription>
           </div>
-          <StatusBadge value={status} />
+          {isUpdating ? (
+            <Badge
+              variant="outline"
+              className="border-orange-500/35 bg-orange-500/10 text-orange-200"
+            >
+              <LoaderCircle
+                className="size-3.5 animate-spin"
+                aria-hidden="true"
+              />
+              Updating
+            </Badge>
+          ) : (
+            <StatusBadge value={status} />
+          )}
         </div>
       </CardHeader>
       <CardContent>
+        {(isUpdating || isStale || needsConfidenceReview) && (
+          <div className="mb-4 space-y-2">
+            {isUpdating && (
+              <div
+                className="flex items-start gap-2 rounded-lg border border-orange-500/25 bg-orange-500/5 p-3 text-sm text-orange-100"
+                role="status"
+              >
+                <LoaderCircle
+                  className="mt-0.5 size-4 shrink-0 animate-spin"
+                  aria-hidden="true"
+                />
+                <p>
+                  New documents are still being analyzed. This is the last
+                  completed intelligence snapshot and may change.
+                </p>
+              </div>
+            )}
+            {isStale && (
+              <div
+                className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 text-sm text-amber-100"
+                role="alert"
+              >
+                <div className="flex min-w-0 items-start gap-2">
+                  <AlertTriangle
+                    className="mt-0.5 size-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <p>
+                    {latestRefreshFailed
+                      ? "The latest package synthesis failed. This is the last completed intelligence snapshot."
+                      : "A newer bid-package revision exists. This snapshot is retained for audit history until the new package is finalized and analyzed."}
+                    {latestError ? ` ${latestError}` : ""}
+                  </p>
+                </div>
+                {latestRefreshFailed && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={retrying}
+                    onClick={() => void retryProject()}
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden="true" />
+                    {retrying ? "Retrying…" : "Retry synthesis"}
+                  </Button>
+                )}
+              </div>
+            )}
+            {needsConfidenceReview && (
+              <div
+                className="flex items-start gap-2 rounded-lg border border-red-500/25 bg-red-500/5 p-3 text-sm text-red-100"
+                role="alert"
+              >
+                <AlertTriangle
+                  className="mt-0.5 size-4 shrink-0"
+                  aria-hidden="true"
+                />
+                <p>
+                  Confidence is below the review threshold. Verify the cited
+                  source pages before using these findings.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         <Tabs defaultValue="overview">
-          <TabsList className="max-w-full overflow-x-auto" variant="line">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="findings">
-              Findings ({intelligence.findings.length})
-            </TabsTrigger>
-            <TabsTrigger value="evidence">
-              Evidence ({intelligence.evidence.length})
-            </TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto overflow-y-hidden pb-1">
+            <TabsList className="min-w-max" variant="line">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="findings">
+                Findings ({intelligence.findings.length})
+              </TabsTrigger>
+              <TabsTrigger value="evidence">
+                Evidence ({intelligence.evidence.length})
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="overview" className="pt-4">
             <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 p-4">
@@ -342,8 +449,13 @@ export function ProjectIntelligencePanel({
                                 </p>
                               </div>
                             </div>
-                            <Badge variant="secondary">
-                              {finding.confidence}%
+                            <Badge
+                              variant="outline"
+                              className={confidenceBadgeClass(
+                                finding.confidence,
+                              )}
+                            >
+                              {finding.confidence}% confidence
                             </Badge>
                           </div>
                           <CitationList
@@ -360,32 +472,54 @@ export function ProjectIntelligencePanel({
           </TabsContent>
 
           <TabsContent value="evidence" className="pt-4">
+            <div className="mb-3 text-sm text-muted-foreground">
+              {evidenceByDocument.size} documents ·{" "}
+              {intelligence.evidence.length} cited passages
+            </div>
             <div className="space-y-2">
-              {intelligence.evidence.map((evidence) => (
-                <article
-                  key={evidence.id}
-                  className="rounded-lg border border-border p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-medium">
-                      {evidence.documentName}
+              {Array.from(evidenceByDocument.entries()).map(
+                ([documentName, evidenceRows]) => (
+                  <details
+                    key={documentName}
+                    className="group overflow-hidden rounded-lg border border-border bg-muted/10"
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">
+                          {documentName}
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {evidenceRows.length} cited{" "}
+                          {evidenceRows.length === 1 ? "passage" : "passages"}
+                        </div>
+                      </div>
+                      <ChevronDown
+                        className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </summary>
+                    <div className="divide-y divide-border border-t border-border">
+                      {evidenceRows.map((evidence) => (
+                        <article key={evidence.id} className="p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs text-muted-foreground">
+                              {evidence.locator || "No section label"}
+                            </div>
+                            <Badge variant="outline">
+                              {evidence.pageNumber
+                                ? `PDF page ${evidence.pageNumber}`
+                                : "Page not identified"}
+                            </Badge>
+                          </div>
+                          <blockquote className="mt-2 border-l-2 border-orange-500/40 pl-3 text-sm leading-5 text-muted-foreground">
+                            “{evidence.excerpt}”
+                          </blockquote>
+                        </article>
+                      ))}
                     </div>
-                    <Badge variant="outline">
-                      {evidence.pageNumber
-                        ? `PDF page ${evidence.pageNumber}`
-                        : "Page not identified"}
-                    </Badge>
-                  </div>
-                  {evidence.locator && (
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      {evidence.locator}
-                    </div>
-                  )}
-                  <blockquote className="mt-2 border-l-2 border-orange-500/40 pl-3 text-sm leading-5 text-muted-foreground">
-                    “{evidence.excerpt}”
-                  </blockquote>
-                </article>
-              ))}
+                  </details>
+                ),
+              )}
             </div>
           </TabsContent>
         </Tabs>

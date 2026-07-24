@@ -35,7 +35,7 @@ const documentFindingSchema = {
     category: { type: "string", enum: HELIOS_INTELLIGENCE_CATEGORIES },
     title: { type: "string", minLength: 1, maxLength: 240 },
     detail: { type: "string", minLength: 1, maxLength: 2400 },
-    confidence: { type: "number", minimum: 0, maximum: 100 },
+    confidence: { type: "integer", minimum: 0, maximum: 100 },
     severity: { type: "string", enum: HELIOS_FINDING_SEVERITIES },
     evidenceKeys: {
       type: "array",
@@ -52,7 +52,7 @@ const evidenceBackedValueSchema = {
   required: ["value", "confidence", "evidenceIds"],
   properties: {
     value: { type: "string", maxLength: 240 },
-    confidence: { type: "number", minimum: 0, maximum: 100 },
+    confidence: { type: "integer", minimum: 0, maximum: 100 },
     evidenceIds: {
       type: "array",
       maxItems: 40,
@@ -76,7 +76,7 @@ const projectFindingSchema = {
     category: { type: "string", enum: HELIOS_INTELLIGENCE_CATEGORIES },
     title: { type: "string", minLength: 1, maxLength: 240 },
     detail: { type: "string", minLength: 1, maxLength: 2400 },
-    confidence: { type: "number", minimum: 0, maximum: 100 },
+    confidence: { type: "integer", minimum: 0, maximum: 100 },
     severity: { type: "string", enum: HELIOS_FINDING_SEVERITIES },
     evidenceIds: {
       type: "array",
@@ -111,7 +111,7 @@ export const heliosDocumentIntelligenceFormat = {
         maxItems: 40,
         items: { type: "string", minLength: 1, maxLength: 128 },
       },
-      confidence: { type: "number", minimum: 0, maximum: 100 },
+      confidence: { type: "integer", minimum: 0, maximum: 100 },
       evidence: {
         type: "array",
         minItems: 1,
@@ -152,7 +152,7 @@ export const heliosProjectSynthesisFormat = {
       },
       projectType: evidenceBackedValueSchema,
       fundingSource: evidenceBackedValueSchema,
-      confidence: { type: "number", minimum: 0, maximum: 100 },
+      confidence: { type: "integer", minimum: 0, maximum: 100 },
       findings: {
         type: "array",
         maxItems: 300,
@@ -177,6 +177,22 @@ including bonds, insurance, prevailing wage, MWBE/DBE goals, permits, traffic
 control, environmental controls, utility work, dewatering, temporary works,
 liquidated damages, bid forms, alternates, allowances, unit prices, drawing
 indexes, specification sections, and addenda.
+
+Document-control rules:
+- Classify the document by its construction purpose, such as plans,
+  specifications, proposal, addendum, general conditions, wage schedule,
+  geotechnical report, permit, bid form, or supporting reference.
+- Identify issue status and watermarks including "Not For Bidding",
+  "Preliminary", "Issued for Bid", revisions, and addendum references.
+- Treat filename information as context only; base conclusions on document
+  content and cited evidence.
+
+Confidence rules:
+- Every confidence score is an integer percentage from 0 to 100.
+- Never return a decimal fraction between 0 and 1.
+- Use 90-100 for explicit, unambiguous evidence; 70-89 for strong evidence
+  requiring limited interpretation; 40-69 for partial or ambiguous evidence;
+  and 0-39 when the source is weak, incomplete, or unreadable.
 
 Evidence rules:
 - Every finding must cite one or more evidence keys from the evidence array.
@@ -203,4 +219,22 @@ separate warnings. Every summary statement and finding must cite one or more
 evidence IDs supplied in the input. Project type and funding source must cite
 evidence when populated; use an empty value and an empty evidence list when
 the source documents do not establish them.
+
+Package-control rules:
+- Evaluate the supplied document register as one bid package.
+- Identify missing referenced plans, specifications, forms, conditions,
+  addenda, wage schedules, permits, and supporting reports.
+- Identify contradictions across documents as scope_conflicts findings.
+- Identify revisions or addenda that change dates, quantities, scope,
+  requirements, or bid responsiveness as addendum_impacts findings.
+- Identify preliminary, superseded, or "Not For Bidding" material as
+  document_control findings.
+- Do not imply that the package is complete when controlling documents are
+  missing or the evidence is inconsistent.
+
+Every confidence score must be an integer percentage from 0 to 100, never a
+decimal fraction between 0 and 1. Use 90-100 for explicit, consistent evidence;
+70-89 for strong evidence requiring limited interpretation; 40-69 for partial
+or conflicting evidence; and 0-39 when the supplied record is weak or
+incomplete.
 `.trim();

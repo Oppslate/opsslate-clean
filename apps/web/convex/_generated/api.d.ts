@@ -80,6 +80,7 @@ import type * as heliosIdentity from "../heliosIdentity.js";
 import type * as heliosIntelligence from "../heliosIntelligence.js";
 import type * as heliosIntelligenceActions from "../heliosIntelligenceActions.js";
 import type * as heliosOpenAIContracts from "../heliosOpenAIContracts.js";
+import type * as heliosPackages from "../heliosPackages.js";
 import type * as heliosProjects from "../heliosProjects.js";
 import type * as http from "../http.js";
 import type * as inboundEmailAddresses from "../inboundEmailAddresses.js";
@@ -203,6 +204,7 @@ declare const fullApi: ApiFromModules<{
   heliosIntelligence: typeof heliosIntelligence;
   heliosIntelligenceActions: typeof heliosIntelligenceActions;
   heliosOpenAIContracts: typeof heliosOpenAIContracts;
+  heliosPackages: typeof heliosPackages;
   heliosProjects: typeof heliosProjects;
   http: typeof http;
   inboundEmailAddresses: typeof inboundEmailAddresses;

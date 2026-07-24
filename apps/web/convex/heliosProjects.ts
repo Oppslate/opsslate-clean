@@ -67,6 +67,8 @@ function documentSummary(document: Doc<"heliosDocuments">) {
     status: document.status,
     attemptCount: document.attemptCount || 0,
     lastError: document.lastError,
+    packageId: document.packageId ? String(document.packageId) : undefined,
+    relativePath: document.relativePath,
     processingStartedAt: document.processingStartedAt,
     processingCompletedAt: document.processingCompletedAt,
     createdAt: document.createdAt,
@@ -184,6 +186,68 @@ export const getProject = internalQuery({
       )
       .order("desc")
       .collect();
+    const documentAnalyses = await Promise.all(
+      documents.map((document) =>
+        ctx.db
+          .query("heliosDocumentIntelligence")
+          .withIndex("by_document", (query) =>
+            query.eq("documentId", document._id),
+          )
+          .first(),
+      ),
+    );
+    const documentSummaries = documents.map((document, index) => ({
+      ...documentSummary(document),
+      documentType: documentAnalyses[index]?.documentType,
+    }));
+    const packages = await ctx.db
+      .query("heliosBidPackages")
+      .withIndex("by_project_revision", (query) =>
+        query.eq("projectId", project._id),
+      )
+      .order("desc")
+      .collect();
+    const packageRows = await Promise.all(
+      packages.map(async (bidPackage) => {
+        const entries = await ctx.db
+          .query("heliosPackageEntries")
+          .withIndex("by_package", (query) =>
+            query.eq("packageId", bidPackage._id),
+          )
+          .collect();
+        return {
+          id: String(bidPackage._id),
+          projectId: String(project._id),
+          name: bidPackage.name,
+          sourceType: bidPackage.sourceType,
+          revision: bidPackage.revision,
+          status: bidPackage.status,
+          entryCount: bidPackage.entryCount,
+          pdfCount: bidPackage.pdfCount,
+          rejectedCount: bidPackage.rejectedCount,
+          uploadedCount: bidPackage.uploadedCount,
+          duplicateCount: bidPackage.duplicateCount,
+          failedCount: bidPackage.failedCount,
+          totalBytes: bidPackage.totalBytes,
+          lastError: bidPackage.lastError,
+          finalizedAt: bidPackage.finalizedAt,
+          analysisCompletedAt: bidPackage.analysisCompletedAt,
+          createdAt: bidPackage.createdAt,
+          updatedAt: bidPackage.updatedAt,
+          entries: entries.map((entry) => ({
+            id: String(entry._id),
+            packageId: String(entry.packageId),
+            relativePath: entry.relativePath,
+            size: entry.size,
+            status: entry.status,
+            reason: entry.reason,
+            documentId: entry.documentId
+              ? String(entry.documentId)
+              : undefined,
+          })),
+        };
+      }),
+    );
     const intelligence = await ctx.db
       .query("heliosProjectIntelligence")
       .withIndex("by_project", (query) =>
@@ -204,7 +268,12 @@ export const getProject = internalQuery({
     );
     return {
       project: projectSummary(project, documents.length),
-      documents: documents.map(documentSummary),
+      documents: documentSummaries,
+      packages: packageRows,
+      activePackageId: project.activePackageId
+        ? String(project.activePackageId)
+        : undefined,
+      latestIntelligenceError: project.latestIntelligenceError,
       intelligence: intelligence
         ? {
             id: intelligence._id,
@@ -237,6 +306,17 @@ export const getProject = internalQuery({
               locator: row.locator,
               excerpt: row.excerpt,
             })),
+            packageId: intelligence.packageId
+              ? String(intelligence.packageId)
+              : undefined,
+            packageRevision: intelligence.packageRevision,
+            generationId: intelligence.generationId
+              ? String(intelligence.generationId)
+              : undefined,
+            isStale:
+              Boolean(project.currentPackageRevision) &&
+              (intelligence.packageRevision || 0) <
+                (project.currentPackageRevision || 0),
             generatedAt: intelligence.generatedAt,
           }
         : undefined,
@@ -248,6 +328,8 @@ export const createUploadIntent = internalMutation({
   args: {
     principal: heliosPrincipalValidator,
     projectId: v.string(),
+    packageId: v.optional(v.string()),
+    packageEntryId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { user, companyId } = await requireHeliosPrincipal(
@@ -258,12 +340,54 @@ export const createUploadIntent = internalMutation({
     if (project.status === "archived") {
       throw new Error("Archived projects cannot accept documents.");
     }
+    if (Boolean(args.packageId) !== Boolean(args.packageEntryId)) {
+      throw new Error("Package upload information is incomplete.");
+    }
+
+    let packageId: Id<"heliosBidPackages"> | undefined;
+    let packageEntryId: Id<"heliosPackageEntries"> | undefined;
+    if (args.packageId && args.packageEntryId) {
+      packageId =
+        ctx.db.normalizeId("heliosBidPackages", args.packageId) || undefined;
+      packageEntryId =
+        ctx.db.normalizeId("heliosPackageEntries", args.packageEntryId) ||
+        undefined;
+      if (!packageId || !packageEntryId) {
+        throw new Error("Bid package upload is invalid.");
+      }
+      const [bidPackage, entry] = await Promise.all([
+        ctx.db.get(packageId),
+        ctx.db.get(packageEntryId),
+      ]);
+      if (
+        !bidPackage ||
+        !entry ||
+        bidPackage.companyId !== companyId ||
+        bidPackage.projectId !== project._id ||
+        entry.companyId !== companyId ||
+        entry.projectId !== project._id ||
+        entry.packageId !== bidPackage._id ||
+        !["pending", "failed"].includes(entry.status) ||
+        bidPackage.status !== "uploading"
+      ) {
+        throw new Error("Bid package entry cannot be uploaded.");
+      }
+      if (entry.status === "failed") {
+        await ctx.db.patch(entry._id, {
+          status: "pending",
+          reason: undefined,
+          updatedAt: Date.now(),
+        });
+      }
+    }
 
     const now = Date.now();
     const intentId = await ctx.db.insert("heliosUploadIntents", {
       companyId,
       projectId: project._id,
       createdBy: user._id,
+      packageId,
+      packageEntryId,
       status: "pending",
       expiresAt: now + HELIOS_UPLOAD_INTENT_LIFETIME_MS,
       createdAt: now,
@@ -313,6 +437,24 @@ export const inspectUpload = internalQuery({
   },
 });
 
+async function refreshPackageCounts(
+  ctx: MutationCtx,
+  packageId: Id<"heliosBidPackages">,
+  now: number,
+) {
+  const entries = await ctx.db
+    .query("heliosPackageEntries")
+    .withIndex("by_package", (query) => query.eq("packageId", packageId))
+    .collect();
+  await ctx.db.patch(packageId, {
+    uploadedCount: entries.filter((entry) => entry.status === "uploaded").length,
+    duplicateCount: entries.filter((entry) => entry.status === "duplicate")
+      .length,
+    failedCount: entries.filter((entry) => entry.status === "failed").length,
+    updatedAt: now,
+  });
+}
+
 export const registerDocument = internalMutation({
   args: {
     principal: heliosPrincipalValidator,
@@ -343,8 +485,34 @@ export const registerDocument = internalMutation({
     }
 
     const now = Date.now();
+    const packageEntry = intent.packageEntryId
+      ? await ctx.db.get(intent.packageEntryId)
+      : null;
+    const bidPackage = intent.packageId
+      ? await ctx.db.get(intent.packageId)
+      : null;
+    if (
+      Boolean(intent.packageId) !== Boolean(intent.packageEntryId) ||
+      (intent.packageId &&
+        (!bidPackage ||
+          !packageEntry ||
+          bidPackage.companyId !== companyId ||
+          bidPackage.projectId !== project._id ||
+          bidPackage.status !== "uploading" ||
+          packageEntry.companyId !== companyId ||
+          packageEntry.projectId !== project._id ||
+          packageEntry.packageId !== bidPackage._id ||
+          packageEntry._id !== intent.packageEntryId ||
+          packageEntry.status !== "pending"))
+    ) {
+      throw new Error("Bid package upload is no longer valid.");
+    }
+
     const metadata = await ctx.db.system.get("_storage", args.storageId);
-    const canonicalFileName = canonicalPdfFileName(args.fileName);
+    const relativePath = packageEntry?.relativePath;
+    const fileName =
+      relativePath?.split("/").pop()?.trim() || args.fileName.trim();
+    const canonicalFileName = canonicalPdfFileName(fileName);
     const invalidReason =
       !metadata
         ? "Uploaded file was not found."
@@ -352,6 +520,8 @@ export const registerDocument = internalMutation({
           ? "Uploaded file is not a PDF."
           : metadata.size <= 0 || metadata.size > HELIOS_MAX_PDF_BYTES
             ? "Uploaded PDF exceeds the allowed size."
+            : packageEntry && metadata.size !== packageEntry.size
+              ? "Uploaded PDF size does not match the package manifest."
             : !args.magicValid
               ? "Uploaded file does not contain a valid PDF signature."
               : !canonicalFileName.endsWith(".pdf")
@@ -365,7 +535,18 @@ export const registerDocument = internalMutation({
         failureReason: invalidReason || "Uploaded file is invalid.",
         updatedAt: now,
       });
-      throw new Error(invalidReason || "Uploaded file is invalid.");
+      if (packageEntry && bidPackage) {
+        await ctx.db.patch(packageEntry._id, {
+          status: "failed",
+          reason: invalidReason || "Uploaded file is invalid.",
+          updatedAt: now,
+        });
+        await refreshPackageCounts(ctx, bidPackage._id, now);
+      }
+      return {
+        kind: "rejected" as const,
+        error: invalidReason || "Uploaded file is invalid.",
+      };
     }
 
     const duplicate = await ctx.db
@@ -381,7 +562,38 @@ export const registerDocument = internalMutation({
         duplicateDocumentId: duplicate._id,
         updatedAt: now,
       });
+      if (packageEntry && bidPackage) {
+        await ctx.db.patch(packageEntry._id, {
+          status: "duplicate",
+          documentId: duplicate._id,
+          reason: "Exact file already exists in this project.",
+          updatedAt: now,
+        });
+        await refreshPackageCounts(ctx, bidPackage._id, now);
+      }
       return { kind: "duplicate" as const, document: documentSummary(duplicate) };
+    }
+
+    const existingPathDocuments = relativePath
+      ? await ctx.db
+          .query("heliosDocuments")
+          .withIndex("by_project", (query) =>
+            query.eq("projectId", project._id),
+          )
+          .collect()
+      : [];
+    const priorVersion = existingPathDocuments
+      .filter(
+        (document) =>
+          document.status !== "superseded" &&
+          document.relativePath?.toLowerCase() === relativePath.toLowerCase(),
+      )
+      .sort((left, right) => right.version - left.version)[0];
+    if (priorVersion) {
+      await ctx.db.patch(priorVersion._id, {
+        status: "superseded",
+        updatedAt: now,
+      });
     }
 
     const documentId = await ctx.db.insert("heliosDocuments", {
@@ -389,26 +601,43 @@ export const registerDocument = internalMutation({
       projectId: project._id,
       uploadedBy: user._id,
       storageId: args.storageId,
-      fileName: args.fileName.trim(),
+      fileName,
       canonicalFileName,
       contentType: "application/pdf",
       size: metadata.size,
       sha256: metadata.sha256,
       status: "ready_for_intelligence",
       attemptCount: 0,
-      version: 1,
+      packageId: bidPackage?._id,
+      packageEntryId: packageEntry?._id,
+      relativePath,
+      version: (priorVersion?.version || 0) + 1,
+      supersedesDocumentId: priorVersion?._id,
       createdAt: now,
       updatedAt: now,
     });
     await ctx.db.patch(intent._id, { status: "consumed", updatedAt: now });
-    await ctx.db.patch(project._id, {
-      status: "documents_ready",
-      intelligenceStatus: "ready_for_intelligence",
-      updatedAt: now,
-    });
+    if (packageEntry && bidPackage) {
+      await ctx.db.patch(packageEntry._id, {
+        status: "uploaded",
+        documentId,
+        reason: undefined,
+        updatedAt: now,
+      });
+      await refreshPackageCounts(ctx, bidPackage._id, now);
+      await ctx.db.patch(project._id, { updatedAt: now });
+    } else {
+      await ctx.db.patch(project._id, {
+        status: "documents_ready",
+        intelligenceStatus: "ready_for_intelligence",
+        updatedAt: now,
+      });
+    }
     const document = await ctx.db.get(documentId);
     if (!document) throw new Error("Document could not be registered.");
-    await ctx.scheduler.runAfter(0, queueDocumentReference, { documentId });
+    if (!bidPackage) {
+      await ctx.scheduler.runAfter(0, queueDocumentReference, { documentId });
+    }
     return { kind: "created" as const, document: documentSummary(document) };
   },
 });

@@ -10,6 +10,7 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  type QueryCtx,
 } from "./_generated/server";
 import {
   heliosPrincipalValidator,
@@ -82,6 +83,24 @@ async function activeDocumentJob(
   return jobs.find((job) => activeDocumentStatuses.has(job.status));
 }
 
+async function packageDocumentIds(
+  ctx: MutationCtx | QueryCtx,
+  packageId: Id<"heliosBidPackages">,
+) {
+  const entries = await ctx.db
+    .query("heliosPackageEntries")
+    .withIndex("by_package", (query) => query.eq("packageId", packageId))
+    .collect();
+  return new Set(
+    entries
+      .map((entry) => entry.documentId)
+      .filter((documentId): documentId is Id<"heliosDocuments"> =>
+        Boolean(documentId),
+      )
+      .map(String),
+  );
+}
+
 async function enqueueDocument(
   ctx: MutationCtx,
   document: Doc<"heliosDocuments">,
@@ -94,6 +113,7 @@ async function enqueueDocument(
     companyId: document.companyId,
     projectId: document.projectId,
     documentId: document._id,
+    packageId: document.packageId,
     kind: "document",
     status: "queued",
     attempt,
@@ -116,6 +136,99 @@ async function enqueueDocument(
   return jobId;
 }
 
+async function enqueueProjectSynthesis(
+  ctx: MutationCtx,
+  project: Doc<"heliosProjects">,
+  bidPackage?: Doc<"heliosBidPackages">,
+) {
+  const active = await ctx.db
+    .query("heliosIntelligenceJobs")
+    .withIndex("by_project_status", (query) =>
+      query.eq("projectId", project._id).eq("status", "synthesizing"),
+    )
+    .first();
+  if (active) return active._id;
+
+  const projectJobs = await ctx.db
+    .query("heliosIntelligenceJobs")
+    .withIndex("by_project_status", (query) =>
+      query.eq("projectId", project._id),
+    )
+    .collect();
+  const attempt =
+    Math.max(
+      0,
+      ...projectJobs
+        .filter((job) => job.kind === "project")
+        .map((job) => job.attempt),
+    ) + 1;
+  const now = Date.now();
+  const jobId = await ctx.db.insert("heliosIntelligenceJobs", {
+    companyId: project.companyId,
+    projectId: project._id,
+    packageId: bidPackage?._id,
+    packageRevision: bidPackage?.revision,
+    kind: "project",
+    status: "synthesizing",
+    attempt,
+    createdAt: now,
+    startedAt: now,
+    updatedAt: now,
+  });
+  await ctx.db.patch(project._id, {
+    intelligenceStatus: "processing",
+    latestIntelligenceError: undefined,
+    updatedAt: now,
+  });
+  if (bidPackage) {
+    await ctx.db.patch(bidPackage._id, {
+      status: "processing",
+      lastError: undefined,
+      updatedAt: now,
+    });
+  }
+  await ctx.scheduler.runAfter(0, synthesizeProjectReference, { jobId });
+  return jobId;
+}
+
+async function maybeStartProjectSynthesis(
+  ctx: MutationCtx,
+  projectId: Id<"heliosProjects">,
+  packageId?: Id<"heliosBidPackages">,
+) {
+  const project = await ctx.db.get(projectId);
+  if (!project) return null;
+  const bidPackage = packageId ? await ctx.db.get(packageId) : undefined;
+  if (packageId && (!bidPackage || !bidPackage.finalizedAt)) return null;
+
+  const documents = await ctx.db
+    .query("heliosDocuments")
+    .withIndex("by_project", (query) => query.eq("projectId", projectId))
+    .collect();
+  const allowedDocumentIds = packageId
+    ? await packageDocumentIds(ctx, packageId)
+    : undefined;
+  const scopedDocuments = allowedDocumentIds
+    ? documents.filter((document) =>
+        allowedDocumentIds.has(String(document._id)),
+      )
+    : documents;
+  const active = scopedDocuments.some((document) =>
+    [
+      "ready_for_intelligence",
+      "queued",
+      "uploading_to_openai",
+      "analyzing",
+    ].includes(document.status),
+  );
+  if (active) return null;
+  const hasCompleted = scopedDocuments.some(
+    (document) => document.status === "completed",
+  );
+  if (!hasCompleted) return null;
+  return enqueueProjectSynthesis(ctx, project, bidPackage);
+}
+
 export const queueDocument = internalMutation({
   args: { documentId: v.id("heliosDocuments") },
   handler: async (ctx, args) => {
@@ -128,6 +241,99 @@ export const queueDocument = internalMutation({
       return null;
     }
     return enqueueDocument(ctx, document);
+  },
+});
+
+export const finalizePackage = internalMutation({
+  args: {
+    principal: heliosPrincipalValidator,
+    projectId: v.string(),
+    packageId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { companyId } = await requireHeliosPrincipal(ctx, args.principal);
+    const project = await projectForCompany(ctx, companyId, args.projectId);
+    const packageId = ctx.db.normalizeId("heliosBidPackages", args.packageId);
+    if (!packageId) throw new Error("Bid package not found.");
+    const bidPackage = await ctx.db.get(packageId);
+    if (
+      !bidPackage ||
+      bidPackage.companyId !== companyId ||
+      bidPackage.projectId !== project._id ||
+      project.activePackageId !== bidPackage._id
+    ) {
+      throw new Error("Bid package not found.");
+    }
+    if (bidPackage.finalizedAt) {
+      return {
+        packageId: String(bidPackage._id),
+        status: bidPackage.status,
+      };
+    }
+    if (bidPackage.status !== "uploading") {
+      throw new Error("Bid package cannot be finalized.");
+    }
+    const entries = await ctx.db
+      .query("heliosPackageEntries")
+      .withIndex("by_package", (query) =>
+        query.eq("packageId", bidPackage._id),
+      )
+      .collect();
+    const unresolved = entries.filter((entry) =>
+      ["pending", "failed"].includes(entry.status),
+    );
+    if (unresolved.length) {
+      throw new Error(
+        `${unresolved.length} package files still require attention.`,
+      );
+    }
+    const accepted = entries.filter((entry) =>
+      ["uploaded", "duplicate"].includes(entry.status),
+    );
+    if (!accepted.length) {
+      throw new Error("The bid package contains no registered PDFs.");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(bidPackage._id, {
+      status: "ready_for_analysis",
+      finalizedAt: now,
+      lastError: undefined,
+      updatedAt: now,
+    });
+    const documents = await ctx.db
+      .query("heliosDocuments")
+      .withIndex("by_project", (query) =>
+        query.eq("projectId", project._id),
+      )
+      .collect();
+    const packageDocuments = documents.filter(
+      (document) =>
+        document.packageId === bidPackage._id &&
+        document.status === "ready_for_intelligence",
+    );
+    for (const document of packageDocuments) {
+      await enqueueDocument(ctx, document);
+    }
+    await ctx.db.patch(bidPackage._id, {
+      status: "processing",
+      updatedAt: now,
+    });
+    await ctx.db.patch(project._id, {
+      status: "documents_ready",
+      intelligenceStatus: packageDocuments.length
+        ? "queued"
+        : "processing",
+      latestIntelligenceError: undefined,
+      updatedAt: now,
+    });
+    if (!packageDocuments.length) {
+      await maybeStartProjectSynthesis(ctx, project._id, bidPackage._id);
+    }
+    return {
+      packageId: String(bidPackage._id),
+      status: "processing" as const,
+    };
   },
 });
 
@@ -169,31 +375,13 @@ export const retryProject = internalMutation({
       .filter((query) => query.eq(query.field("status"), "completed"))
       .first();
     if (!completed) throw new Error("No completed document intelligence exists.");
-
-    const active = await ctx.db
-      .query("heliosIntelligenceJobs")
-      .withIndex("by_project_status", (query) =>
-        query.eq("projectId", project._id).eq("status", "synthesizing"),
-      )
-      .first();
-    if (active) return { jobId: active._id, status: active.status };
-
-    const now = Date.now();
-    const jobId = await ctx.db.insert("heliosIntelligenceJobs", {
-      companyId,
-      projectId: project._id,
-      kind: "project",
-      status: "synthesizing",
-      attempt: 1,
-      createdAt: now,
-      startedAt: now,
-      updatedAt: now,
-    });
-    await ctx.db.patch(project._id, {
-      intelligenceStatus: "processing",
-      updatedAt: now,
-    });
-    await ctx.scheduler.runAfter(0, synthesizeProjectReference, { jobId });
+    const bidPackage = project.activePackageId
+      ? await ctx.db.get(project.activePackageId)
+      : undefined;
+    if (bidPackage && !bidPackage.finalizedAt) {
+      throw new Error("Finalize the active bid package before retrying.");
+    }
+    const jobId = await enqueueProjectSynthesis(ctx, project, bidPackage);
     return { jobId, status: "synthesizing" as const };
   },
 });
@@ -306,10 +494,18 @@ export const failDocumentJob = internalMutation({
       .query("heliosDocuments")
       .withIndex("by_project", (query) => query.eq("projectId", job.projectId))
       .collect();
-    const hasCompleted = documents.some(
+    const allowedDocumentIds = job.packageId
+      ? await packageDocumentIds(ctx, job.packageId)
+      : undefined;
+    const scopedDocuments = allowedDocumentIds
+      ? documents.filter((document) =>
+          allowedDocumentIds.has(String(document._id)),
+        )
+      : documents;
+    const hasCompleted = scopedDocuments.some(
       (document) => document.status === "completed",
     );
-    const hasActive = documents.some((document) =>
+    const hasActive = scopedDocuments.some((document) =>
       ["ready_for_intelligence", "queued", "uploading_to_openai", "analyzing"].includes(
         document.status,
       ),
@@ -323,31 +519,7 @@ export const failDocumentJob = internalMutation({
       updatedAt: now,
     });
     if (!hasActive && hasCompleted) {
-      const existingSynthesis = await ctx.db
-        .query("heliosIntelligenceJobs")
-        .withIndex("by_project_status", (query) =>
-          query.eq("projectId", job.projectId).eq("status", "synthesizing"),
-        )
-        .first();
-      if (!existingSynthesis) {
-        const projectJobId = await ctx.db.insert("heliosIntelligenceJobs", {
-          companyId: job.companyId,
-          projectId: job.projectId,
-          kind: "project",
-          status: "synthesizing",
-          attempt: 1,
-          createdAt: now,
-          startedAt: now,
-          updatedAt: now,
-        });
-        await ctx.db.patch(job.projectId, {
-          intelligenceStatus: "processing",
-          updatedAt: now,
-        });
-        await ctx.scheduler.runAfter(0, synthesizeProjectReference, {
-          jobId: projectJobId,
-        });
-      }
+      await maybeStartProjectSynthesis(ctx, job.projectId, job.packageId);
     }
     return null;
   },
@@ -358,6 +530,10 @@ export const completeDocumentJob = internalMutation({
     jobId: v.id("heliosIntelligenceJobs"),
     model: v.string(),
     result: v.any(),
+    responseId: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalTokens: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const result = parseDocumentIntelligence(args.result);
@@ -451,12 +627,22 @@ export const completeDocumentJob = internalMutation({
       .query("heliosDocuments")
       .withIndex("by_project", (query) => query.eq("projectId", job.projectId))
       .collect();
-    const active = documents.some((row) =>
+    const allowedDocumentIds = job.packageId
+      ? await packageDocumentIds(ctx, job.packageId)
+      : undefined;
+    const scopedDocuments = allowedDocumentIds
+      ? documents.filter((document) =>
+          allowedDocumentIds.has(String(document._id)),
+        )
+      : documents;
+    const active = scopedDocuments.some((row) =>
       ["ready_for_intelligence", "queued", "uploading_to_openai", "analyzing"].includes(
         row.status,
       ),
     );
-    const completed = documents.filter((row) => row.status === "completed");
+    const completed = scopedDocuments.filter(
+      (row) => row.status === "completed",
+    );
     if (active) {
       await ctx.db.patch(job.projectId, {
         intelligenceStatus: "processing",
@@ -472,31 +658,7 @@ export const completeDocumentJob = internalMutation({
       return null;
     }
 
-    const existingSynthesis = await ctx.db
-      .query("heliosIntelligenceJobs")
-      .withIndex("by_project_status", (query) =>
-        query.eq("projectId", job.projectId).eq("status", "synthesizing"),
-      )
-      .first();
-    if (!existingSynthesis) {
-      const projectJobId = await ctx.db.insert("heliosIntelligenceJobs", {
-        companyId: job.companyId,
-        projectId: job.projectId,
-        kind: "project",
-        status: "synthesizing",
-        attempt: 1,
-        createdAt: now,
-        startedAt: now,
-        updatedAt: now,
-      });
-      await ctx.db.patch(job.projectId, {
-        intelligenceStatus: "processing",
-        updatedAt: now,
-      });
-      await ctx.scheduler.runAfter(0, synthesizeProjectReference, {
-        jobId: projectJobId,
-      });
-    }
+    await maybeStartProjectSynthesis(ctx, job.projectId, job.packageId);
     return null;
   },
 });
@@ -516,25 +678,35 @@ export const loadProjectJob = internalQuery({
         query.eq("projectId", project._id),
       )
       .collect();
-    const analyses = await Promise.all(
-      documents
-        .filter((document) => document.status === "completed")
-        .map(async (document) => {
-          const analysis = await ctx.db
-            .query("heliosDocumentIntelligence")
-            .withIndex("by_document", (query) =>
-              query.eq("documentId", document._id),
-            )
-            .first();
-          return analysis ? { document, analysis } : null;
-        }),
+    const allowedDocumentIds = job.packageId
+      ? await packageDocumentIds(ctx, job.packageId)
+      : undefined;
+    const completedDocuments = documents.filter(
+      (document) =>
+        document.status === "completed" &&
+        (!allowedDocumentIds ||
+          allowedDocumentIds.has(String(document._id))),
     );
-    const evidence = await ctx.db
+    const analyses = await Promise.all(
+      completedDocuments.map(async (document) => {
+        const analysis = await ctx.db
+          .query("heliosDocumentIntelligence")
+          .withIndex("by_document", (query) =>
+            query.eq("documentId", document._id),
+          )
+          .first();
+        return analysis ? { document, analysis } : null;
+      }),
+    );
+    const activeDocumentIds = new Set(
+      completedDocuments.map((document) => String(document._id)),
+    );
+    const evidence = (await ctx.db
       .query("heliosEvidence")
       .withIndex("by_project", (query) =>
         query.eq("projectId", project._id),
       )
-      .collect();
+      .collect()).filter((row) => activeDocumentIds.has(String(row.documentId)));
     return {
       job,
       project,
@@ -544,11 +716,35 @@ export const loadProjectJob = internalQuery({
   },
 });
 
+export const markProjectResponse = internalMutation({
+  args: {
+    jobId: v.id("heliosIntelligenceJobs"),
+    responseId: v.string(),
+    model: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.kind !== "project" || job.status !== "synthesizing") {
+      return false;
+    }
+    await ctx.db.patch(job._id, {
+      openaiResponseId: args.responseId,
+      model: args.model,
+      updatedAt: Date.now(),
+    });
+    return true;
+  },
+});
+
 export const completeProjectJob = internalMutation({
   args: {
     jobId: v.id("heliosIntelligenceJobs"),
     model: v.string(),
     result: v.any(),
+    responseId: v.string(),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalTokens: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
@@ -561,8 +757,16 @@ export const completeProjectJob = internalMutation({
         query.eq("projectId", job.projectId),
       )
       .collect();
+    const allowedDocumentIds = job.packageId
+      ? await packageDocumentIds(ctx, job.packageId)
+      : undefined;
+    const scopedEvidence = allowedDocumentIds
+      ? evidence.filter((row) =>
+          allowedDocumentIds.has(String(row.documentId)),
+        )
+      : evidence;
     const evidenceById = new Map(
-      evidence.map((row) => [String(row._id), row._id]),
+      scopedEvidence.map((row) => [String(row._id), row._id]),
     );
     const result = parseProjectSynthesis(args.result, evidenceById.keys());
     const toEvidenceIds = (ids: string[]) =>
@@ -577,13 +781,24 @@ export const completeProjectJob = internalMutation({
         query.eq("projectId", job.projectId),
       )
       .collect();
-    for (const row of previous) await ctx.db.delete(row._id);
+    for (const row of previous) {
+      if (row.isCurrent !== false) {
+        await ctx.db.patch(row._id, { isCurrent: false });
+      }
+    }
     const now = Date.now();
     await ctx.db.insert("heliosProjectIntelligence", {
       companyId: job.companyId,
       projectId: job.projectId,
+      packageId: job.packageId,
+      packageRevision: job.packageRevision,
+      generationId: job._id,
+      isCurrent: true,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      totalTokens: args.totalTokens,
       model: args.model,
-      schemaVersion: 1,
+      schemaVersion: 2,
       summary: result.summary,
       summaryEvidenceIds: toEvidenceIds(result.summaryEvidenceIds),
       projectType: {
@@ -603,6 +818,11 @@ export const completeProjectJob = internalMutation({
     });
     await ctx.db.patch(job._id, {
       status: "completed",
+      model: args.model,
+      openaiResponseId: args.responseId,
+      inputTokens: args.inputTokens,
+      outputTokens: args.outputTokens,
+      totalTokens: args.totalTokens,
       completedAt: now,
       updatedAt: now,
     });
@@ -612,9 +832,27 @@ export const completeProjectJob = internalMutation({
         query.eq("projectId", job.projectId),
       )
       .collect();
-    const hasFailed = documents.some((row) => row.status === "failed");
+    const scopedDocuments = allowedDocumentIds
+      ? documents.filter((document) =>
+          allowedDocumentIds.has(String(document._id)),
+        )
+      : documents;
+    const hasFailed = scopedDocuments.some((row) => row.status === "failed");
+    if (job.packageId) {
+      const bidPackage = await ctx.db.get(job.packageId);
+      if (bidPackage && bidPackage.projectId === job.projectId) {
+        await ctx.db.patch(bidPackage._id, {
+          status: hasFailed ? "partially_ready" : "ready_for_review",
+          analysisCompletedAt: now,
+          lastError: undefined,
+          updatedAt: now,
+        });
+      }
+    }
     await ctx.db.patch(job.projectId, {
       intelligenceStatus: hasFailed ? "partially_ready" : "ready_for_review",
+      latestIntelligenceError: undefined,
+      intelligenceUpdatedAt: now,
       updatedAt: now,
     });
     return null;
@@ -630,14 +868,26 @@ export const failProjectJob = internalMutation({
     const job = await ctx.db.get(args.jobId);
     if (!job || job.kind !== "project") return null;
     const now = Date.now();
+    const error = safeError(args.error);
     await ctx.db.patch(job._id, {
       status: "failed",
-      error: safeError(args.error),
+      error,
       completedAt: now,
       updatedAt: now,
     });
+    if (job.packageId) {
+      const bidPackage = await ctx.db.get(job.packageId);
+      if (bidPackage && bidPackage.projectId === job.projectId) {
+        await ctx.db.patch(bidPackage._id, {
+          status: "failed",
+          lastError: error,
+          updatedAt: now,
+        });
+      }
+    }
     await ctx.db.patch(job.projectId, {
       intelligenceStatus: "failed",
+      latestIntelligenceError: error,
       updatedAt: now,
     });
     return null;

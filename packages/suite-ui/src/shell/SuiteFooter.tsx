@@ -29,7 +29,7 @@ export function SuiteFooter({
 }: SuiteFooterProps) {
   return (
     <footer
-      className={`sticky bottom-0 z-[60] border-t border-white/8 bg-[#0d1218]/96 shadow-[0_-10px_30px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[margin] duration-200 supports-[backdrop-filter]:bg-[#0d1218]/84 ${
+      className={`relative z-10 border-t border-white/8 bg-[#0d1218] transition-[margin] duration-200 ${
         sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-60"
       }`}
     >

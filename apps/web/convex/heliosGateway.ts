@@ -1,10 +1,12 @@
 import {
   normalizeProjectInput,
+  type HeliosBidPackage,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
   type HeliosProjectDetail,
   type HeliosProjectInput,
   type HeliosProjectSummary,
+  type HeliosPackageInput,
 } from "@opsslate/helios-domain";
 import { makeFunctionReference } from "convex/server";
 
@@ -12,7 +14,7 @@ import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 
 const MAX_IDENTITY_BODY_BYTES = 8 * 1024;
-const MAX_DATA_BODY_BYTES = 32 * 1024;
+const MAX_DATA_BODY_BYTES = 512 * 1024;
 const PDF_SIGNATURE = "%PDF-";
 
 type GatewayPrincipal = {
@@ -50,9 +52,32 @@ const getProjectReference = makeFunctionReference<
 >("heliosProjects:getProject");
 const createUploadIntentReference = makeFunctionReference<
   "mutation",
-  { principal: GatewayPrincipal; projectId: string },
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    packageId?: string;
+    packageEntryId?: string;
+  },
   { intentId: string; uploadUrl: string }
 >("heliosProjects:createUploadIntent");
+const createPackageReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    input: HeliosPackageInput;
+  },
+  HeliosBidPackage
+>("heliosPackages:createPackage");
+const finalizePackageReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    packageId: string;
+  },
+  { packageId: string; status: string }
+>("heliosIntelligence:finalizePackage");
 const inspectUploadReference = makeFunctionReference<
   "query",
   {
@@ -73,10 +98,11 @@ const registerDocumentReference = makeFunctionReference<
     fileName: string;
     magicValid: boolean;
   },
-  {
-    kind: "created" | "duplicate";
-    document: HeliosDocumentSummary;
-  }
+  | {
+      kind: "created" | "duplicate";
+      document: HeliosDocumentSummary;
+    }
+  | { kind: "rejected"; error: string }
 >("heliosProjects:registerDocument");
 const retryDocumentReference = makeFunctionReference<
   "mutation",
@@ -366,6 +392,62 @@ export const getHeliosProject = httpAction(async (ctx, request) => {
   }
 });
 
+export const createHeliosPackage = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  if (
+    !boundedString(authorization.payload.projectId) ||
+    !isRecord(authorization.payload.input)
+  ) {
+    return json({ error: "Invalid bid package." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(createPackageReference, {
+      principal: principalFrom(authorization.payload),
+      projectId: authorization.payload.projectId,
+      input: authorization.payload.input as HeliosPackageInput,
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    console.error("[helios:package-create] failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return json({ error: "Bid package could not be created." }, 400);
+  }
+});
+
+export const finalizeHeliosPackage = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  if (
+    !boundedString(authorization.payload.projectId) ||
+    !boundedString(authorization.payload.packageId)
+  ) {
+    return json({ error: "Invalid bid package." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(finalizePackageReference, {
+      principal: principalFrom(authorization.payload),
+      projectId: authorization.payload.projectId,
+      packageId: authorization.payload.packageId,
+    });
+    return json({ data }, 202);
+  } catch (error) {
+    console.error("[helios:package-finalize] failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Bid package could not be finalized.",
+      },
+      400,
+    );
+  }
+});
+
 export const createHeliosUploadIntent = httpAction(async (ctx, request) => {
   const authorization = await protectedPayload(request);
   if (!authorization.ok) return authorization.response;
@@ -378,6 +460,12 @@ export const createHeliosUploadIntent = httpAction(async (ctx, request) => {
       {
         principal: principalFrom(authorization.payload),
         projectId: authorization.payload.projectId,
+        packageId: boundedString(authorization.payload.packageId)
+          ? authorization.payload.packageId
+          : undefined,
+        packageEntryId: boundedString(authorization.payload.packageEntryId)
+          ? authorization.payload.packageEntryId
+          : undefined,
       },
     );
     return json({ data }, 201);
@@ -425,6 +513,15 @@ export const registerHeliosDocument = httpAction(async (ctx, request) => {
         magicValid,
       },
     );
+    if (data.kind === "rejected") {
+      return json(
+        {
+          error: data.error,
+          code: "document_registration_validation_failed",
+        },
+        400,
+      );
+    }
     return json({ data }, 201);
   } catch (error) {
     console.error("[helios:document-registration] failed", {

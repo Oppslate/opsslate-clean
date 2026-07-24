@@ -102,11 +102,75 @@ export default defineSchema({
       v.literal("partially_ready"),
       v.literal("failed"),
     ),
+    activePackageId: v.optional(v.id("heliosBidPackages")),
+    currentPackageRevision: v.optional(v.number()),
+    latestIntelligenceError: v.optional(v.string()),
+    intelligenceUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_company_updated", ["companyId", "updatedAt"])
     .index("by_company_status", ["companyId", "status"]),
+
+  heliosBidPackages: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    createdBy: v.id("users"),
+    name: v.string(),
+    sourceType: v.union(
+      v.literal("files"),
+      v.literal("folder"),
+      v.literal("zip"),
+    ),
+    revision: v.number(),
+    status: v.union(
+      v.literal("uploading"),
+      v.literal("ready_for_analysis"),
+      v.literal("processing"),
+      v.literal("ready_for_review"),
+      v.literal("partially_ready"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    entryCount: v.number(),
+    pdfCount: v.number(),
+    rejectedCount: v.number(),
+    uploadedCount: v.number(),
+    duplicateCount: v.number(),
+    failedCount: v.number(),
+    totalBytes: v.number(),
+    lastError: v.optional(v.string()),
+    finalizedAt: v.optional(v.number()),
+    analysisCompletedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project_revision", ["projectId", "revision"])
+    .index("by_project_status", ["projectId", "status"])
+    .index("by_company_updated", ["companyId", "updatedAt"]),
+
+  heliosPackageEntries: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    relativePath: v.string(),
+    canonicalPath: v.string(),
+    size: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("uploaded"),
+      v.literal("duplicate"),
+      v.literal("rejected"),
+      v.literal("failed"),
+    ),
+    reason: v.optional(v.string()),
+    documentId: v.optional(v.id("heliosDocuments")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_package", ["packageId", "createdAt"])
+    .index("by_package_path", ["packageId", "canonicalPath"])
+    .index("by_project", ["projectId", "createdAt"]),
 
   heliosDocuments: defineTable({
     companyId: v.id("companies"),
@@ -129,6 +193,9 @@ export default defineSchema({
     ),
     attemptCount: v.optional(v.number()),
     lastError: v.optional(v.string()),
+    packageId: v.optional(v.id("heliosBidPackages")),
+    packageEntryId: v.optional(v.id("heliosPackageEntries")),
+    relativePath: v.optional(v.string()),
     processingStartedAt: v.optional(v.number()),
     processingCompletedAt: v.optional(v.number()),
     version: v.number(),
@@ -144,6 +211,8 @@ export default defineSchema({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),
     createdBy: v.id("users"),
+    packageId: v.optional(v.id("heliosBidPackages")),
+    packageEntryId: v.optional(v.id("heliosPackageEntries")),
     status: v.union(
       v.literal("pending"),
       v.literal("consumed"),
@@ -162,6 +231,8 @@ export default defineSchema({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),
     documentId: v.optional(v.id("heliosDocuments")),
+    packageId: v.optional(v.id("heliosBidPackages")),
+    packageRevision: v.optional(v.number()),
     kind: v.union(v.literal("document"), v.literal("project")),
     status: v.union(
       v.literal("queued"),
@@ -174,6 +245,10 @@ export default defineSchema({
     attempt: v.number(),
     openaiFileId: v.optional(v.string()),
     openaiResponseId: v.optional(v.string()),
+    model: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalTokens: v.optional(v.number()),
     error: v.optional(v.string()),
     createdAt: v.number(),
     startedAt: v.optional(v.number()),
@@ -212,6 +287,7 @@ export default defineSchema({
       v.object({
         category: v.union(
           v.literal("project_metadata"),
+          v.literal("document_control"),
           v.literal("contract_requirements"),
           v.literal("required_forms"),
           v.literal("addenda"),
@@ -225,6 +301,8 @@ export default defineSchema({
           v.literal("missing_information"),
           v.literal("required_subcontractors"),
           v.literal("required_suppliers"),
+          v.literal("scope_conflicts"),
+          v.literal("addendum_impacts"),
         ),
         title: v.string(),
         detail: v.string(),
@@ -243,6 +321,13 @@ export default defineSchema({
   heliosProjectIntelligence: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),
+    packageId: v.optional(v.id("heliosBidPackages")),
+    packageRevision: v.optional(v.number()),
+    generationId: v.optional(v.id("heliosIntelligenceJobs")),
+    isCurrent: v.optional(v.boolean()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalTokens: v.optional(v.number()),
     model: v.string(),
     schemaVersion: v.number(),
     summary: v.string(),
@@ -262,6 +347,7 @@ export default defineSchema({
       v.object({
         category: v.union(
           v.literal("project_metadata"),
+          v.literal("document_control"),
           v.literal("contract_requirements"),
           v.literal("required_forms"),
           v.literal("addenda"),
@@ -275,6 +361,8 @@ export default defineSchema({
           v.literal("missing_information"),
           v.literal("required_subcontractors"),
           v.literal("required_suppliers"),
+          v.literal("scope_conflicts"),
+          v.literal("addendum_impacts"),
         ),
         title: v.string(),
         detail: v.string(),

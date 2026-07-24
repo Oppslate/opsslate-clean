@@ -1,6 +1,13 @@
 export const HELIOS_MAX_PDF_BYTES = 50 * 1024 * 1024;
-export const HELIOS_MAX_UPLOAD_BATCH = 20;
+export const HELIOS_MAX_UPLOAD_BATCH = 250;
 export const HELIOS_UPLOAD_INTENT_LIFETIME_MS = 60 * 60 * 1000;
+export const HELIOS_MAX_PACKAGE_ENTRIES = 500;
+export const HELIOS_MAX_PACKAGE_BYTES = 5 * 1024 * 1024 * 1024;
+export const HELIOS_MAX_ARCHIVE_BYTES = 250 * 1024 * 1024;
+export const HELIOS_MAX_ARCHIVE_EXPANDED_BYTES = 1024 * 1024 * 1024;
+export const HELIOS_MAX_ARCHIVE_EXPANSION_RATIO = 100;
+export const HELIOS_MAX_PACKAGE_PATH_LENGTH = 512;
+export const HELIOS_MAX_PACKAGE_DEPTH = 12;
 
 export const HELIOS_PROJECT_STATUSES = [
   "draft",
@@ -31,6 +38,7 @@ export const HELIOS_DOCUMENT_STATUSES = [
 
 export const HELIOS_INTELLIGENCE_CATEGORIES = [
   "project_metadata",
+  "document_control",
   "contract_requirements",
   "required_forms",
   "addenda",
@@ -44,6 +52,32 @@ export const HELIOS_INTELLIGENCE_CATEGORIES = [
   "missing_information",
   "required_subcontractors",
   "required_suppliers",
+  "scope_conflicts",
+  "addendum_impacts",
+] as const;
+
+export const HELIOS_PACKAGE_SOURCE_TYPES = [
+  "files",
+  "folder",
+  "zip",
+] as const;
+
+export const HELIOS_PACKAGE_STATUSES = [
+  "uploading",
+  "ready_for_analysis",
+  "processing",
+  "ready_for_review",
+  "partially_ready",
+  "failed",
+  "superseded",
+] as const;
+
+export const HELIOS_PACKAGE_ENTRY_STATUSES = [
+  "pending",
+  "uploaded",
+  "duplicate",
+  "rejected",
+  "failed",
 ] as const;
 
 export const HELIOS_FINDING_SEVERITIES = [
@@ -70,6 +104,11 @@ export type HeliosIntelligenceCategory =
 export type HeliosFindingSeverity =
   (typeof HELIOS_FINDING_SEVERITIES)[number];
 export type HeliosJobStatus = (typeof HELIOS_JOB_STATUSES)[number];
+export type HeliosPackageSourceType =
+  (typeof HELIOS_PACKAGE_SOURCE_TYPES)[number];
+export type HeliosPackageStatus = (typeof HELIOS_PACKAGE_STATUSES)[number];
+export type HeliosPackageEntryStatus =
+  (typeof HELIOS_PACKAGE_ENTRY_STATUSES)[number];
 
 export type HeliosProjectInput = {
   name: string;
@@ -100,10 +139,58 @@ export type HeliosDocumentSummary = {
   status: HeliosDocumentStatus;
   attemptCount: number;
   lastError?: string;
+  packageId?: string;
+  relativePath?: string;
+  documentType?: string;
   processingStartedAt?: number;
   processingCompletedAt?: number;
   createdAt: number;
   updatedAt: number;
+};
+
+export type HeliosPackageEntry = {
+  id: string;
+  packageId: string;
+  relativePath: string;
+  size: number;
+  status: HeliosPackageEntryStatus;
+  reason?: string;
+  documentId?: string;
+};
+
+export type HeliosBidPackage = {
+  id: string;
+  projectId: string;
+  name: string;
+  sourceType: HeliosPackageSourceType;
+  revision: number;
+  status: HeliosPackageStatus;
+  entryCount: number;
+  pdfCount: number;
+  rejectedCount: number;
+  uploadedCount: number;
+  duplicateCount: number;
+  failedCount: number;
+  totalBytes: number;
+  lastError?: string;
+  finalizedAt?: number;
+  analysisCompletedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+  entries: HeliosPackageEntry[];
+};
+
+export type HeliosPackageManifestEntryInput = {
+  relativePath: string;
+  size: number;
+  accepted: boolean;
+  reason?: string;
+};
+
+export type HeliosPackageInput = {
+  name: string;
+  sourceType: HeliosPackageSourceType;
+  entries: HeliosPackageManifestEntryInput[];
 };
 
 export type HeliosEvidence = {
@@ -143,6 +230,10 @@ export type HeliosProjectIntelligence = {
   confidence: number;
   findings: HeliosIntelligenceFinding[];
   evidence: HeliosEvidence[];
+  packageId?: string;
+  packageRevision?: number;
+  generationId?: string;
+  isStale: boolean;
   generatedAt: number;
 };
 
@@ -159,6 +250,9 @@ export type HeliosCockpitData = {
 export type HeliosProjectDetail = {
   project: HeliosProjectSummary;
   documents: HeliosDocumentSummary[];
+  packages: HeliosBidPackage[];
+  activePackageId?: string;
+  latestIntelligenceError?: string;
   intelligence?: HeliosProjectIntelligence;
 };
 
@@ -244,6 +338,120 @@ export function normalizeProjectInput(value: unknown): HeliosProjectInput {
 export function canonicalPdfFileName(value: string) {
   const leafName = value.split(/[\\/]/).pop()?.trim() || "";
   return leafName.normalize("NFKC").toLowerCase();
+}
+
+export function normalizePackagePath(value: unknown) {
+  if (typeof value !== "string") {
+    throw new HeliosValidationError("Package paths must be text.", "file");
+  }
+  const normalized = value
+    .normalize("NFKC")
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/\/+/g, "/")
+    .trim();
+  if (
+    !normalized ||
+    normalized.length > HELIOS_MAX_PACKAGE_PATH_LENGTH ||
+    normalized.startsWith("/") ||
+    /^[a-zA-Z]:\//.test(normalized)
+  ) {
+    throw new HeliosValidationError("The package contains an invalid path.", "file");
+  }
+  const segments = normalized.split("/");
+  if (
+    segments.length > HELIOS_MAX_PACKAGE_DEPTH ||
+    segments.some(
+      (segment) =>
+        !segment ||
+        segment === "." ||
+        segment === ".." ||
+        /[\u0000-\u001f\u007f]/.test(segment),
+    )
+  ) {
+    throw new HeliosValidationError("The package contains an unsafe path.", "file");
+  }
+  return segments.join("/");
+}
+
+export function normalizePackageInput(value: unknown): HeliosPackageInput {
+  const input = record(value, "Bid package");
+  const name = textValue(input.name, "Package name", 160);
+  if (
+    typeof input.sourceType !== "string" ||
+    !HELIOS_PACKAGE_SOURCE_TYPES.includes(
+      input.sourceType as HeliosPackageSourceType,
+    )
+  ) {
+    throw new HeliosValidationError("Package source is invalid.");
+  }
+  if (
+    !Array.isArray(input.entries) ||
+    input.entries.length === 0 ||
+    input.entries.length > HELIOS_MAX_PACKAGE_ENTRIES
+  ) {
+    throw new HeliosValidationError(
+      `A package must contain 1-${HELIOS_MAX_PACKAGE_ENTRIES} entries.`,
+    );
+  }
+  let acceptedCount = 0;
+  let acceptedBytes = 0;
+  const paths = new Set<string>();
+  const entries = input.entries.map((value, index) => {
+    const row = record(value, `Package entry ${index + 1}`);
+    const relativePath = normalizePackagePath(row.relativePath);
+    const canonicalPath = relativePath.toLowerCase();
+    if (paths.has(canonicalPath)) {
+      throw new HeliosValidationError(
+        `The package contains the same path more than once: ${relativePath}`,
+      );
+    }
+    paths.add(canonicalPath);
+    if (
+      typeof row.size !== "number" ||
+      !Number.isSafeInteger(row.size) ||
+      row.size < 0
+    ) {
+      throw new HeliosValidationError("Package entry size is invalid.");
+    }
+    if (typeof row.accepted !== "boolean") {
+      throw new HeliosValidationError("Package entry status is invalid.");
+    }
+    if (row.accepted) {
+      validatePdfCandidate({
+        name: relativePath,
+        type: "application/pdf",
+        size: row.size,
+      });
+      acceptedCount += 1;
+      acceptedBytes += row.size;
+    }
+    return {
+      relativePath,
+      size: row.size,
+      accepted: row.accepted,
+      reason: row.accepted
+        ? undefined
+        : textValue(
+            row.reason || "Unsupported file type.",
+            "Rejection reason",
+            240,
+          ),
+    };
+  });
+  if (!acceptedCount || acceptedCount > HELIOS_MAX_UPLOAD_BATCH) {
+    throw new HeliosValidationError(
+      `A package must contain 1-${HELIOS_MAX_UPLOAD_BATCH} valid PDFs.`,
+    );
+  }
+  if (acceptedBytes > HELIOS_MAX_PACKAGE_BYTES) {
+    throw new HeliosValidationError("The PDF package is too large.");
+  }
+  return {
+    name,
+    sourceType: input.sourceType as HeliosPackageSourceType,
+    entries,
+  };
 }
 
 export function validatePdfCandidate(file: {

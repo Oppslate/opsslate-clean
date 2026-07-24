@@ -13,12 +13,24 @@ const intelligence = readFileSync(
   join(root, "../web/convex/heliosIntelligence.ts"),
   "utf8",
 );
+const contracts = readFileSync(
+  join(root, "../web/convex/heliosOpenAIContracts.ts"),
+  "utf8",
+);
 const projects = readFileSync(
   join(root, "../web/convex/heliosProjects.ts"),
   "utf8",
 );
 const projectPage = readFileSync(
   join(root, "src/components/project-intake.tsx"),
+  "utf8",
+);
+const intelligencePanel = readFileSync(
+  join(root, "src/components/project-intelligence-panel.tsx"),
+  "utf8",
+);
+const suiteFooter = readFileSync(
+  join(root, "../../packages/suite-ui/src/shell/SuiteFooter.tsx"),
   "utf8",
 );
 const retryDocumentRoute = readFileSync(
@@ -59,6 +71,18 @@ test("OpenAI objects are cleaned and evidence is revalidated before storage", ()
   assert.match(intelligence, /parseProjectSynthesis/);
 });
 
+test("confidence uses an explicit integer percentage contract", () => {
+  const integerConfidenceFields = contracts.match(
+    /confidence:\s*\{\s*type:\s*"integer",\s*minimum:\s*0,\s*maximum:\s*100\s*\}/g,
+  );
+  assert.ok(
+    integerConfidenceFields && integerConfidenceFields.length >= 5,
+    "every confidence field should use an integer 0-100 schema",
+  );
+  assert.match(contracts, /Never return a decimal fraction between 0 and 1/);
+  assert.match(contracts, /never a\s+decimal fraction between 0 and 1/);
+});
+
 test("retry mutations preserve session, origin, tenant, and project boundaries", () => {
   for (const route of [retryDocumentRoute, retryProjectRoute]) {
     assert.match(route, /readHeliosPrincipal/);
@@ -75,4 +99,16 @@ test("3C presents intelligence for review without estimate or approval actions",
     projectPage,
     /approve intelligence|ready for estimate|create estimate/i,
   );
+});
+
+test("project intelligence remains scannable without content overlays", () => {
+  assert.match(intelligencePanel, /overflow-x-auto overflow-y-hidden/);
+  assert.match(intelligencePanel, /evidenceByDocument/);
+  assert.match(intelligencePanel, /<details/);
+  assert.match(intelligencePanel, /\bUpdating\b/);
+  assert.doesNotMatch(
+    intelligencePanel,
+    /TabsList className="max-w-full overflow-x-auto"/,
+  );
+  assert.doesNotMatch(suiteFooter, /sticky bottom-0/);
 });
