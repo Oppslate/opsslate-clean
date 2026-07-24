@@ -11,6 +11,11 @@ const reviewRoute = source(
   "src/app/api/projects/[projectId]/intelligence/[intelligenceId]/findings/[findingId]/review/route.ts",
 );
 const reviewQueue = source("src/components/finding-review-queue.tsx");
+const cockpit = source("src/components/project-intelligence-cockpit.tsx");
+const cockpitQueue = source("src/components/cockpit-finding-queue.tsx");
+const decisionDock = source("src/components/cockpit-decision-dock.tsx");
+const evidenceCockpit = source("src/components/evidence-review-cockpit.tsx");
+const projectIntake = source("src/components/project-intake.tsx");
 const intelligencePanel = source(
   "src/components/project-intelligence-panel.tsx",
 );
@@ -63,9 +68,34 @@ test("review queue supports filtering, evidence, decisions, corrections, and his
 });
 
 test("Foundation 3D stops before estimate, pricing, procurement, or RFQ creation", () => {
-  const combined = `${reviewQueue}\n${intelligencePanel}`;
+  const combined = `${reviewQueue}\n${intelligencePanel}\n${cockpit}\n${decisionDock}`;
   assert.doesNotMatch(
     combined,
     /create estimate|estimate builder|create bid item|send rfq|vendor pricing/i,
+  );
+});
+
+test("Foundation 3D.1 composes queue, PDF evidence, and decisions in one cockpit", () => {
+  assert.match(cockpit, /CockpitFindingQueue/);
+  assert.match(cockpit, /EvidenceReviewCockpit/);
+  assert.match(cockpit, /CockpitDecisionDock/);
+  assert.match(cockpit, /selectedFindingId/);
+  assert.match(cockpitQueue, /Findings inbox/);
+  assert.match(evidenceCockpit, /<iframe/);
+  assert.match(evidenceCockpit, /Cited pages/);
+  assert.match(evidenceCockpit, /AI explanation/);
+  assert.match(decisionDock, /Selected finding/);
+  assert.match(decisionDock, /Your decision/);
+  assert.doesNotMatch(cockpit, /TabsContent|TabsTrigger/);
+});
+
+test("cockpit remains primary while document administration is available on demand", () => {
+  assert.match(projectIntake, /detail\.intelligence \?/);
+  assert.match(projectIntake, /ProjectIntelligenceCockpit/);
+  assert.match(projectIntake, /<details/);
+  assert.match(projectIntake, /Bid package and project document control/);
+  assert.ok(
+    projectIntake.indexOf("<ProjectIntelligenceCockpit") <
+      projectIntake.indexOf("<details"),
   );
 });
