@@ -33,3 +33,20 @@ points.
 - Vercel target: Preview
 - Vercel status: Ready
 - Cockpit work: Not started
+
+### Foundation item 3C preview evidence
+
+- [Vercel preview](https://helios-foundation-item-2-preview-mo0pwde7f-oppslate.vercel.app)
+- Vercel deployment: `dpl_G97gtsgzrsrFpthz5S6UW6J4HTCv`
+- Vercel target: Preview
+- Vercel status: Ready
+- Deployed source checkpoint: `2292f24`
+- Remote and local production builds: Passed
+- Unauthenticated desktop, tablet, and mobile layout: Passed
+- Keyboard focus, responsive overflow, font/style assets, security headers, and
+  missing-session error state: Passed
+- Browser console and page errors: None
+- Authenticated cockpit and navigation drawer: Not testable on the separate
+  `vercel.app` origin because the OpsSlate shared session cookie is intentionally
+  not available cross-origin. No authentication bypass was added.
+- Production promotion and custom domain changes: Not performed
