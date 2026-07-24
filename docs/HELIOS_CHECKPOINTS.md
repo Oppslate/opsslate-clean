@@ -27,6 +27,8 @@ points.
 | Foundation item 3B: working cockpit and secure PDF intake | 2026-07-23 | Implemented and locally verified at `fb54209`; live integration review pending | Run isolated cross-tenant, upload, responsive, accessibility, and visual acceptance tests before approval or deployment |
 | Foundation item 3C.1–3C.3: bid-package intake, durable project intelligence, and cited PDF review | 2026-07-24 | Preview ready at `f3166a2`; tagged `helios-foundation-3c.3`; approval pending | Authenticated human review of citation-to-page navigation on the preview |
 
+| Foundation item 3D: human finding review and correction lifecycle | 2026-07-24 | Preview ready at `9e2d731`; tagged `helios-foundation-3d`; approval pending | Authenticated human visual review of the review queue and dialogs on the preview |
+
 ### Foundation item 2 evidence
 
 - [Foundation handoff](./HELIOS_FOUNDATION_ITEM_2.md)
@@ -72,6 +74,32 @@ points.
 - Preview sign-in, styles, and application title: Passed
 - Preview runtime error scan: Clean
 - Authenticated human citation-to-page visual review: Pending
+- Production promotion and custom domain changes: Not performed
+
+### Foundation item 3D preview evidence
+
+- [Foundation review handoff](./HELIOS_FOUNDATION_3D_REVIEW.md)
+- [Stable Vercel preview](https://helios-foundation-item-2-preview-oppslate-oppslate.vercel.app)
+- Unique Vercel preview:
+  `https://helios-foundation-item-2-preview-irs7iao31-oppslate.vercel.app`
+- Vercel deployment: `dpl_HtMH4VSQxEj95GZVTvUxjsJBxWEa`
+- Vercel target / status: Preview / Ready
+- Application checkpoint: `9e2d731`
+- Annotated Git tag: `helios-foundation-3d`
+- Automated Helios boundary tests: 28 passed
+- Lint, TypeScript, shared UI boundary, local production build, and remote
+  production build: Passed
+- Live review persistence: approved status and reviewer history returned
+- Live wrong-company review: `400`; no event was written
+- Live review-triggered reanalysis: new current generation created; preceding
+  generation and two review events retained
+- Preview same-origin unauthenticated review request: `401`
+- Preview cross-origin review request: `403`
+- Desktop, tablet, and mobile horizontal overflow: None
+- WCAG A/AA automated scan: 0 violations
+- Browser page errors and Vercel runtime error logs: None
+- Authenticated human review of the queue, correction dialog, and source
+  transition: Pending
 - Production promotion and custom domain changes: Not performed
 
 ### Foundation item 3A-R standalone preview evidence
