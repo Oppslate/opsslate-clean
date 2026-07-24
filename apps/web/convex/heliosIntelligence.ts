@@ -386,6 +386,33 @@ export const retryProject = internalMutation({
   },
 });
 
+export const queueReviewedReanalysis = internalMutation({
+  args: {
+    projectId: v.id("heliosProjects"),
+    intelligenceId: v.id("heliosProjectIntelligence"),
+  },
+  handler: async (ctx, args) => {
+    const [project, intelligence] = await Promise.all([
+      ctx.db.get(args.projectId),
+      ctx.db.get(args.intelligenceId),
+    ]);
+    if (
+      !project ||
+      !intelligence ||
+      intelligence.projectId !== project._id ||
+      intelligence.companyId !== project.companyId ||
+      intelligence.isCurrent === false
+    ) {
+      return null;
+    }
+    const bidPackage = project.activePackageId
+      ? await ctx.db.get(project.activePackageId)
+      : undefined;
+    if (bidPackage && !bidPackage.finalizedAt) return null;
+    return enqueueProjectSynthesis(ctx, project, bidPackage);
+  },
+});
+
 export const loadDocumentJob = internalQuery({
   args: { jobId: v.id("heliosIntelligenceJobs") },
   handler: async (ctx, args) => {

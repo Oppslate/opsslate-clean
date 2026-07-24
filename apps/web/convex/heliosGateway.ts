@@ -1,8 +1,12 @@
 import {
+  HeliosValidationError,
+  normalizeFindingReviewInput,
   normalizeProjectInput,
   type HeliosBidPackage,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
+  type HeliosFindingReviewEvent,
+  type HeliosFindingReviewInput,
   type HeliosProjectDetail,
   type HeliosProjectInput,
   type HeliosProjectSummary,
@@ -134,6 +138,17 @@ const retryProjectReference = makeFunctionReference<
   },
   { jobId: string; status: "synthesizing" }
 >("heliosIntelligence:retryProject");
+const reviewFindingReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    intelligenceId: string;
+    findingId: string;
+    input: HeliosFindingReviewInput;
+  },
+  HeliosFindingReviewEvent
+>("heliosReviews:reviewFinding");
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -662,5 +677,39 @@ export const retryHeliosProject = httpAction(async (ctx, request) => {
     return json({ data }, 202);
   } catch {
     return json({ error: "Project intelligence could not be retried." }, 400);
+  }
+});
+
+export const reviewHeliosFinding = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (
+    !boundedString(payload.projectId) ||
+    !boundedString(payload.intelligenceId) ||
+    !boundedString(payload.findingId, 256) ||
+    !isRecord(payload.input)
+  ) {
+    return json({ error: "Invalid finding review request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(reviewFindingReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      intelligenceId: payload.intelligenceId,
+      findingId: payload.findingId,
+      input: normalizeFindingReviewInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json(
+      {
+        error:
+          error instanceof HeliosValidationError
+            ? error.message
+            : "Finding review could not be saved.",
+      },
+      400,
+    );
   }
 });

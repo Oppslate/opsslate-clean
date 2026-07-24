@@ -95,6 +95,23 @@ export const HELIOS_JOB_STATUSES = [
   "failed",
 ] as const;
 
+export const HELIOS_FINDING_REVIEW_ACTIONS = [
+  "approve",
+  "correct",
+  "reject",
+  "request_reanalysis",
+  "supersede",
+] as const;
+
+export const HELIOS_FINDING_REVIEW_STATUSES = [
+  "needs_review",
+  "approved",
+  "corrected",
+  "rejected",
+  "reanalysis_requested",
+  "superseded",
+] as const;
+
 export type HeliosProjectStatus = (typeof HELIOS_PROJECT_STATUSES)[number];
 export type HeliosIntelligenceStatus =
   (typeof HELIOS_INTELLIGENCE_STATUSES)[number];
@@ -104,6 +121,10 @@ export type HeliosIntelligenceCategory =
 export type HeliosFindingSeverity =
   (typeof HELIOS_FINDING_SEVERITIES)[number];
 export type HeliosJobStatus = (typeof HELIOS_JOB_STATUSES)[number];
+export type HeliosFindingReviewAction =
+  (typeof HELIOS_FINDING_REVIEW_ACTIONS)[number];
+export type HeliosFindingReviewStatus =
+  (typeof HELIOS_FINDING_REVIEW_STATUSES)[number];
 export type HeliosPackageSourceType =
   (typeof HELIOS_PACKAGE_SOURCE_TYPES)[number];
 export type HeliosPackageStatus = (typeof HELIOS_PACKAGE_STATUSES)[number];
@@ -210,6 +231,48 @@ export type HeliosIntelligenceFinding = {
   confidence: number;
   severity: HeliosFindingSeverity;
   evidenceIds: string[];
+  review: HeliosFindingReviewState;
+};
+
+export type HeliosFindingReviewEvent = {
+  id: string;
+  action: HeliosFindingReviewAction;
+  status: HeliosFindingReviewStatus;
+  reviewerName: string;
+  correctedTitle?: string;
+  correctedDetail?: string;
+  trade?: string;
+  comment?: string;
+  createdAt: number;
+};
+
+export type HeliosFindingReviewState = {
+  status: HeliosFindingReviewStatus;
+  correctedTitle?: string;
+  correctedDetail?: string;
+  trade?: string;
+  reviewerName?: string;
+  latestComment?: string;
+  updatedAt?: number;
+  history: HeliosFindingReviewEvent[];
+};
+
+export type HeliosFindingReviewInput = {
+  action: HeliosFindingReviewAction;
+  correctedTitle?: string;
+  correctedDetail?: string;
+  trade?: string;
+  comment?: string;
+};
+
+export type HeliosFindingReviewSummary = {
+  total: number;
+  needsReview: number;
+  approved: number;
+  corrected: number;
+  rejected: number;
+  reanalysisRequested: number;
+  superseded: number;
 };
 
 export type HeliosEvidenceBackedValue = {
@@ -229,6 +292,7 @@ export type HeliosProjectIntelligence = {
   fundingSource: HeliosEvidenceBackedValue;
   confidence: number;
   findings: HeliosIntelligenceFinding[];
+  reviewSummary: HeliosFindingReviewSummary;
   evidence: HeliosEvidence[];
   packageId?: string;
   packageRevision?: number;
@@ -454,6 +518,62 @@ export function normalizePackageInput(value: unknown): HeliosPackageInput {
   };
 }
 
+export function normalizeFindingReviewInput(
+  value: unknown,
+): HeliosFindingReviewInput {
+  const input = record(value, "Finding review");
+  if (
+    typeof input.action !== "string" ||
+    !HELIOS_FINDING_REVIEW_ACTIONS.includes(
+      input.action as HeliosFindingReviewAction,
+    )
+  ) {
+    throw new HeliosValidationError("Finding review action is invalid.");
+  }
+  const action = input.action as HeliosFindingReviewAction;
+  const optionalReviewText = (
+    candidate: unknown,
+    label: string,
+    maximum: number,
+  ) => {
+    if (candidate === undefined || candidate === null || candidate === "") {
+      return undefined;
+    }
+    return textValue(candidate, label, maximum);
+  };
+  const comment = optionalReviewText(input.comment, "Review note", 2000);
+  if (
+    ["reject", "request_reanalysis", "supersede"].includes(action) &&
+    !comment
+  ) {
+    throw new HeliosValidationError(
+      "A review note is required for this action.",
+    );
+  }
+  if (action === "correct") {
+    return {
+      action,
+      correctedTitle: textValue(
+        input.correctedTitle,
+        "Corrected finding title",
+        240,
+      ),
+      correctedDetail: textValue(
+        input.correctedDetail,
+        "Corrected finding detail",
+        2400,
+      ),
+      trade: optionalReviewText(input.trade, "Trade", 120),
+      comment,
+    };
+  }
+  return {
+    action,
+    trade: optionalReviewText(input.trade, "Trade", 120),
+    comment,
+  };
+}
+
 export function validatePdfCandidate(file: {
   name: string;
   type?: string;
@@ -512,7 +632,7 @@ export type HeliosDocumentEvidenceInput = {
 
 export type HeliosDocumentFindingInput = Omit<
   HeliosIntelligenceFinding,
-  "id" | "evidenceIds"
+  "id" | "evidenceIds" | "review"
 > & {
   evidenceKeys: string[];
 };
@@ -532,7 +652,7 @@ export type HeliosProjectSynthesisInput = {
   projectType: HeliosEvidenceBackedValue;
   fundingSource: HeliosEvidenceBackedValue;
   confidence: number;
-  findings: Omit<HeliosIntelligenceFinding, "id">[];
+  findings: Omit<HeliosIntelligenceFinding, "id" | "review">[];
 };
 
 function record(value: unknown, label: string): UnknownRecord {

@@ -35,6 +35,7 @@ import { useState } from "react";
 
 import { formatTimestamp } from "@/lib/format";
 import { EvidenceReviewCockpit } from "./evidence-review-cockpit";
+import { FindingReviewQueue } from "./finding-review-queue";
 import { StatusBadge } from "./status-badge";
 
 const categoryLabels: Record<HeliosIntelligenceCategory, string> = {
@@ -369,6 +370,9 @@ export function ProjectIntelligencePanel({
               <TabsTrigger value="evidence">
                 Evidence ({intelligence.evidence.length})
               </TabsTrigger>
+              <TabsTrigger value="review">
+                Review queue ({intelligence.reviewSummary.needsReview})
+              </TabsTrigger>
               <TabsTrigger value="source-review">Source review</TabsTrigger>
             </TabsList>
           </div>
@@ -553,6 +557,15 @@ export function ProjectIntelligencePanel({
                 ),
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="review" className="pt-4">
+            <FindingReviewQueue
+              projectId={projectId}
+              intelligence={intelligence}
+              locked={isUpdating || isStale}
+              onOpenEvidence={openEvidence}
+            />
           </TabsContent>
 
           <TabsContent value="source-review" className="pt-4">

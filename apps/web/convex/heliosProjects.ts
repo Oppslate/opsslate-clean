@@ -263,6 +263,83 @@ export const getProject = internalQuery({
           )
           .collect()
       : [];
+    const reviewEvents = intelligence
+      ? await ctx.db
+          .query("heliosFindingReviewEvents")
+          .withIndex("by_intelligence_created", (query) =>
+            query.eq("intelligenceId", intelligence._id),
+          )
+          .order("asc")
+          .collect()
+      : [];
+    const reviewEventsByFinding = new Map<
+      string,
+      typeof reviewEvents
+    >();
+    for (const event of reviewEvents) {
+      const existing = reviewEventsByFinding.get(event.findingId) || [];
+      reviewEventsByFinding.set(event.findingId, [...existing, event]);
+    }
+    const findings =
+      intelligence?.findings.map((finding, index) => {
+        const findingId = `${intelligence._id}:finding:${index}`;
+        const history = reviewEventsByFinding.get(findingId) || [];
+        const latest = history[history.length - 1];
+        let correctedTitle: string | undefined;
+        let correctedDetail: string | undefined;
+        let trade: string | undefined;
+        for (const event of history) {
+          correctedTitle = event.correctedTitle || correctedTitle;
+          correctedDetail = event.correctedDetail || correctedDetail;
+          trade = event.trade || trade;
+        }
+        return {
+          id: findingId,
+          ...finding,
+          evidenceIds: finding.evidenceIds.map(String),
+          review: {
+            status: latest?.status || ("needs_review" as const),
+            correctedTitle,
+            correctedDetail,
+            trade,
+            reviewerName: latest?.reviewerName,
+            latestComment: latest?.comment,
+            updatedAt: latest?.createdAt,
+            history: history.map((event) => ({
+              id: String(event._id),
+              action: event.action,
+              status: event.status,
+              reviewerName: event.reviewerName,
+              correctedTitle: event.correctedTitle,
+              correctedDetail: event.correctedDetail,
+              trade: event.trade,
+              comment: event.comment,
+              createdAt: event.createdAt,
+            })),
+          },
+        };
+      }) || [];
+    const reviewSummary = {
+      total: findings.length,
+      needsReview: findings.filter(
+        (finding) => finding.review.status === "needs_review",
+      ).length,
+      approved: findings.filter(
+        (finding) => finding.review.status === "approved",
+      ).length,
+      corrected: findings.filter(
+        (finding) => finding.review.status === "corrected",
+      ).length,
+      rejected: findings.filter(
+        (finding) => finding.review.status === "rejected",
+      ).length,
+      reanalysisRequested: findings.filter(
+        (finding) => finding.review.status === "reanalysis_requested",
+      ).length,
+      superseded: findings.filter(
+        (finding) => finding.review.status === "superseded",
+      ).length,
+    };
     const documentsById = new Map(
       documents.map((document) => [document._id, document]),
     );
@@ -291,11 +368,8 @@ export const getProject = internalQuery({
               evidenceIds: intelligence.fundingSource.evidenceIds.map(String),
             },
             confidence: intelligence.confidence,
-            findings: intelligence.findings.map((finding, index) => ({
-              id: `${intelligence._id}:finding:${index}`,
-              ...finding,
-              evidenceIds: finding.evidenceIds.map(String),
-            })),
+            findings,
+            reviewSummary,
             evidence: evidence.map((row) => ({
               id: row._id,
               documentId: row.documentId,

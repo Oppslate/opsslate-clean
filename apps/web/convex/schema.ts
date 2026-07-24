@@ -378,6 +378,43 @@ export default defineSchema({
     generatedAt: v.number(),
   }).index("by_project", ["projectId"]),
 
+  heliosFindingReviewEvents: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    intelligenceId: v.id("heliosProjectIntelligence"),
+    generationId: v.optional(v.id("heliosIntelligenceJobs")),
+    findingId: v.string(),
+    findingIndex: v.number(),
+    action: v.union(
+      v.literal("approve"),
+      v.literal("correct"),
+      v.literal("reject"),
+      v.literal("request_reanalysis"),
+      v.literal("supersede"),
+    ),
+    status: v.union(
+      v.literal("approved"),
+      v.literal("corrected"),
+      v.literal("rejected"),
+      v.literal("reanalysis_requested"),
+      v.literal("superseded"),
+    ),
+    correctedTitle: v.optional(v.string()),
+    correctedDetail: v.optional(v.string()),
+    trade: v.optional(v.string()),
+    comment: v.optional(v.string()),
+    reviewerUserId: v.id("users"),
+    reviewerName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_intelligence_created", ["intelligenceId", "createdAt"])
+    .index("by_intelligence_finding_created", [
+      "intelligenceId",
+      "findingId",
+      "createdAt",
+    ])
+    .index("by_project_created", ["projectId", "createdAt"]),
+
   equipment: defineTable({
     companyId: v.id("companies"),
     name: v.string(),

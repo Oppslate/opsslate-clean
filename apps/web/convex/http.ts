@@ -8,6 +8,7 @@ import {
   finalizeHeliosPackage,
   listHeliosProjects,
   registerHeliosDocument,
+  reviewHeliosFinding,
   resolveIdentity,
   retryHeliosDocument,
   retryHeliosProject,
@@ -71,6 +72,11 @@ http.route({
   path: "/helios/v1/intelligence/retry",
   method: "POST",
   handler: retryHeliosProject,
+});
+http.route({
+  path: "/helios/v1/findings/review",
+  method: "POST",
+  handler: reviewHeliosFinding,
 });
 
 export default http;
