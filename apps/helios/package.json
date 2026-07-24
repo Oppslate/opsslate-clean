@@ -10,8 +10,8 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.6.0",
     "@opsslate/helios-domain": "file:../../packages/helios-domain",
-    "@opsslate/suite-auth": "file:../../packages/suite-auth",
     "@opsslate/suite-config": "file:../../packages/suite-config",
     "@opsslate/suite-ui": "file:../../packages/suite-ui",
     "lucide-react": "^0.575.0",

@@ -7,7 +7,7 @@ import {
   validatePdfCandidate,
   type HeliosProjectDetail,
 } from "@opsslate/helios-domain";
-import type { HeliosPrincipal } from "@opsslate/suite-auth/types";
+import type { HeliosPrincipal } from "@/lib/helios-principal";
 import { Badge } from "@opsslate/suite-ui/badge";
 import { Button } from "@opsslate/suite-ui/button";
 import {

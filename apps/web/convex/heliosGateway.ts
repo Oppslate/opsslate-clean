@@ -31,7 +31,7 @@ const resolveIdentityReference = makeFunctionReference<
   "mutation",
   { issuer: string; subject: string; email: string; name: string },
   ResolvedPrincipal
->("heliosIdentity:resolveExistingUser");
+>("heliosIdentity:resolveOrProvisionUser");
 const listCockpitReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal },

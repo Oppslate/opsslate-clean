@@ -7,19 +7,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@opsslate/suite-ui/card";
+import Link from "next/link";
 
 const messages: Record<string, string> = {
-  invalid:
-    "Your OpsSlate session could not be verified. Sign in to OpsSlate again, then return to Helios.",
-  missing:
-    "No shared OpsSlate session was found. Sign in to OpsSlate, then return to Helios.",
   unavailable:
-    "Secure Helios access is not available yet. An administrator must complete the Foundation 3A identity configuration.",
+    "Secure Helios access is temporarily unavailable. Please try again.",
 };
 
 export function HeliosAccessBoundary({ state }: { state?: string }) {
-  const opsSlateUrl =
-    process.env.NEXT_PUBLIC_OPSSLATE_APP_URL || "https://opsslate.app";
   const message = state ? messages[state] : undefined;
 
   return (
@@ -34,11 +29,10 @@ export function HeliosAccessBoundary({ state }: { state?: string }) {
               Helios
             </Badge>
           </div>
-          <CardTitle>Authenticated OpsSlate access required</CardTitle>
+          <CardTitle>Sign in to Helios</CardTitle>
           <CardDescription>
-            Helios uses a verified OpsSlate identity and derives company access
-            on the server. Company identifiers are never accepted from the
-            browser as authorization.
+            Helios is an independent estimating application with its own
+            accounts, companies, roles, and secure sessions.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -51,22 +45,16 @@ export function HeliosAccessBoundary({ state }: { state?: string }) {
             </p>
           ) : null}
           <div className="flex flex-col gap-3 sm:flex-row">
-            <form
-              action="/api/auth/session?returnTo=/"
-              method="post"
-              className="contents"
-            >
-              <Button type="submit">Verify OpsSlate session</Button>
-            </form>
+            <Button asChild>
+              <Link href="/sign-in">Sign in</Link>
+            </Button>
             <Button asChild variant="outline">
-              <a href={`${opsSlateUrl.replace(/\/$/, "")}/login`}>
-                Go to OpsSlate sign in
-              </a>
+              <Link href="/sign-up">Create a Helios account</Link>
             </Button>
           </div>
           <p className="text-xs leading-5 text-muted-foreground">
-            Helios does not accept credentials directly and does not create
-            accounts automatically.
+            Your company access is derived on the server from your verified
+            Helios membership. OpsSlate credentials are not used.
           </p>
         </CardContent>
       </Card>

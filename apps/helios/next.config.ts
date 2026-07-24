@@ -14,7 +14,6 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
   transpilePackages: [
     "@opsslate/helios-domain",
-    "@opsslate/suite-auth",
     "@opsslate/suite-config",
     "@opsslate/suite-ui",
   ],

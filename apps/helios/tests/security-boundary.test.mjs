@@ -5,8 +5,13 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const route = readFileSync(
-  join(root, "src/app/api/auth/session/route.ts"),
+const session = readFileSync(
+  join(root, "src/lib/helios-session.ts"),
+  "utf8",
+);
+const proxy = readFileSync(join(root, "src/proxy.ts"), "utf8");
+const shell = readFileSync(
+  join(root, "src/components/helios-shell.tsx"),
   "utf8",
 );
 const identity = readFileSync(
@@ -18,19 +23,21 @@ const gateway = readFileSync(
   "utf8",
 );
 
-test("Helios session cookie is server-only and bounded", () => {
-  assert.match(route, /httpOnly:\s*true/);
-  assert.match(route, /sameSite:\s*"lax"/);
-  assert.match(route, /HELIOS_SESSION_MAX_AGE_SECONDS/);
-  assert.doesNotMatch(route, /domain:/);
+test("Helios authentication is independent and Clerk-verified", () => {
+  assert.match(proxy, /clerkMiddleware/);
+  assert.match(session, /auth,\s*currentUser/);
+  assert.match(session, /session\.isAuthenticated/);
+  assert.match(session, /verification\?\.status !== "verified"/);
+  assert.doesNotMatch(session, /opsslate/i);
 });
 
-test("session mutations enforce same-origin requests", () => {
-  assert.match(route, /if \(!sameOrigin\(request\)\)/);
-  assert.match(route, /sec-fetch-site/);
+test("logout terminates the independent identity-provider session", () => {
+  assert.match(shell, /useClerk/);
+  assert.match(shell, /signOut\(\{ redirectUrl: "\/sign-in" \}\)/);
+  assert.doesNotMatch(shell, /api\/auth\/session/);
 });
 
-test("tenant identity is derived from the stored OpsSlate user", () => {
+test("tenant identity is provisioned and derived on the server", () => {
   assert.match(identity, /companyId:\s*user\.companyId/);
   assert.doesNotMatch(
     identity,
@@ -40,6 +47,9 @@ test("tenant identity is derived from the stored OpsSlate user", () => {
   assert.match(identity, /membership\.status === "active"/);
   assert.match(identity, /memberships\.length > 0 && !teamMember/);
   assert.match(identity, /HELIOS_ALLOWED_ROLES/);
+  assert.match(identity, /ctx\.db\.insert\("companies"/);
+  assert.match(identity, /ctx\.db\.insert\("users"/);
+  assert.match(identity, /ctx\.db\.insert\("teamMembers"/);
 });
 
 test("Convex identity resolution is internal and gateway-protected", () => {

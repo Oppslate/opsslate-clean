@@ -8,7 +8,7 @@ function normalizedEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-export const resolveExistingUser = internalMutation({
+export const resolveOrProvisionUser = internalMutation({
   args: {
     issuer: v.string(),
     subject: v.string(),
@@ -37,19 +37,47 @@ export const resolveExistingUser = internalMutation({
       .unique();
 
     if (linkedUser && emailUser && linkedUser._id !== emailUser._id) {
-      throw new Error("Identity is linked to a different OpsSlate account.");
+      throw new Error("Identity is linked to a different Helios account.");
     }
 
-    const user = linkedUser ?? emailUser;
+    let user = linkedUser ?? emailUser;
     if (!user) {
-      throw new Error("No existing OpsSlate account matches this identity.");
+      const now = Date.now();
+      const companyName = `${args.name.trim() || email.split("@")[0]}'s Company`;
+      const companyId = await ctx.db.insert("companies", {
+        name: companyName.slice(0, 160),
+        plan: "helios_preview",
+        email,
+      });
+      const userId = await ctx.db.insert("users", {
+        companyId,
+        email,
+        name: args.name.trim() || email,
+        role: "owner",
+        identityIssuer: issuer,
+        identitySubject: subject,
+        identityLinkedAt: now,
+        passwordHash: "managed:clerk",
+      });
+      await ctx.db.insert("teamMembers", {
+        companyId,
+        userId,
+        email,
+        name: args.name.trim() || email,
+        role: "owner",
+        status: "active",
+        invitedAt: now,
+        lastActiveAt: now,
+      });
+      user = await ctx.db.get(userId);
+      if (!user) throw new Error("Helios account could not be created.");
     }
 
     if (
       (user.identityIssuer && user.identityIssuer !== issuer) ||
       (user.identitySubject && user.identitySubject !== subject)
     ) {
-      throw new Error("OpsSlate account is linked to a different identity.");
+      throw new Error("Helios account is linked to a different identity.");
     }
 
     const memberships = await ctx.db
@@ -63,16 +91,16 @@ export const resolveExistingUser = internalMutation({
     );
 
     if (memberships.length > 0 && !teamMember) {
-      throw new Error("OpsSlate team membership is not active.");
+      throw new Error("Helios team membership is not active.");
     }
 
     const role = (teamMember?.role || user.role || "member").toLowerCase();
     if (!HELIOS_ALLOWED_ROLES.has(role)) {
-      throw new Error("OpsSlate role is not authorized for Helios.");
+      throw new Error("Helios role is not authorized.");
     }
 
     const company = await ctx.db.get(user.companyId);
-    if (!company) throw new Error("OpsSlate company no longer exists.");
+    if (!company) throw new Error("Helios company no longer exists.");
 
     if (!user.identityIssuer || !user.identitySubject) {
       await ctx.db.patch(user._id, {

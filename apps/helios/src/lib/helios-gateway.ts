@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { HeliosPrincipal } from "@opsslate/suite-auth/types";
+import type { HeliosPrincipal } from "@/lib/helios-principal";
 
 type GatewayErrorPayload = { error?: unknown };
 

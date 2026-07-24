@@ -1,6 +1,11 @@
 # Helios Foundation Item 3A — Security and Tenancy Boundary
 
-Status: implementation checkpoint in progress
+Status: superseded for current Helios authentication
+
+> The OpsSlate shared-session design in this document was replaced by the
+> approved standalone identity boundary in
+> `HELIOS_FOUNDATION_3A_R_STANDALONE_IDENTITY.md`. This file is retained as
+> checkpoint history and must not be used to implement current Helios login.
 
 ## Scope
 

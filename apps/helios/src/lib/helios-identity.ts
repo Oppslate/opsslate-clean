@@ -1,9 +1,9 @@
 import "server-only";
 
 import type {
+  HeliosIdentity,
   HeliosPrincipal,
-  OpsSlateIdentity,
-} from "@opsslate/suite-auth/types";
+} from "@/lib/helios-principal";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -68,7 +68,7 @@ function parsePrincipal(value: unknown): HeliosPrincipal {
 }
 
 export async function resolveHeliosPrincipal(
-  identity: OpsSlateIdentity,
+  identity: HeliosIdentity,
 ): Promise<HeliosPrincipal> {
   const response = await fetch(
     `${convexSiteUrl()}/helios/v1/identity/resolve`,
@@ -87,7 +87,7 @@ export async function resolveHeliosPrincipal(
   );
 
   if (!response.ok) {
-    throw new Error("OpsSlate identity is not authorized for Helios.");
+    throw new Error("Helios identity is not authorized.");
   }
 
   const payload = await response.json();

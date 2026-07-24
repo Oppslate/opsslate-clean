@@ -1,32 +1,34 @@
 import "server-only";
 
-import { verifyHeliosSessionToken } from "@opsslate/suite-auth/server";
-import type { HeliosPrincipal } from "@opsslate/suite-auth/types";
-import { cookies } from "next/headers";
+import { auth, currentUser } from "@clerk/nextjs/server";
 
-export const HELIOS_SESSION_COOKIE =
-  process.env.NODE_ENV === "production"
-    ? "__Host-helios_session"
-    : "helios_session";
+import { resolveHeliosPrincipal } from "@/lib/helios-identity";
+import type { HeliosPrincipal } from "@/lib/helios-principal";
 
-export function getHeliosSessionSecret() {
-  const secret = process.env.HELIOS_SESSION_SECRET || "";
-  if (secret.length < 32) {
-    throw new Error(
-      "HELIOS_SESSION_SECRET must be configured with at least 32 characters.",
-    );
-  }
-  return secret;
-}
+const HELIOS_IDENTITY_ISSUER = "https://clerk.com";
 
 export async function readHeliosPrincipal(): Promise<HeliosPrincipal | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(HELIOS_SESSION_COOKIE)?.value;
-  if (!token) return null;
+  const session = await auth();
+  if (!session.isAuthenticated || !session.userId) return null;
 
-  try {
-    return verifyHeliosSessionToken(token, getHeliosSessionSecret());
-  } catch {
+  const user = await currentUser();
+  const primaryEmail = user?.primaryEmailAddress;
+  if (
+    !user ||
+    !primaryEmail ||
+    primaryEmail.verification?.status !== "verified"
+  ) {
     return null;
   }
+
+  const name =
+    [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+    primaryEmail.emailAddress;
+
+  return resolveHeliosPrincipal({
+    subject: session.userId,
+    issuer: HELIOS_IDENTITY_ISSUER,
+    email: primaryEmail.emailAddress,
+    name,
+  });
 }

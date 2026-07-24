@@ -6,7 +6,7 @@ import type {
   HeliosProjectInput,
   HeliosProjectSummary,
 } from "@opsslate/helios-domain";
-import type { HeliosPrincipal } from "@opsslate/suite-auth/types";
+import type { HeliosPrincipal } from "@/lib/helios-principal";
 
 import { callHeliosGateway } from "./helios-gateway";
 
