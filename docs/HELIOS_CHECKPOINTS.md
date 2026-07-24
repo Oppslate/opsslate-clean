@@ -25,7 +25,7 @@ points.
 | Milestone | Date started | Status | Pending before checkpoint |
 | --- | --- | --- | --- |
 | Foundation item 3B: working cockpit and secure PDF intake | 2026-07-23 | Implemented and locally verified at `fb54209`; live integration review pending | Run isolated cross-tenant, upload, responsive, accessibility, and visual acceptance tests before approval or deployment |
-| Foundation item 3C: AI document and project intelligence | 2026-07-24 | Implemented at `e14d773`; isolated Convex schema/functions, production builds, automated checks, and live GPT-5.6 Sol PDF/evidence validation passed | Verify a signed-session real-document workflow and responsive accessibility before approval or deployment |
+| Foundation item 3C.1–3C.3: bid-package intake, durable project intelligence, and cited PDF review | 2026-07-24 | Preview ready at `f3166a2`; tagged `helios-foundation-3c.3`; approval pending | Authenticated human review of citation-to-page navigation on the preview |
 
 ### Foundation item 2 evidence
 
@@ -50,6 +50,28 @@ points.
 - Authenticated cockpit and navigation drawer: Not testable on the separate
   `vercel.app` origin because the OpsSlate shared session cookie is intentionally
   not available cross-origin. No authentication bypass was added.
+- Production promotion and custom domain changes: Not performed
+
+### Foundation item 3C.3 preview evidence
+
+- [Stable Vercel preview](https://helios-foundation-item-2-preview-oppslate-oppslate.vercel.app)
+- Unique Vercel preview:
+  `https://helios-foundation-item-2-preview-pzqpudigj-oppslate.vercel.app`
+- Vercel deployment: `dpl_GRTYXxdz4dyxQevptEvvo1X8T6gi`
+- Vercel target / status: Preview / Ready
+- Application checkpoint: `f3166a2`
+- Annotated Git tag: `helios-foundation-3c.3`
+- Automated Helios boundary tests: 24 passed
+- Lint, TypeScript, shared UI boundary, local production build, and remote
+  production build: Passed
+- Live protected-PDF range request: `206`, `application/pdf`, `%PDF-`,
+  private/no-store
+- Live wrong-company document request: `404`
+- Unauthenticated preview PDF request: `401`
+- Desktop, tablet, and mobile horizontal overflow: None
+- Preview sign-in, styles, and application title: Passed
+- Preview runtime error scan: Clean
+- Authenticated human citation-to-page visual review: Pending
 - Production promotion and custom domain changes: Not performed
 
 ### Foundation item 3A-R standalone preview evidence
