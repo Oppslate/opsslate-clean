@@ -18,6 +18,7 @@ points.
 | --- | --- | --- | --- | --- | --- |
 | Foundation item 2: shared OpsSlate UI and responsive Helios application boundary | 2026-07-23 | Approved and verified | `89c51ef` | `helios-foundation-item-2` | Local and Vercel production builds passed; shared-ownership drift check passed; desktop, tablet, mobile, drawer, focus, assets, and styles verified |
 | Foundation item 3A: identity, session, and company authorization boundary | 2026-07-23 | Implemented and locally verified; live integration pending | `cac34c6` | Not tagged | Domain/security tests, lint, type checks, and builds passed; live issuer/tenant tests pending |
+| Foundation item 3A-R: standalone Helios identity and tenant security | 2026-07-24 | Preview ready; first human sign-up pending | `93b7be2` | Not tagged | Independent Clerk resource and isolated Convex tenant provisioning deployed; production build, lint, 12 security tests, UI-boundary check, unauthenticated API, same-origin, headers, desktop, tablet, and mobile checks passed |
 
 ## Milestones in progress
 
@@ -50,3 +51,24 @@ points.
   `vercel.app` origin because the OpsSlate shared session cookie is intentionally
   not available cross-origin. No authentication bypass was added.
 - Production promotion and custom domain changes: Not performed
+
+### Foundation item 3A-R standalone preview evidence
+
+- [Vercel preview](https://helios-foundation-item-2-preview-nt8arqo81-oppslate.vercel.app)
+- Vercel deployment: `dpl_F3PUQjgfEfKZGcYdBV1doF1ufygo`
+- Vercel target: Preview
+- Vercel status: Ready
+- Deployed source checkpoint: `93b7be2`
+- Independent Clerk development instance: Available
+- Isolated Convex deployment: `kindly-tiger-289`
+- OpsSlate authentication dependency and preview environment variables: Removed
+- Remote and local production builds: Passed
+- Helios security tests: 12 passed
+- Shared UI boundary, lint, and browser console errors: Passed / none
+- Unauthenticated projects API: `401`
+- Cross-origin project mutation: `403`
+- Desktop, tablet, and mobile horizontal overflow: None
+- Human sign-up, authenticated cockpit, logout, and two-user cross-company
+  verification: Pending the first interactive Cloudflare verification; no
+  challenge bypass was added
+- Production promotion and OpsSlate production changes: Not performed
