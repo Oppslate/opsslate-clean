@@ -11,6 +11,7 @@ import {
   resolveIdentity,
   retryHeliosDocument,
   retryHeliosProject,
+  viewHeliosDocument,
 } from "./heliosGateway";
 
 const http = httpRouter();
@@ -55,6 +56,11 @@ http.route({
   path: "/helios/v1/documents/register",
   method: "POST",
   handler: registerHeliosDocument,
+});
+http.route({
+  path: "/helios/v1/documents/view",
+  method: "POST",
+  handler: viewHeliosDocument,
 });
 http.route({
   path: "/helios/v1/documents/retry",

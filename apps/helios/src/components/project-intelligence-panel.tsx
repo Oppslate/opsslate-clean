@@ -34,6 +34,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { formatTimestamp } from "@/lib/format";
+import { EvidenceReviewCockpit } from "./evidence-review-cockpit";
 import { StatusBadge } from "./status-badge";
 
 const categoryLabels: Record<HeliosIntelligenceCategory, string> = {
@@ -71,9 +72,11 @@ function confidenceBadgeClass(value: number) {
 function CitationList({
   evidenceIds,
   intelligence,
+  onOpen,
 }: {
   evidenceIds: string[];
   intelligence: HeliosProjectIntelligence;
+  onOpen: (evidenceId: string) => void;
 }) {
   const evidenceById = new Map(
     intelligence.evidence.map((evidence) => [evidence.id, evidence]),
@@ -87,17 +90,23 @@ function CitationList({
           ? `PDF page ${evidence.pageNumber}`
           : "Page not identified";
         return (
-          <Badge
+          <button
             key={evidenceId}
-            variant="outline"
+            type="button"
             title={`${evidence.documentName} · ${page} · ${evidence.excerpt}`}
-            className="max-w-full border-orange-500/30 text-orange-200"
+            className="max-w-full rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400/60"
+            onClick={() => onOpen(evidenceId)}
           >
-            <FileSearch aria-hidden="true" />
-            <span className="truncate">
-              {evidence.documentName} · {page}
-            </span>
-          </Badge>
+            <Badge
+              variant="outline"
+              className="max-w-full border-orange-500/30 text-orange-200 hover:bg-orange-500/10"
+            >
+              <FileSearch aria-hidden="true" />
+              <span className="truncate">
+                {evidence.documentName} · {page}
+              </span>
+            </Badge>
+          </button>
         );
       })}
     </div>
@@ -118,6 +127,13 @@ export function ProjectIntelligencePanel({
   const router = useRouter();
   const { toast } = useToast();
   const [retrying, setRetrying] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState<string>();
+
+  function openEvidence(evidenceId: string) {
+    setSelectedEvidenceId(evidenceId);
+    setActiveTab("source-review");
+  }
 
   async function retryProject() {
     setRetrying(true);
@@ -343,7 +359,7 @@ export function ProjectIntelligencePanel({
             )}
           </div>
         )}
-        <Tabs defaultValue="overview">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <div className="overflow-x-auto overflow-y-hidden pb-1">
             <TabsList className="min-w-max" variant="line">
               <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -353,6 +369,7 @@ export function ProjectIntelligencePanel({
               <TabsTrigger value="evidence">
                 Evidence ({intelligence.evidence.length})
               </TabsTrigger>
+              <TabsTrigger value="source-review">Source review</TabsTrigger>
             </TabsList>
           </div>
 
@@ -368,6 +385,7 @@ export function ProjectIntelligencePanel({
                   <CitationList
                     evidenceIds={intelligence.summaryEvidenceIds}
                     intelligence={intelligence}
+                    onOpen={openEvidence}
                   />
                 </div>
               </div>
@@ -396,6 +414,7 @@ export function ProjectIntelligencePanel({
                       <CitationList
                         evidenceIds={value.evidenceIds}
                         intelligence={intelligence}
+                        onOpen={openEvidence}
                       />
                     )}
                   </div>
@@ -461,6 +480,7 @@ export function ProjectIntelligencePanel({
                           <CitationList
                             evidenceIds={finding.evidenceIds}
                             intelligence={intelligence}
+                            onOpen={openEvidence}
                           />
                         </article>
                       ))}
@@ -514,6 +534,18 @@ export function ProjectIntelligencePanel({
                           <blockquote className="mt-2 border-l-2 border-orange-500/40 pl-3 text-sm leading-5 text-muted-foreground">
                             “{evidence.excerpt}”
                           </blockquote>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-3"
+                            onClick={() => openEvidence(evidence.id)}
+                          >
+                            <FileSearch
+                              className="size-3.5"
+                              aria-hidden="true"
+                            />
+                            Open source page
+                          </Button>
                         </article>
                       ))}
                     </div>
@@ -521,6 +553,15 @@ export function ProjectIntelligencePanel({
                 ),
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="source-review" className="pt-4">
+            <EvidenceReviewCockpit
+              projectId={projectId}
+              intelligence={intelligence}
+              selectedEvidenceId={selectedEvidenceId}
+              onSelectEvidence={setSelectedEvidenceId}
+            />
           </TabsContent>
         </Tabs>
       </CardContent>

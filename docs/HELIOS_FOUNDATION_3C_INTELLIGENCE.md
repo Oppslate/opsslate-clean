@@ -22,11 +22,27 @@ The continuous workflow in this checkpoint is:
    project-level intelligence record from the accepted evidence.
 8. The project workspace displays summary, confidence, grouped findings, source
    document, physical PDF page, locator, and excerpt for human review.
+9. The estimator can open the protected original PDF beside the cited evidence
+   and move directly from a conclusion to its physical source page.
 
 This checkpoint does not approve intelligence, mark a project ready for an
-estimate, create estimate items, show a secure PDF viewer, send RFQs, generate
-proposals, or hand a project to OpsSlate. Those capabilities require separate
-approval.
+estimate, create estimate items, send RFQs, generate proposals, or hand a
+project to OpsSlate. Those capabilities require separate approval.
+
+## Foundation 3C.3 evidence review cockpit
+
+Foundation 3C.3 adds a read-only estimator review surface:
+
+- three-pane desktop layout for source documents, the original PDF, and cited
+  passages;
+- citation buttons that open the correct document and physical PDF page;
+- previous/next cited-passage navigation;
+- a protected open-in-native-viewer action;
+- tablet stacking and a mobile native-PDF fallback;
+- persistent AI provenance and human-verification language.
+
+The viewer uses the original protected PDF stored during intake. It does not
+render a reconstructed document or expose a storage URL.
 
 ## Security boundary
 
@@ -37,6 +53,12 @@ approval.
   are never returned through the Helios gateway.
 - The existing signed session, same-origin, active-membership, role, company,
   project, and document ownership checks protect all retry operations.
+- Original PDF delivery reauthorizes the session, company, project, and
+  document on every request and proxies only the PDF stream through Helios.
+- PDF range requests are supported without returning the protected Convex
+  storage URL to the browser.
+- PDF responses use private/no-store caching, inline disposition,
+  content-sniffing protection, and same-origin framing restrictions.
 - Provider errors are converted to bounded operational messages; document
   content and raw provider responses are not logged or returned.
 - A stable opaque company identifier is sent as OpenAI's
@@ -145,12 +167,13 @@ The limited Helios-specific treatment is:
 - orange-outlined `AI-generated` provenance badge;
 - explicit confidence labels and percentages;
 - source/page citation badges;
+- citation-to-page source review using the original protected PDF;
 - evidence excerpt cards;
 - warning and critical severity icons;
 - persistent “Human review required” language.
 
-There is no approval button, fake PDF viewer, estimate action, placeholder
-analysis, or disconnected mock project data.
+There is no approval button, reconstructed or fake PDF, estimate action,
+placeholder analysis, or disconnected mock project data.
 
 ## Required environment configuration
 
@@ -194,4 +217,7 @@ Live OpenAI smoke test:
 - Visually inspect desktop, tablet, and mobile intelligence states.
 - Review accessibility for keyboard tabs, focus order, live status, citations,
   error recovery, and contrast.
-- Do not deploy Helios or begin Foundation 3D until this review is complete.
+- Exercise the protected PDF route through an authenticated human browser
+  session on the preview deployment.
+- Do not promote Helios to production or begin Foundation 4 until this review
+  is complete.

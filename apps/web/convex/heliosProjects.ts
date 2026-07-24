@@ -324,6 +324,33 @@ export const getProject = internalQuery({
   },
 });
 
+export const authorizeDocumentContent = internalQuery({
+  args: {
+    principal: heliosPrincipalValidator,
+    projectId: v.string(),
+    documentId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { companyId } = await requireHeliosPrincipal(ctx, args.principal);
+    const project = await ownedProject(ctx, companyId, args.projectId);
+    const documentId = ctx.db.normalizeId("heliosDocuments", args.documentId);
+    if (!documentId) throw new Error("Document not found.");
+    const document = await ctx.db.get(documentId);
+    if (
+      !document ||
+      document.companyId !== companyId ||
+      document.projectId !== project._id
+    ) {
+      throw new Error("Document not found.");
+    }
+    return {
+      storageId: document.storageId,
+      fileName: document.fileName,
+      size: document.size,
+    };
+  },
+});
+
 export const createUploadIntent = internalMutation({
   args: {
     principal: heliosPrincipalValidator,

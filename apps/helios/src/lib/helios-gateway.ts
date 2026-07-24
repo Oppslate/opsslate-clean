@@ -49,6 +49,25 @@ function gatewayPrincipal(principal: HeliosPrincipal) {
   };
 }
 
+export async function callHeliosGatewayRaw(
+  path: string,
+  principal: HeliosPrincipal,
+  body: Record<string, unknown> = {},
+) {
+  return fetch(`${gatewayUrl()}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/pdf",
+      Authorization: `Bearer ${gatewaySecret()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ principal: gatewayPrincipal(principal), ...body }),
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(120_000),
+  });
+}
+
 export async function callHeliosGateway<T>(
   path: string,
   principal: HeliosPrincipal,

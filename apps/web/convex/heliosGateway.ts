@@ -50,6 +50,19 @@ const getProjectReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string },
   HeliosProjectDetail
 >("heliosProjects:getProject");
+const authorizeDocumentContentReference = makeFunctionReference<
+  "query",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    documentId: string;
+  },
+  {
+    storageId: Id<"_storage">;
+    fileName: string;
+    size: number;
+  }
+>("heliosProjects:authorizeDocumentContent");
 const createUploadIntentReference = makeFunctionReference<
   "mutation",
   {
@@ -257,6 +270,21 @@ function principalFrom(payload: Record<string, unknown>) {
   return payload.principal as GatewayPrincipal;
 }
 
+function safeInlineFileName(value: string) {
+  const ascii =
+    value
+      .normalize("NFKC")
+      .replace(/[^\x20-\x7e]/g, "_")
+      .replace(/["\\]/g, "_")
+      .slice(0, 180) || "project-document.pdf";
+  const encoded = encodeURIComponent(value.slice(0, 240)).replace(
+    /['()*]/g,
+    (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `inline; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
 async function storageHasPdfSignature(
   storage: {
     getUrl(storageId: Id<"_storage">): Promise<string | null>;
@@ -389,6 +417,62 @@ export const getHeliosProject = httpAction(async (ctx, request) => {
     return json({ data }, 200);
   } catch {
     return json({ error: "Project was not found." }, 404);
+  }
+});
+
+export const viewHeliosDocument = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (
+    !boundedString(payload.projectId) ||
+    !boundedString(payload.documentId)
+  ) {
+    return json({ error: "Invalid document request." }, 400);
+  }
+  const range =
+    typeof payload.range === "string" &&
+    /^bytes=\d*-\d*$/.test(payload.range) &&
+    payload.range.length <= 80
+      ? payload.range
+      : undefined;
+  try {
+    const document = await ctx.runQuery(authorizeDocumentContentReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      documentId: payload.documentId,
+    });
+    const storageUrl = await ctx.storage.getUrl(document.storageId);
+    if (!storageUrl) {
+      return json({ error: "Document content was not found." }, 404);
+    }
+    const source = await fetch(storageUrl, {
+      headers: range ? { Range: range } : undefined,
+      redirect: "error",
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!source.ok || !source.body) {
+      return json({ error: "Document content could not be loaded." }, 502);
+    }
+    const headers = new Headers({
+      "Accept-Ranges": source.headers.get("accept-ranges") || "bytes",
+      "Cache-Control": "private, no-store, max-age=0",
+      "Content-Disposition": safeInlineFileName(document.fileName),
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
+      "Content-Type": "application/pdf",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "SAMEORIGIN",
+    });
+    for (const name of ["content-length", "content-range"]) {
+      const value = source.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+    return new Response(source.body, {
+      status: source.status,
+      headers,
+    });
+  } catch {
+    return json({ error: "Document was not found." }, 404);
   }
 });
 

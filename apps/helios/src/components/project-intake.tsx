@@ -95,7 +95,7 @@ export function ProjectIntake({
   return (
     <HeliosShell
       principal={principal}
-      topActions={<Badge variant="secondary">Foundation 3C.1–3C.2</Badge>}
+      topActions={<Badge variant="secondary">Foundation 3C.1–3C.3</Badge>}
     >
       <div className="space-y-5">
         <header>
