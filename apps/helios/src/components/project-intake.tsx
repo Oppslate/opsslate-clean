@@ -63,6 +63,7 @@ type UploadRow = {
   state: UploadState;
   error?: string;
 };
+const UPLOAD_CONCURRENCY = 3;
 
 function uploadToStorage(
   uploadUrl: string,
@@ -232,7 +233,11 @@ export function ProjectIntake({
       state: "queued" as const,
     }));
     setUploads((current) => [...rows, ...current]);
-    await Promise.all(rows.map(processUpload));
+    for (let index = 0; index < rows.length; index += UPLOAD_CONCURRENCY) {
+      await Promise.all(
+        rows.slice(index, index + UPLOAD_CONCURRENCY).map(processUpload),
+      );
+    }
   }
 
   function onFileInput(event: ChangeEvent<HTMLInputElement>) {

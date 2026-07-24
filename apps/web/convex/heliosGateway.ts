@@ -13,6 +13,7 @@ import { httpAction } from "./_generated/server";
 
 const MAX_IDENTITY_BODY_BYTES = 8 * 1024;
 const MAX_DATA_BODY_BYTES = 32 * 1024;
+const PDF_SIGNATURE = "%PDF-";
 
 type GatewayPrincipal = {
   userId: string;
@@ -230,6 +231,41 @@ function principalFrom(payload: Record<string, unknown>) {
   return payload.principal as GatewayPrincipal;
 }
 
+async function storageHasPdfSignature(
+  storage: {
+    getUrl(storageId: Id<"_storage">): Promise<string | null>;
+  },
+  storageId: Id<"_storage">,
+) {
+  const storageUrl = await storage.getUrl(storageId);
+  if (!storageUrl) return false;
+
+  const response = await fetch(storageUrl, {
+    headers: { Range: "bytes=0-4" },
+    redirect: "error",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok || !response.body) return false;
+
+  const reader = response.body.getReader();
+  const prefix: number[] = [];
+  try {
+    while (prefix.length < PDF_SIGNATURE.length) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      prefix.push(
+        ...value.slice(0, PDF_SIGNATURE.length - prefix.length),
+      );
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+
+  return (
+    new TextDecoder().decode(new Uint8Array(prefix)) === PDF_SIGNATURE
+  );
+}
+
 export const resolveIdentity = httpAction(async (ctx, request) => {
   let expectedSecret: string;
   try {
@@ -363,6 +399,10 @@ export const registerHeliosDocument = httpAction(async (ctx, request) => {
     return json({ error: "Invalid document registration." }, 400);
   }
 
+  let stage:
+    | "inspect_upload"
+    | "read_pdf_signature"
+    | "commit_document" = "inspect_upload";
   try {
     const storageId = payload.storageId as Id<"_storage">;
     await ctx.runQuery(inspectUploadReference, {
@@ -371,10 +411,9 @@ export const registerHeliosDocument = httpAction(async (ctx, request) => {
       intentId: payload.intentId,
       storageId,
     });
-    const blob = await ctx.storage.get(storageId);
-    const magicValid = blob
-      ? new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer()) === "%PDF-"
-      : false;
+    stage = "read_pdf_signature";
+    const magicValid = await storageHasPdfSignature(ctx.storage, storageId);
+    stage = "commit_document";
     const data = await ctx.runMutation(
       registerDocumentReference,
       {
@@ -387,8 +426,21 @@ export const registerHeliosDocument = httpAction(async (ctx, request) => {
       },
     );
     return json({ data }, 201);
-  } catch {
-    return json({ error: "PDF validation or registration failed." }, 400);
+  } catch (error) {
+    console.error("[helios:document-registration] failed", {
+      stage,
+      error:
+        error instanceof Error
+          ? { name: error.name, message: error.message }
+          : { name: "UnknownError", message: String(error) },
+    });
+    return json(
+      {
+        error: "PDF validation or registration failed.",
+        code: `document_registration_${stage}_failed`,
+      },
+      400,
+    );
   }
 });
 

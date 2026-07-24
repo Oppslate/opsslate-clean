@@ -42,8 +42,10 @@ test("company ownership is reauthorized inside every project operation", () => {
 });
 
 test("storage registration validates server-observed PDF data", () => {
-  assert.match(gateway, /blob\.slice\(0,\s*5\)/);
-  assert.match(gateway, /"%PDF-"/);
+  assert.match(gateway, /storage\.getUrl\(storageId\)/);
+  assert.match(gateway, /Range: "bytes=0-4"/);
+  assert.match(gateway, /response\.body\.getReader\(\)/);
+  assert.match(gateway, /PDF_SIGNATURE = "%PDF-"/);
   assert.match(projectStore, /metadata\.contentType !== "application\/pdf"/);
   assert.match(projectStore, /metadata\.sha256/);
   assert.match(projectStore, /by_project_hash/);
