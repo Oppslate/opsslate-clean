@@ -136,7 +136,7 @@ export function SuiteAppShell({
           className="min-w-0 flex-1 overflow-auto p-4 pb-8 lg:p-6 lg:pb-8"
         >
           {showTopBar && (
-            <div className="mb-5 flex items-center justify-end gap-3">
+            <div className="relative z-20 mb-5 flex items-center justify-end gap-3">
               {search && (
                 <button
                   type="button"

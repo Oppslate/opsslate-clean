@@ -63,6 +63,22 @@
 - Passed: a clean authenticated browser load produced no page errors and no
   document-level horizontal overflow.
 
+## Card-top visibility iteration
+
+- Reference:
+  `docs/evidence/helios-3d1-card-top-reference.png`.
+- Side-by-side comparison:
+  `docs/evidence/helios-3d1-card-top-comparison.png`.
+- Passed at the Edge-equivalent `1908 × 915` application viewport: the cockpit
+  begins at the top of the content area and the full decision dock is visible
+  without page scrolling.
+- Passed: Approve, Correct, Reanalyze, Supersede, and Reject are all fully
+  inside the initial viewport.
+- Passed: the shared milestone badge and account menu remain above the cockpit
+  in a reserved header area with no control collision.
+- Passed: tablet and mobile retain their normal stacked layout, account access,
+  navigation drawer, and zero document-level horizontal overflow.
+
 ## Findings
 
 - P0: none.

@@ -60,6 +60,12 @@ concept image were not copied as fake buttons.
 - Side-by-side comparison: `docs/evidence/helios-3d1-comparison.png`
 - Tablet implementation: `docs/evidence/helios-3d1-tablet.png`
 - Mobile implementation: `docs/evidence/helios-3d1-mobile.png`
+- Card-top reference:
+  `docs/evidence/helios-3d1-card-top-reference.png`
+- Card-top implementation:
+  `docs/evidence/helios-3d1-top-card-desktop.png`
+- Card-top comparison:
+  `docs/evidence/helios-3d1-card-top-comparison.png`
 - Design QA: `design-qa.md`
 
 ## Stop point

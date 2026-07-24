@@ -107,8 +107,8 @@ export function ProjectIntelligenceCockpit({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-lg">
-      <header className="grid gap-3 border-b border-border bg-card/80 p-3 md:grid-cols-2 md:items-center xl:grid-cols-[minmax(240px,1.4fr)_repeat(3,minmax(120px,0.55fr))_auto]">
+    <div className="relative z-10 overflow-hidden rounded-xl border border-border bg-card shadow-lg xl:-mt-20">
+      <header className="grid gap-3 border-b border-border bg-card/80 p-3 md:grid-cols-2 md:items-center xl:grid-cols-[minmax(240px,1.4fr)_repeat(3,minmax(120px,0.55fr))_minmax(210px,0.45fr)]">
         <div className="min-w-0 md:col-span-2 xl:col-span-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="truncate text-base font-semibold">{project.name}</h1>
@@ -174,18 +174,7 @@ export function ProjectIntelligenceCockpit({
           </div>
         </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={retrying || isUpdating}
-          onClick={() => void retryProject()}
-        >
-          <RefreshCw
-            className={`size-3.5 ${retrying ? "animate-spin" : ""}`}
-            aria-hidden="true"
-          />
-          Reanalyze
-        </Button>
+        <div className="hidden xl:block" aria-hidden="true" />
       </header>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-muted/10 px-3 py-2 text-[11px]">
@@ -225,6 +214,18 @@ export function ProjectIntelligenceCockpit({
         <span className="ml-auto text-muted-foreground">
           Last analysis {formatTimestamp(intelligence.generatedAt)}
         </span>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={retrying || isUpdating}
+          onClick={() => void retryProject()}
+        >
+          <RefreshCw
+            className={`size-3.5 ${retrying ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
+          Reanalyze
+        </Button>
       </div>
 
       {(locked || intelligence.confidence < 65) && (
