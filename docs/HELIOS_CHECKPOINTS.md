@@ -29,7 +29,7 @@ points.
 
 | Foundation item 3D: human finding review and correction lifecycle | 2026-07-24 | Preview ready at `9e2d731`; tagged `helios-foundation-3d`; approval pending | Authenticated human visual review of the review queue and dialogs on the preview |
 | Foundation item 3D.1: option-3 cockpit alignment | 2026-07-24 | Approved; locally verified at `a88c050`; tagged `helios-foundation-3d.1` | Create and verify a preview-only Vercel deployment; do not promote to production |
-| Foundation item 3D.1.1: above-fold decision dock | 2026-07-24 | Locally verified at `576a728`; tagged `helios-foundation-3d.1.1`; preview pending | Deploy and verify the raised cockpit at the Edge-equivalent viewport |
+| Foundation item 3D.1.1: above-fold decision dock | 2026-07-24 | Preview ready at `576a728`; tagged `helios-foundation-3d.1.1`; visual confirmation pending | Confirm the raised cockpit and decision-button visibility on the preview |
 
 ### Foundation item 2 evidence
 
@@ -143,7 +143,16 @@ points.
 - Automated Helios tests: 30 passed
 - Helios lint, Helios TypeScript, shared UI TypeScript, shared ownership
   boundary, and local production build: Passed
-- Vercel preview: Pending
+- [Unique Vercel preview](https://helios-foundation-item-2-preview-lxfgikry1-oppslate.vercel.app)
+- [Stable Vercel preview](https://helios-foundation-item-2-preview-oppslate-oppslate.vercel.app)
+- Vercel deployment: `dpl_9jkV2vQA7Mn9iVyMz5yvXVyhxJmc`
+- Vercel target / status: Preview / Ready
+- Deployed source commit: `f74deb4`
+- Authenticated Edge-equivalent preview: all five decision buttons visible
+  without scrolling; protected PDF loaded
+- Deployed tablet and mobile layouts: Passed; no horizontal overflow
+- Browser page and Vercel runtime errors: None
+- Production promotion and domain changes: Not performed
 
 ### Foundation item 3A-R standalone preview evidence
 
