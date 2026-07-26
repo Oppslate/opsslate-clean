@@ -177,3 +177,38 @@ points.
   verification: Pending the first interactive Cloudflare verification; no
   challenge bypass was added
 - Production promotion and OpsSlate production changes: Not performed
+
+### Foundation item 3E.0 estimate-intelligence foundation
+
+- [Approved architecture and extraction contract](./HELIOS_FOUNDATION_3E_ESTIMATE_INTELLIGENCE_SPEC.md)
+- Application checkpoint: `2080dd7`
+- Versioned estimate, section, owner pay item, operational cost code, resource,
+  allocation, risk, job, and append-only decision-event records: Added
+- Owner bid quantity and production quantity: Stored separately
+- Labor, equipment, material, subcontract, trucking, disposal, and other
+  resource classes: Added
+- Independent overhead, profit, and bond calculations: Added and verified with
+  integer-cent golden tests
+- AI proposal contract: strict structured output, evidence required at every
+  scope level, unknown quantities remain unknown, and AI-generated prices are
+  rejected
+- Estimate generation: durable background job with server-only OpenAI response
+  identifiers and best-effort response cleanup
+- Authentication and isolation: Clerk session, same-origin mutation, signed
+  gateway request, role authorization, and company/project ownership enforced
+- Estimate Builder: active sidebar destination, project chooser, synchronized
+  Build and Bid Schedule views, operational cost-code/resource drilldown,
+  evidence display, takeoff gaps, and separate risk register
+- Golden culvert domain fixture: Passed with NYSDOT owner item `619.0501` and
+  `ENG`, `EW`, `FILL`, `PAVE`, `MAINT`, and `REM` child cost codes
+- Live Seneca vertical slice: version 1 reached Ready For Review with 2 owner
+  pay items, 2 operational sections, 26 base-bid cost codes, and 19 risks
+- Live pricing guardrail: every generated resource and total remained Unpriced
+- Automated domain tests: 11 passed
+- Automated Helios security and UI boundary tests: 34 passed
+- Helios lint, targeted new Convex lint, shared UI boundary, TypeScript, and
+  Helios production build: Passed
+- Authenticated desktop, tablet, and mobile browser verification: Passed; no
+  global horizontal overflow and no errors in a clean browser session
+- Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
