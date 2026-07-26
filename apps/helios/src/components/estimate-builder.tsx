@@ -154,7 +154,7 @@ export function EstimateBuilder({
       <header className="flex flex-col justify-between gap-4 rounded-xl border bg-card px-5 py-4 lg:flex-row lg:items-center">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-orange-500/35 text-orange-300">Foundation 3E.2</Badge>
+            <Badge variant="outline" className="border-orange-500/35 text-orange-300">Foundation 3E.3</Badge>
             <Badge variant={workspace?.status === "failed" ? "destructive" : "secondary"} className="capitalize">
               {statusLabel}
             </Badge>
