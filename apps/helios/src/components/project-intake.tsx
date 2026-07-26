@@ -1,6 +1,9 @@
 "use client";
 
-import type { HeliosProjectDetail } from "@opsslate/helios-domain";
+import type {
+  HeliosEstimateWorkspace,
+  HeliosProjectDetail,
+} from "@opsslate/helios-domain";
 import type { HeliosPrincipal } from "@/lib/helios-principal";
 import { Badge } from "@opsslate/suite-ui/badge";
 import { ChevronDown } from "lucide-react";
@@ -8,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { HeliosShell } from "./helios-shell";
+import { EstimateCockpit2 } from "./estimate-cockpit-2";
 import { ProjectDocumentControl } from "./project-document-control";
 import { ProjectIntelligenceCockpit } from "./project-intelligence-cockpit";
 import { ProjectIntelligencePanel } from "./project-intelligence-panel";
@@ -15,9 +19,11 @@ import { ProjectIntelligencePanel } from "./project-intelligence-panel";
 export function ProjectIntake({
   detail,
   principal,
+  workspace,
 }: {
   detail: HeliosProjectDetail;
   principal: HeliosPrincipal;
+  workspace: HeliosEstimateWorkspace | null;
 }) {
   const router = useRouter();
   const { project } = detail;
@@ -44,10 +50,22 @@ export function ProjectIntake({
   return (
     <HeliosShell
       principal={principal}
-      topActions={<Badge variant="secondary">Foundation 3D.1</Badge>}
+      topActions={
+        workspace ? undefined : (
+          <Badge variant="secondary">Foundation 3D.1</Badge>
+        )
+      }
     >
       <div className="space-y-4">
-        {detail.intelligence ? (
+        {detail.intelligence && workspace ? (
+          <EstimateCockpit2
+            project={project}
+            status={project.intelligenceStatus}
+            intelligence={detail.intelligence}
+            workspace={workspace}
+            latestError={detail.latestIntelligenceError}
+          />
+        ) : detail.intelligence ? (
           <ProjectIntelligenceCockpit
             project={project}
             status={project.intelligenceStatus}

@@ -86,3 +86,82 @@
 - P2: none.
 
 Final result: passed
+
+---
+
+# Helios Cockpit 2.0 Design QA
+
+## Target and implemented state
+
+- Reference: approved cockpit option 3 at `1395 × 837`.
+- Implementation: authenticated Seneca estimate workspace using the current
+  estimate version, owner items, cost codes, resources, quantities, pricing
+  status, procurement records, evidence links, risks, and decision history.
+- Side-by-side comparison:
+  `docs/evidence/helios-cockpit-2-comparison.png`.
+- Responsive evidence:
+  `docs/evidence/helios-cockpit-2-desktop.png`,
+  `docs/evidence/helios-cockpit-2-tablet.png`, and
+  `docs/evidence/helios-cockpit-2-mobile.png`.
+
+## Fidelity review
+
+### Layout, hierarchy, and workflow
+
+- Passed: the implementation preserves the approved dense project header,
+  readiness strip, prioritized left queue, dominant center work area,
+  contextual right intelligence panel, and persistent decision dock.
+- Passed: the requested stacked estimate intentionally replaces the mockup's
+  dominant PDF reader. The center now exposes the operational hierarchy
+  `section → owner item → cost code → resource` while proof remains available
+  in context on the right.
+- Passed: critical risks sort ahead of routine missing-price work, while the
+  lane controls permit one-click isolation of scope, quantity, pricing,
+  procurement, evidence, and risk work.
+- Passed: the shared OpsSlate shell remains the only shell and document
+  administration stays collapsed below the cockpit.
+
+### Typography, spacing, tokens, icons, and surfaces
+
+- Passed: the screen uses shared OpsSlate typography, semantic colors,
+  borders, radii, shadows, focus rings, badges, buttons, inputs, tabs, and
+  status treatments.
+- Passed: compact identifiers and costs use the established monospace
+  treatment; headings and action labels retain the OpsSlate hierarchy.
+- Passed: Lucide remains the single icon family. No new UI library, copied
+  shell, placeholder imagery, CSS art, inline SVG, or arbitrary color system
+  was introduced.
+- Passed after iteration: header actions no longer collide with the shared
+  account control, the right context panel is not clipped, and the stacked
+  estimate does not cause document-level horizontal overflow.
+
+## Responsive review
+
+| Viewport | Result |
+| --- | --- |
+| Desktop `1395 × 837` | Passed; all three panels and the decision dock are visible together with zero document-level or panel-level horizontal overflow |
+| Tablet `1024 × 768` | Passed; queue and estimate share the first row, context spans the next row, panels use bounded internal scrolling, and there is zero document-level horizontal overflow |
+| Mobile `390 × 844` | Passed; shared navigation becomes a drawer, header and metrics reflow, panels stack with bounded internal scrolling, controls retain practical targets, and there is zero horizontal overflow |
+
+## Interaction, states, and accessibility review
+
+- Passed: selecting a readiness metric filters the review queue in one click;
+  browser verification confirmed Evidence changes the queue from 150 to 50
+  actions and exposes its pressed state.
+- Passed: selecting a review card synchronizes the estimate context, proof/risk
+  tab, and decision dock without navigation.
+- Passed: scope, resource, quantity, evidence, risk, RFQ, and submittal actions
+  use the existing secured and audited estimate endpoints.
+- Passed: semantic headings, regions, buttons, links, labels, pressed states,
+  visible focus rings, loading/disabled states, and screen-reader-only input
+  labels are present.
+- Passed: empty proof, risk, procurement, and history contexts provide a clear
+  next step without fake data or fake controls.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none after desktop, tablet, and mobile fit corrections.
+
+Final result: passed
