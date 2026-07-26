@@ -175,6 +175,8 @@ export const HELIOS_ESTIMATE_SCOPE_OWNERSHIP = [
   "subcontract",
   "supplier",
   "allowance",
+  "owner_responsibility",
+  "undecided",
   "unassigned",
 ] as const;
 
@@ -183,6 +185,25 @@ export const HELIOS_ESTIMATE_RATE_STATUSES = [
   "user_entered",
   "cost_database",
   "vendor_quote",
+  "approved_historical",
+  "approved_crew",
+] as const;
+
+export const HELIOS_ESTIMATE_PRICING_STATUSES = [
+  "unpriced",
+  "partial",
+  "priced",
+] as const;
+
+export const HELIOS_ESTIMATE_BUILD_ACTIONS = [
+  "create_cost_code",
+  "update_cost_code",
+  "accept_cost_code",
+  "reject_cost_code",
+  "create_resource",
+  "update_resource",
+  "accept_resource",
+  "reject_resource",
 ] as const;
 
 export type HeliosProjectStatus = (typeof HELIOS_PROJECT_STATUSES)[number];
@@ -220,6 +241,10 @@ export type HeliosEstimateScopeOwnership =
   (typeof HELIOS_ESTIMATE_SCOPE_OWNERSHIP)[number];
 export type HeliosEstimateRateStatus =
   (typeof HELIOS_ESTIMATE_RATE_STATUSES)[number];
+export type HeliosEstimatePricingStatus =
+  (typeof HELIOS_ESTIMATE_PRICING_STATUSES)[number];
+export type HeliosEstimateBuildAction =
+  (typeof HELIOS_ESTIMATE_BUILD_ACTIONS)[number];
 
 export type HeliosProjectInput = {
   name: string;
@@ -418,7 +443,21 @@ export type HeliosEstimateResource = {
   unit: string;
   rateCents?: number;
   rateStatus: HeliosEstimateRateStatus;
+  priceSourceLabel?: string;
+  priceSourceReference?: string;
+  effectiveDate?: string;
+  wasteBasisPoints: number;
+  durationHours?: number;
+  crewOrAssembly?: string;
+  escalationBasisPoints: number;
+  overrideRateCents?: number;
+  overrideReason?: string;
+  overriddenBy?: string;
+  overriddenAt?: number;
+  effectiveRateCents?: number;
   taxStatus: "taxable" | "exempt" | "unknown";
+  reviewStatus: HeliosEstimateReviewStatus;
+  pricingStatus: HeliosEstimatePricingStatus;
   directCostCents?: number;
 };
 
@@ -433,6 +472,7 @@ export type HeliosEstimateCostCode = {
   reviewStatus: HeliosEstimateReviewStatus;
   evidenceIds: string[];
   resources: HeliosEstimateResource[];
+  pricingStatus: HeliosEstimatePricingStatus;
   directCostCents?: number;
 };
 
@@ -520,15 +560,48 @@ export type HeliosEstimateReviewSummary = {
 
 export type HeliosEstimateDecisionEvent = {
   id: string;
-  recordType: "section" | "pay_item" | "estimate";
+  recordType: "section" | "pay_item" | "cost_code" | "resource" | "risk" | "estimate";
   recordId: string;
-  action: HeliosEstimateReviewAction | "accept_import";
+  action: HeliosEstimateReviewAction | "accept_import" | "create" | "update";
   comment?: string;
   targetRecordId?: string;
   previousValue?: unknown;
   decisionValue?: unknown;
   reviewerName: string;
   createdAt: number;
+};
+
+export type HeliosEstimateBuildInput = {
+  action: HeliosEstimateBuildAction;
+  payItemId?: string;
+  costCodeId?: string;
+  resourceId?: string;
+  comment?: string;
+  costCode?: {
+    code: string;
+    description: string;
+    scopeOwnership: HeliosEstimateScopeOwnership;
+    productionQuantity?: number;
+    productionUnit: string;
+  };
+  resource?: {
+    resourceClass: HeliosEstimateResourceClass;
+    description: string;
+    quantity?: number;
+    unit: string;
+    wasteBasisPoints: number;
+    durationHours?: number;
+    taxStatus: "taxable" | "exempt" | "unknown";
+    rateStatus: HeliosEstimateRateStatus;
+    rateCents?: number;
+    priceSourceLabel?: string;
+    priceSourceReference?: string;
+    effectiveDate?: string;
+    crewOrAssembly?: string;
+    escalationBasisPoints: number;
+    overrideRateCents?: number;
+    overrideReason?: string;
+  };
 };
 
 export type HeliosEstimateReviewInput = {
@@ -563,14 +636,20 @@ export type HeliosEstimateReviewInput = {
   };
 };
 
-export type HeliosEstimateProposalResourceInput = Omit<
+export type HeliosEstimateProposalResourceInput = Pick<
   HeliosEstimateResource,
-  "id" | "directCostCents"
+  | "resourceClass"
+  | "description"
+  | "quantity"
+  | "unit"
+  | "rateCents"
+  | "rateStatus"
+  | "taxStatus"
 >;
 
 export type HeliosEstimateProposalCostCodeInput = Omit<
   HeliosEstimateCostCode,
-  "id" | "resources" | "directCostCents" | "reviewStatus"
+  "id" | "resources" | "pricingStatus" | "directCostCents" | "reviewStatus"
 > & { resources: HeliosEstimateProposalResourceInput[] };
 
 export type HeliosEstimateProposalPayItemInput = Omit<
@@ -1508,6 +1587,120 @@ export function normalizeEstimateReviewInput(
   return { recordType, recordId, action, comment, targetRecordId, correction, split };
 }
 
+export function normalizeEstimateBuildInput(value: unknown): HeliosEstimateBuildInput {
+  const input = record(value, "Estimate build action");
+  const action = allowedValue(input.action, HELIOS_ESTIMATE_BUILD_ACTIONS, "Build action");
+  const optionalString = (candidate: unknown, label: string, maximum: number) =>
+    candidate === undefined || candidate === null || candidate === ""
+      ? undefined
+      : textValue(candidate, label, maximum);
+  const optionalQuantity = (candidate: unknown, label: string) =>
+    candidate === undefined || candidate === null || candidate === ""
+      ? undefined
+      : optionalPositiveQuantity(candidate, label);
+  const basisPoints = (candidate: unknown, label: string) => {
+    const result = candidate === undefined || candidate === null || candidate === ""
+      ? 0
+      : Math.round(finiteNonNegative(candidate, label));
+    if (result > 100_000) throw new HeliosValidationError(`${label} cannot exceed 1,000%.`);
+    return result;
+  };
+  const payItemId = optionalString(input.payItemId, "Owner pay item", 128);
+  const costCodeId = optionalString(input.costCodeId, "Cost code", 128);
+  const resourceId = optionalString(input.resourceId, "Resource", 128);
+  const comment = optionalString(input.comment, "Build note", 1_000);
+
+  let costCode: HeliosEstimateBuildInput["costCode"];
+  if (input.costCode !== undefined) {
+    const source = record(input.costCode, "Cost code values");
+    costCode = {
+      code: textValue(source.code, "Cost code", 80),
+      description: textValue(source.description, "Cost code description", 240),
+      scopeOwnership: allowedValue(
+        source.scopeOwnership,
+        HELIOS_ESTIMATE_SCOPE_OWNERSHIP,
+        "Scope ownership",
+      ),
+      productionQuantity: optionalQuantity(source.productionQuantity, "Production quantity"),
+      productionUnit: textValue(source.productionUnit, "Production unit", 40),
+    };
+  }
+
+  let resource: HeliosEstimateBuildInput["resource"];
+  if (input.resource !== undefined) {
+    const source = record(input.resource, "Resource values");
+    const rateStatus = allowedValue(source.rateStatus, HELIOS_ESTIMATE_RATE_STATUSES, "Price source");
+    const rateCents = source.rateCents === undefined || source.rateCents === null || source.rateCents === ""
+      ? undefined
+      : safeCents(source.rateCents as number, "Source rate");
+    const overrideRateCents = source.overrideRateCents === undefined || source.overrideRateCents === null || source.overrideRateCents === ""
+      ? undefined
+      : safeCents(source.overrideRateCents as number, "Override rate");
+    const priceSourceLabel = optionalString(source.priceSourceLabel, "Price source label", 160);
+    const priceSourceReference = optionalString(source.priceSourceReference, "Price source reference", 240);
+    const effectiveDate = optionalString(source.effectiveDate, "Effective date", 10);
+    const overrideReason = optionalString(source.overrideReason, "Override reason", 500);
+    if (rateStatus === "unpriced" && (rateCents !== undefined || overrideRateCents !== undefined)) {
+      throw new HeliosValidationError("Unpriced resources cannot contain a source or override rate.");
+    }
+    if (rateStatus !== "unpriced") {
+      if (rateCents === undefined || !priceSourceLabel || !effectiveDate) {
+        throw new HeliosValidationError("Priced resources require a source rate, source label, and effective date.");
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) || Number.isNaN(Date.parse(`${effectiveDate}T00:00:00Z`))) {
+        throw new HeliosValidationError("Enter a valid effective date in YYYY-MM-DD format.");
+      }
+      if (rateStatus !== "user_entered" && !priceSourceReference) {
+        throw new HeliosValidationError("Quotes, databases, crews, and historical prices require a source reference.");
+      }
+    }
+    if (overrideRateCents !== undefined && !overrideReason) {
+      throw new HeliosValidationError("A reason is required for every estimator rate override.");
+    }
+    resource = {
+      resourceClass: allowedValue(source.resourceClass, HELIOS_ESTIMATE_RESOURCE_CLASSES, "Resource class"),
+      description: textValue(source.description, "Resource description", 240),
+      quantity: optionalQuantity(source.quantity, "Resource quantity"),
+      unit: textValue(source.unit, "Resource unit", 40),
+      wasteBasisPoints: basisPoints(source.wasteBasisPoints, "Waste"),
+      durationHours: optionalQuantity(source.durationHours, "Duration"),
+      taxStatus: allowedValue(source.taxStatus, ["taxable", "exempt", "unknown"] as const, "Tax status"),
+      rateStatus,
+      rateCents,
+      priceSourceLabel,
+      priceSourceReference,
+      effectiveDate,
+      crewOrAssembly: optionalString(source.crewOrAssembly, "Crew or assembly", 160),
+      escalationBasisPoints: basisPoints(source.escalationBasisPoints, "Escalation"),
+      overrideRateCents,
+      overrideReason,
+    };
+  }
+
+  if (action === "create_cost_code" && (!payItemId || !costCode)) {
+    throw new HeliosValidationError("Select an owner pay item and enter cost-code values.");
+  }
+  if (action === "update_cost_code" && (!costCodeId || !costCode)) {
+    throw new HeliosValidationError("Select a cost code and enter its corrected values.");
+  }
+  if (["accept_cost_code", "reject_cost_code"].includes(action) && !costCodeId) {
+    throw new HeliosValidationError("Select a cost code.");
+  }
+  if (action === "create_resource" && (!costCodeId || !resource)) {
+    throw new HeliosValidationError("Select a cost code and enter resource values.");
+  }
+  if (action === "update_resource" && (!resourceId || !resource)) {
+    throw new HeliosValidationError("Select a resource and enter its corrected values.");
+  }
+  if (["accept_resource", "reject_resource"].includes(action) && !resourceId) {
+    throw new HeliosValidationError("Select a resource.");
+  }
+  if (action.startsWith("reject_") && !comment) {
+    throw new HeliosValidationError("A rejection reason is required.");
+  }
+  return { action, payItemId, costCodeId, resourceId, comment, costCode, resource };
+}
+
 export function calculateEstimateReviewSummary(
   records: Array<{ reviewStatus: HeliosEstimateReviewStatus }>,
   blockers: string[] = [],
@@ -1533,15 +1726,25 @@ function safeCents(value: number, label: string) {
   return value;
 }
 
-export function calculateResourceCost(resource: Pick<HeliosEstimateResource, "quantity" | "rateCents">) {
-  if (resource.quantity === undefined || resource.rateCents === undefined) return undefined;
-  safeCents(resource.rateCents, "Resource rate");
-  const total = Math.round(resource.quantity * resource.rateCents);
+export function calculateResourceCost(resource: Pick<
+  HeliosEstimateResource,
+  "quantity" | "rateCents" | "overrideRateCents"
+> & { wasteBasisPoints?: number; escalationBasisPoints?: number }) {
+  const effectiveRateCents = resource.overrideRateCents ?? resource.rateCents;
+  if (resource.quantity === undefined || effectiveRateCents === undefined) return undefined;
+  safeCents(effectiveRateCents, "Resource rate");
+  const wasteFactor = 1 + (resource.wasteBasisPoints || 0) / 10_000;
+  const escalationFactor = 1 + (resource.escalationBasisPoints || 0) / 10_000;
+  const total = Math.round(resource.quantity * wasteFactor * effectiveRateCents * escalationFactor);
   if (!Number.isSafeInteger(total)) throw new HeliosValidationError("Resource cost exceeds the supported range.");
   return total;
 }
 
-export function calculateCostCodeDirectCost(resources: Array<Pick<HeliosEstimateResource, "quantity" | "rateCents">>) {
+export function calculateCostCodeDirectCost(resources: Array<Pick<
+  HeliosEstimateResource,
+  "quantity" | "rateCents" | "overrideRateCents"
+> & { wasteBasisPoints?: number; escalationBasisPoints?: number }>) {
+  if (!resources.length) return undefined;
   let total = 0;
   for (const resource of resources) {
     const cost = calculateResourceCost(resource);
@@ -1549,6 +1752,17 @@ export function calculateCostCodeDirectCost(resources: Array<Pick<HeliosEstimate
     total = safeCents(total + cost, "Cost code total");
   }
   return total;
+}
+
+export function calculatePricingStatus(
+  resources: Array<Pick<HeliosEstimateResource, "quantity" | "rateCents" | "overrideRateCents">>,
+): HeliosEstimatePricingStatus {
+  if (!resources.length) return "unpriced";
+  const priced = resources.filter(
+    (resource) => resource.quantity !== undefined && (resource.overrideRateCents ?? resource.rateCents) !== undefined,
+  ).length;
+  if (priced === 0) return "unpriced";
+  return priced === resources.length ? "priced" : "partial";
 }
 
 export function calculateDerivedUnitCost(directCostCents: number | undefined, bidQuantity: number | undefined) {

@@ -76,6 +76,7 @@ import type * as feedback from "../feedback.js";
 import type * as fieldNotes from "../fieldNotes.js";
 import type * as heliosAuthorization from "../heliosAuthorization.js";
 import type * as heliosEstimateActions from "../heliosEstimateActions.js";
+import type * as heliosEstimateBuild from "../heliosEstimateBuild.js";
 import type * as heliosEstimateOpenAIContracts from "../heliosEstimateOpenAIContracts.js";
 import type * as heliosEstimateReviews from "../heliosEstimateReviews.js";
 import type * as heliosEstimates from "../heliosEstimates.js";
@@ -205,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   fieldNotes: typeof fieldNotes;
   heliosAuthorization: typeof heliosAuthorization;
   heliosEstimateActions: typeof heliosEstimateActions;
+  heliosEstimateBuild: typeof heliosEstimateBuild;
   heliosEstimateOpenAIContracts: typeof heliosEstimateOpenAIContracts;
   heliosEstimateReviews: typeof heliosEstimateReviews;
   heliosEstimates: typeof heliosEstimates;

@@ -1,6 +1,7 @@
 import {
   HeliosValidationError,
   normalizeFindingReviewInput,
+  normalizeEstimateBuildInput,
   normalizeEstimateReviewInput,
   normalizeProjectInput,
   type HeliosBidPackage,
@@ -10,6 +11,7 @@ import {
   type HeliosFindingReviewInput,
   type HeliosEstimateWorkspace,
   type HeliosEstimateReviewInput,
+  type HeliosEstimateBuildInput,
   type HeliosProjectDetail,
   type HeliosProjectInput,
   type HeliosProjectSummary,
@@ -182,6 +184,16 @@ const acceptRemainingEstimateRecordsReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string; estimateId: string },
   { accepted: number }
 >("heliosEstimateReviews:acceptRemainingRecords");
+const mutateEstimateBuildReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    estimateId: string;
+    input: HeliosEstimateBuildInput;
+  },
+  { eventId: string; recordId: string; recordType: "cost_code" | "resource"; action: string }
+>("heliosEstimateBuild:mutateBuild");
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -812,6 +824,30 @@ export const reviewHeliosEstimateRecord = httpAction(async (ctx, request) => {
   } catch (error) {
     return json({
       error: error instanceof Error ? error.message : "Estimate review could not be saved.",
+    }, 400);
+  }
+});
+
+export const mutateHeliosEstimateBuild = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (
+    !boundedString(payload.projectId) ||
+    !boundedString(payload.estimateId) ||
+    !isRecord(payload.input)
+  ) return json({ error: "Invalid estimate build request." }, 400);
+  try {
+    const data = await ctx.runMutation(mutateEstimateBuildReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      estimateId: payload.estimateId,
+      input: normalizeEstimateBuildInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({
+      error: error instanceof Error ? error.message : "Estimate build change could not be saved.",
     }, 400);
   }
 });

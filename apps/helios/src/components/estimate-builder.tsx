@@ -3,6 +3,7 @@
 import {
   calculateEstimateTotals,
   calculateEstimateReviewSummary,
+  type HeliosEstimateBuildInput,
   type HeliosEstimateWorkspace,
   type HeliosProjectSummary,
 } from "@opsslate/helios-domain";
@@ -12,12 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@opss
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@opsslate/suite-ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@opsslate/suite-ui/tabs";
 import { useToast } from "@opsslate/suite-ui/toast";
-import { AlertTriangle, ArrowLeft, Bot, ChevronDown, FileCheck2, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, Check, ChevronDown, FileCheck2, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { EstimateImportReview } from "./estimate-import-review";
+import { EstimateCostCodeWorkspace } from "./estimate-cost-code-workspace";
 
 function money(value?: number) {
   if (value === undefined) return "Unpriced";
@@ -63,6 +65,7 @@ export function EstimateBuilder({
   const router = useRouter();
   const { toast } = useToast();
   const [requesting, setRequesting] = useState(false);
+  const [savingBuild, setSavingBuild] = useState<string | null>(null);
   const isProcessing = workspace?.status === "proposal_processing";
 
   useEffect(() => {
@@ -125,13 +128,33 @@ export function EstimateBuilder({
     }
   }
 
+  async function saveBuild(input: HeliosEstimateBuildInput, success: string) {
+    if (!workspace) return;
+    setSavingBuild(input.costCodeId || input.resourceId || input.action);
+    try {
+      const response = await fetch(`/api/projects/${project.id}/estimate/${workspace.id}/build`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Estimate build change could not be saved.");
+      toast(success);
+      router.refresh();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Estimate build change could not be saved.");
+    } finally {
+      setSavingBuild(null);
+    }
+  }
+
   const statusLabel = workspace?.status.replaceAll("_", " ") || "Not generated";
   return (
     <div className="space-y-4">
       <header className="flex flex-col justify-between gap-4 rounded-xl border bg-card px-5 py-4 lg:flex-row lg:items-center">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-orange-500/35 text-orange-300">Foundation 3E</Badge>
+            <Badge variant="outline" className="border-orange-500/35 text-orange-300">Foundation 3E.2</Badge>
             <Badge variant={workspace?.status === "failed" ? "destructive" : "secondary"} className="capitalize">
               {statusLabel}
             </Badge>
@@ -247,16 +270,25 @@ export function EstimateBuilder({
                           </div>
                         </summary>
                         <div className="border-t bg-background/35 p-4">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm text-muted-foreground">Internal operations under owner item {item.officialItemNumber}</div>
+                            {(["accepted", "corrected"] as string[]).includes(item.reviewStatus) ? (
+                              <EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Accept this owner item before adding cost codes.</span>
+                            )}
+                          </div>
                           <Table>
-                            <TableHeader><TableRow><TableHead>Cost code</TableHead><TableHead>Production basis</TableHead><TableHead>Ownership</TableHead><TableHead>Resources</TableHead><TableHead className="text-right">Direct cost</TableHead></TableRow></TableHeader>
+                            <TableHeader><TableRow><TableHead>Cost code</TableHead><TableHead>Production basis</TableHead><TableHead>Ownership</TableHead><TableHead>Pricing</TableHead><TableHead className="text-right">Direct cost</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
                             <TableBody>
                               {item.costCodes.map((code) => (
                                 <TableRow key={code.id}>
                                   <TableCell className="min-w-64 whitespace-normal"><div className="font-mono text-xs text-orange-300">{code.code}</div><div className="font-medium">{code.description}</div><div className="mt-1 text-xs text-muted-foreground">{code.evidenceIds.length} citations · {code.confidence}% confidence</div></TableCell>
                                   <TableCell>{quantity(code.productionQuantity, code.productionUnit)}</TableCell>
                                   <TableCell className="capitalize">{code.scopeOwnership.replaceAll("_", " ")}</TableCell>
-                                  <TableCell><div className="flex max-w-sm flex-wrap gap-1">{code.resources.length ? code.resources.map((resource) => <Badge key={resource.id} variant="secondary" className="capitalize">{resource.resourceClass}: {resource.description}</Badge>) : <span className="text-muted-foreground">To be developed</span>}</div></TableCell>
+                                  <TableCell><Badge variant={code.pricingStatus === "priced" ? "secondary" : "outline"} className="capitalize">{code.pricingStatus}</Badge><div className="mt-1 text-xs text-muted-foreground">{code.resources.length} resource{code.resources.length === 1 ? "" : "s"}</div></TableCell>
                                   <TableCell className="text-right font-medium">{money(code.directCostCents)}</TableCell>
+                                  <TableCell><div className="flex justify-end gap-2">{code.reviewStatus === "proposed" && (["accepted", "corrected"] as string[]).includes(item.reviewStatus) && <Button size="sm" disabled={savingBuild !== null} onClick={() => saveBuild({ action: "accept_cost_code", costCodeId: code.id }, "Cost code accepted.")}><Check aria-hidden="true" />Accept</Button>}<EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} code={code} /></div></TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>

@@ -8,10 +8,13 @@ import {
   calculateDerivedUnitCost,
   calculateEstimateReviewSummary,
   calculateEstimateTotals,
+  calculatePricingStatus,
+  calculateResourceCost,
   canonicalPdfFileName,
   hasPdfMagicBytes,
   normalizeProjectInput,
   normalizeEstimateReviewInput,
+  normalizeEstimateBuildInput,
   parseDocumentIntelligence,
   parseEstimateProposal,
   parseProjectSynthesis,
@@ -36,6 +39,74 @@ test("normalizes the project intake contract", () => {
       notes: undefined,
     },
   );
+});
+
+test("normalizes all seven 3E.2 resource classes and traceable price sources", () => {
+  for (const resourceClass of ["labor", "equipment", "material", "subcontract", "trucking", "disposal", "other"] as const) {
+    const input = normalizeEstimateBuildInput({
+      action: "create_resource",
+      costCodeId: "cost-code-1",
+      resource: {
+        resourceClass,
+        description: `${resourceClass} resource`,
+        quantity: 2,
+        unit: "HR",
+        rateStatus: "user_entered",
+        rateCents: 10_000,
+        priceSourceLabel: "Chief estimator",
+        effectiveDate: "2026-07-26",
+        taxStatus: "unknown",
+        wasteBasisPoints: 0,
+        escalationBasisPoints: 0,
+      },
+    });
+    assert.equal(input.resource?.resourceClass, resourceClass);
+  }
+  assert.throws(() => normalizeEstimateBuildInput({
+    action: "create_resource",
+    costCodeId: "cost-code-1",
+    resource: {
+      resourceClass: "labor",
+      description: "Foreperson",
+      quantity: 8,
+      unit: "HR",
+      rateStatus: "user_entered",
+      rateCents: 9_500,
+      taxStatus: "exempt",
+    },
+  }), /source label, and effective date/i);
+});
+
+test("calculates 3E.2 waste, escalation, controlled overrides, and pricing status", () => {
+  const resource = normalizeEstimateBuildInput({
+    action: "update_resource",
+    resourceId: "resource-1",
+    resource: {
+      resourceClass: "material",
+      description: "Select granular material",
+      quantity: 100,
+      unit: "TON",
+      wasteBasisPoints: 500,
+      rateStatus: "vendor_quote",
+      rateCents: 2_000,
+      priceSourceLabel: "Vendor quote",
+      priceSourceReference: "Q-1042",
+      effectiveDate: "2026-07-26",
+      escalationBasisPoints: 1_000,
+      overrideRateCents: 2_500,
+      overrideReason: "Delivered rate includes remote haul premium.",
+      taxStatus: "exempt",
+    },
+  }).resource!;
+  assert.equal(calculateResourceCost(resource), 288_750);
+  assert.equal(calculateCostCodeDirectCost([resource]), 288_750);
+  assert.equal(calculatePricingStatus([resource]), "priced");
+  assert.equal(calculatePricingStatus([{ quantity: 1, rateCents: 100 }, { quantity: 1, rateCents: undefined }]), "partial");
+  assert.throws(() => normalizeEstimateBuildInput({
+    action: "update_resource",
+    resourceId: "resource-1",
+    resource: { ...resource, overrideReason: undefined },
+  }), /reason is required/i);
 });
 
 test("rejects missing names and impossible dates", () => {

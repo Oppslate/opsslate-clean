@@ -9,17 +9,21 @@ const source = (path) => readFileSync(join(root, path), "utf8");
 
 const route = source("src/app/api/projects/[projectId]/estimate/propose/route.ts");
 const reviewRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/review/route.ts");
+const buildRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/build/route.ts");
 const acceptRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/accept-import/route.ts");
 const acceptRemainingRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/accept-remaining/route.ts");
 const gateway = source("../web/convex/heliosGateway.ts");
 const estimates = source("../web/convex/heliosEstimates.ts");
 const estimateReviews = source("../web/convex/heliosEstimateReviews.ts");
+const estimateBuild = source("../web/convex/heliosEstimateBuild.ts");
 const actions = source("../web/convex/heliosEstimateActions.ts");
 const contracts = source("../web/convex/heliosEstimateOpenAIContracts.ts");
 const schema = source("../web/convex/schema.ts");
 const builder = source("src/components/estimate-builder.tsx");
 const importReview = source("src/components/estimate-import-review.tsx");
+const costCodeWorkspace = source("src/components/estimate-cost-code-workspace.tsx");
 const navigation = source("src/lib/navigation.ts");
+const domain = source("../../packages/helios-domain/src/index.ts");
 
 test("estimate proposal requests enforce session, origin, gateway, tenant, and project ownership", () => {
   assert.match(route, /isSameOrigin/);
@@ -73,6 +77,30 @@ test("3E.1 acceptance is deterministic and locks the reviewed version", () => {
   assert.match(estimateReviews, /missing its official fixed amount/);
   assert.match(estimateReviews, /status: "accepted"/);
   assert.match(estimateReviews, /importReviewedBy: user\._id/);
+});
+
+test("3E.2 build mutations enforce origin, identity, tenant, hierarchy, and accepted owner scope", () => {
+  assert.match(buildRoute, /isSameOrigin/);
+  assert.match(buildRoute, /readHeliosPrincipal/);
+  assert.match(estimateBuild, /requireHeliosPrincipal/);
+  assert.match(estimateBuild, /estimate\.companyId !== companyId/);
+  assert.match(estimateBuild, /record\.companyId !== companyId/);
+  assert.match(estimateBuild, /Accept the owner pay item before building/);
+  assert.match(estimateBuild, /normalizeEstimateBuildInput/);
+});
+
+test("3E.2 supports seven resources, focused worksheets, one-click acceptance, and controlled overrides", () => {
+  for (const resourceClass of ["labor", "equipment", "material", "subcontract", "trucking", "disposal", "other"]) {
+    assert.match(domain, new RegExp(`"${resourceClass}"`));
+  }
+  assert.match(costCodeWorkspace, /accept_resource/);
+  assert.match(builder, /accept_cost_code/);
+  assert.match(costCodeWorkspace, /Open worksheet/);
+  assert.match(costCodeWorkspace, /overrideReason/);
+  assert.match(costCodeWorkspace, /effectiveDate/);
+  assert.match(estimateBuild, /overriddenBy/);
+  assert.match(estimateBuild, /heliosEstimateDecisionEvents/);
+  assert.doesNotMatch(builder, /code\.resources\.map\(\(resource\) => <Badge/);
 });
 
 test("3E.1 deterministically stages new, unchanged, changed, conflicting, and missing owner items", () => {

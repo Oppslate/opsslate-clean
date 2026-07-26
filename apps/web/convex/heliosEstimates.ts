@@ -2,6 +2,8 @@ import {
   calculateCostCodeDirectCost,
   calculateDerivedUnitCost,
   calculateEstimateReviewSummary,
+  calculatePricingStatus,
+  calculateResourceCost,
   parseEstimateProposal,
   type HeliosEstimateWorkspace,
 } from "@opsslate/helios-domain";
@@ -20,7 +22,7 @@ import {
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
 
-const ESTIMATE_SCHEMA_VERSION = 1;
+const ESTIMATE_SCHEMA_VERSION = 2;
 
 const startEstimateReference = makeFunctionReference<
   "action",
@@ -286,6 +288,9 @@ export const completeEstimateProposal = internalMutation({
               quantity: resource.quantity,
               unit: resource.unit,
               rateStatus: "unpriced",
+              wasteBasisPoints: 0,
+              escalationBasisPoints: 0,
+              reviewStatus: "proposed",
               taxStatus: resource.taxStatus,
               createdAt: now,
               updatedAt: now,
@@ -418,7 +423,16 @@ export const getWorkspace = internalQuery({
         .map((item, index) => [item._id, index + 1]),
     );
     const resourcesFor = (costCodeId: Id<"heliosEstimateCostCodes">) =>
-      resourceRows.filter((row) => row.costCodeId === costCodeId).map((resource) => ({
+      resourceRows.filter((row) => row.costCodeId === costCodeId && row.reviewStatus !== "rejected").map((resource) => {
+        const effectiveRateCents = resource.overrideRateCents ?? resource.rateCents;
+        const calculatedResource = {
+          quantity: resource.quantity,
+          rateCents: resource.rateCents,
+          overrideRateCents: resource.overrideRateCents,
+          wasteBasisPoints: resource.wasteBasisPoints || 0,
+          escalationBasisPoints: resource.escalationBasisPoints || 0,
+        };
+        return {
         id: String(resource._id),
         resourceClass: resource.resourceClass,
         description: resource.description,
@@ -426,9 +440,24 @@ export const getWorkspace = internalQuery({
         unit: resource.unit,
         rateCents: resource.rateCents,
         rateStatus: resource.rateStatus,
+        priceSourceLabel: resource.priceSourceLabel,
+        priceSourceReference: resource.priceSourceReference,
+        effectiveDate: resource.effectiveDate,
+        wasteBasisPoints: resource.wasteBasisPoints || 0,
+        durationHours: resource.durationHours,
+        crewOrAssembly: resource.crewOrAssembly,
+        escalationBasisPoints: resource.escalationBasisPoints || 0,
+        overrideRateCents: resource.overrideRateCents,
+        overrideReason: resource.overrideReason,
+        overriddenBy: resource.overriddenBy ? String(resource.overriddenBy) : undefined,
+        overriddenAt: resource.overriddenAt,
+        effectiveRateCents,
         taxStatus: resource.taxStatus,
-        directCostCents: calculateCostCodeDirectCost([{ quantity: resource.quantity, rateCents: resource.rateCents }]),
-      }));
+        reviewStatus: resource.reviewStatus || "proposed",
+        pricingStatus: effectiveRateCents === undefined || resource.quantity === undefined ? "unpriced" as const : "priced" as const,
+        directCostCents: calculateResourceCost(calculatedResource),
+      };
+      });
     const sections = sectionRows.map((section) => ({
       id: String(section._id),
       name: section.name,
@@ -436,7 +465,7 @@ export const getWorkspace = internalQuery({
       reviewStatus: section.reviewStatus,
       evidenceIds: section.evidenceIds.map(String),
       payItems: payItemRows.filter((item) => item.sectionId === section._id).map((item) => {
-        const costCodes = costCodeRows.filter((code) => code.payItemId === item._id).map((code) => {
+        const costCodes = costCodeRows.filter((code) => code.payItemId === item._id && code.reviewStatus !== "rejected").map((code) => {
           const resources = resourcesFor(code._id);
           return {
             id: String(code._id),
@@ -449,6 +478,7 @@ export const getWorkspace = internalQuery({
             reviewStatus: code.reviewStatus,
             evidenceIds: code.evidenceIds.map(String),
             resources,
+            pricingStatus: calculatePricingStatus(resources),
             directCostCents: calculateCostCodeDirectCost(resources),
           };
         });
