@@ -251,3 +251,55 @@ points.
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Next approved milestone: Foundation 3E.2 internal cost-code and resource
   build-up
+
+### Foundation item 3E.2 internal cost-code and resource build-up
+
+- Application checkpoint: `13615c9`
+- Estimate schema version: advanced to version 2 while retaining optional-field
+  compatibility for the existing version 1 Seneca estimate
+- Operational build-up: estimators can add and edit child cost codes beneath an
+  accepted or corrected owner pay item
+- Scope ownership: self-perform, subcontract, supplier, allowance, owner
+  responsibility, and undecided are explicit choices
+- Resource classes: labor, equipment, material, subcontract, trucking,
+  disposal, and other are implemented in one common resource contract
+- Resource basis: quantity, unit, waste, duration, tax status, crew/assembly,
+  source rate, escalation, and effective rate are retained independently
+- Price provenance: human-entered, vendor quote, cost database, approved
+  historical, and approved crew/assembly sources require labels and effective
+  dates; non-human sources also require a stable source reference
+- AI pricing guardrail: proposed AI resources remain explicitly Unpriced; no
+  price is inferred from confidence or scope text
+- Controlled overrides: source rate and override rate remain separate; every
+  override requires a reason and stores the reviewer and timestamp
+- Calculation chain: resource direct cost includes waste and escalation, cost
+  code direct cost rolls up complete active resources, and owner unit cost is
+  derived from direct cost divided by official bid quantity
+- Pricing state: Unpriced, Partial, and Priced are derived independently from
+  scope acceptance so accepted scope cannot masquerade as complete pricing
+- Bid-day speed: proposed cost codes and resources support one-click Accept;
+  edits use one focused worksheet; rejections require a concise reason
+- Primary table density: resource badges were removed from the owner-item table;
+  each cost code now shows resource count, pricing state, direct cost, and one
+  Open Worksheet action
+- Security: same-origin session validation, signed gateway, role authorization,
+  tenant ownership, project/estimate ownership, and parent-record ownership are
+  enforced for every cost-code and resource mutation
+- Decision history: create, update, accept, and reject actions store append-only
+  before/after values, reviewer, timestamp, and reason
+- Live Seneca validation: the accepted BASE BID owner item opened the `01-100`
+  cost-code worksheet; one already-proposed, still-unpriced labor resource was
+  accepted in one click and appeared immediately in append-only history
+- Live-data boundary: no price, quantity, owner item, full import acceptance, or
+  estimate lock was changed during validation
+- Keyboard and focus: Escape closes the worksheet and returns focus to its
+  originating Open Worksheet button
+- Desktop, `1024 px` tablet, and `390 px` mobile: Passed; standard tablet/mobile
+  gutters retained and no global horizontal overflow or browser errors found
+- Automated domain tests: 16 passed
+- Automated Helios security and UI boundary tests: 41 passed
+- Shared UI ownership boundary, Helios lint, Convex schema/function generation,
+  and Helios production build: Passed
+- Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Next approved milestone: Foundation 3E.3 quantity and allocation controls
