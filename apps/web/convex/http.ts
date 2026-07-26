@@ -9,6 +9,7 @@ import {
   finalizeHeliosPackage,
   listHeliosProjects,
   mutateHeliosEstimateBuild,
+  mutateHeliosEstimateSupport,
   registerHeliosDocument,
   requestHeliosEstimateProposal,
   reviewHeliosEstimateRecord,
@@ -103,6 +104,11 @@ http.route({
   path: "/helios/v1/estimates/build",
   method: "POST",
   handler: mutateHeliosEstimateBuild,
+});
+http.route({
+  path: "/helios/v1/estimates/support",
+  method: "POST",
+  handler: mutateHeliosEstimateSupport,
 });
 http.route({
   path: "/helios/v1/estimates/accept-import",

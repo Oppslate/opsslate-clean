@@ -248,6 +248,122 @@ export const HELIOS_ESTIMATE_BUILD_ACTIONS = [
   "reject_allocation",
 ] as const;
 
+export const HELIOS_ESTIMATE_EVIDENCE_RECORD_TYPES = [
+  "section",
+  "pay_item",
+  "cost_code",
+  "resource",
+  "quantity",
+  "rfq",
+  "submittal",
+  "risk",
+] as const;
+
+export const HELIOS_ESTIMATE_EVIDENCE_RELATIONSHIPS = [
+  "scope",
+  "quantity",
+  "pricing",
+  "procurement",
+  "submittal",
+  "risk",
+] as const;
+
+export const HELIOS_EVIDENCE_VERIFICATION_STATUSES = [
+  "proposed",
+  "verified",
+  "disputed",
+  "superseded",
+] as const;
+
+export const HELIOS_RFQ_STATUSES = [
+  "draft",
+  "ready_to_send",
+  "sent",
+  "quote_received",
+  "quote_accepted",
+  "closed",
+] as const;
+
+export const HELIOS_SUBMITTAL_TYPES = [
+  "product_data",
+  "shop_drawing",
+  "sample",
+  "mix_design",
+  "procedure",
+  "certification",
+  "other",
+] as const;
+
+export const HELIOS_SUBMITTAL_STATUSES = [
+  "draft",
+  "required",
+  "assigned",
+  "submitted",
+  "accepted",
+  "closed",
+] as const;
+
+export const HELIOS_RISK_CATEGORIES = [
+  "document_control",
+  "contract",
+  "scope",
+  "quantity",
+  "pricing",
+  "schedule",
+  "procurement",
+  "site_conditions",
+  "utilities",
+  "safety",
+  "regulatory",
+  "environmental",
+  "other",
+] as const;
+
+export const HELIOS_RISK_SEVERITIES = [
+  "information",
+  "low",
+  "medium",
+  "high",
+  "critical",
+] as const;
+
+export const HELIOS_RISK_DISPOSITIONS = [
+  "open",
+  "mitigated",
+  "accepted",
+  "transferred",
+  "avoided",
+  "closed",
+] as const;
+
+export const HELIOS_RISK_CARRY_DECISIONS = [
+  "pending",
+  "base_estimate",
+  "contingency",
+  "qualification",
+  "transfer",
+  "no_carry",
+] as const;
+
+export const HELIOS_ESTIMATE_SUPPORT_ACTIONS = [
+  "generate_rfq",
+  "update_rfq",
+  "accept_rfq",
+  "reject_rfq",
+  "set_rfq_status",
+  "generate_submittal",
+  "update_submittal",
+  "accept_submittal",
+  "reject_submittal",
+  "set_submittal_status",
+  "update_risk",
+  "accept_risk",
+  "reject_risk",
+  "set_risk_decision",
+  "verify_evidence",
+  "dispute_evidence",
+] as const;
+
 export type HeliosProjectStatus = (typeof HELIOS_PROJECT_STATUSES)[number];
 export type HeliosIntelligenceStatus =
   (typeof HELIOS_INTELLIGENCE_STATUSES)[number];
@@ -295,6 +411,22 @@ export type HeliosQuantityRecordStatus =
   (typeof HELIOS_QUANTITY_RECORD_STATUSES)[number];
 export type HeliosAllocationBalanceStatus =
   (typeof HELIOS_ALLOCATION_BALANCE_STATUSES)[number];
+export type HeliosEstimateEvidenceRecordType =
+  (typeof HELIOS_ESTIMATE_EVIDENCE_RECORD_TYPES)[number];
+export type HeliosEstimateEvidenceRelationship =
+  (typeof HELIOS_ESTIMATE_EVIDENCE_RELATIONSHIPS)[number];
+export type HeliosEvidenceVerificationStatus =
+  (typeof HELIOS_EVIDENCE_VERIFICATION_STATUSES)[number];
+export type HeliosRfqStatus = (typeof HELIOS_RFQ_STATUSES)[number];
+export type HeliosSubmittalType = (typeof HELIOS_SUBMITTAL_TYPES)[number];
+export type HeliosSubmittalStatus = (typeof HELIOS_SUBMITTAL_STATUSES)[number];
+export type HeliosRiskCategory = (typeof HELIOS_RISK_CATEGORIES)[number];
+export type HeliosRiskSeverity = (typeof HELIOS_RISK_SEVERITIES)[number];
+export type HeliosRiskDisposition = (typeof HELIOS_RISK_DISPOSITIONS)[number];
+export type HeliosRiskCarryDecision =
+  (typeof HELIOS_RISK_CARRY_DECISIONS)[number];
+export type HeliosEstimateSupportAction =
+  (typeof HELIOS_ESTIMATE_SUPPORT_ACTIONS)[number];
 
 export type HeliosProjectInput = {
   name: string;
@@ -592,8 +724,64 @@ export type HeliosEstimateSection = {
   payItems: HeliosOwnerPayItem[];
 };
 
+export type HeliosEstimateEvidenceLink = {
+  id: string;
+  evidenceId: string;
+  recordType: HeliosEstimateEvidenceRecordType;
+  recordId: string;
+  recordLabel: string;
+  relationship: HeliosEstimateEvidenceRelationship;
+  origin: "ai" | "human" | "import" | "system";
+  verificationStatus: HeliosEvidenceVerificationStatus;
+  verifierName?: string;
+  verifiedAt?: number;
+  comment?: string;
+};
+
+export type HeliosEstimateRfq = {
+  id: string;
+  title: string;
+  packageNumber?: string;
+  status: HeliosRfqStatus;
+  requiredQuoteDate?: string;
+  deliveryLocation?: string;
+  inclusions: string[];
+  exclusions: string[];
+  scheduleConstraints: string[];
+  vendors: string[];
+  linkedPayItemIds: string[];
+  linkedCostCodeIds: string[];
+  linkedQuantityIds: string[];
+  evidenceIds: string[];
+  origin: "ai" | "human" | "system";
+  reviewStatus: HeliosEstimateReviewStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type HeliosEstimateSubmittal = {
+  id: string;
+  type: HeliosSubmittalType;
+  description: string;
+  specification?: string;
+  timing?: string;
+  responsibility?: string;
+  predecessor?: string;
+  dueDate?: string;
+  status: HeliosSubmittalStatus;
+  linkedPayItemIds: string[];
+  linkedCostCodeIds: string[];
+  evidenceIds: string[];
+  origin: "ai" | "human" | "system";
+  reviewStatus: HeliosEstimateReviewStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type HeliosEstimateRisk = {
   id: string;
+  category: HeliosRiskCategory;
+  severity: HeliosRiskSeverity;
   title: string;
   detail: string;
   probabilityPercent: number;
@@ -601,9 +789,21 @@ export type HeliosEstimateRisk = {
   mostLikelyCostCents?: number;
   highCostCents?: number;
   scheduleDays?: number;
+  lowScheduleDays?: number;
+  mostLikelyScheduleDays?: number;
+  highScheduleDays?: number;
+  mitigationCostCents?: number;
   mitigation: string;
+  contingencyResponse?: string;
   owner: string;
-  disposition: "open" | "mitigated" | "accepted" | "transferred";
+  responseDueDate?: string;
+  disposition: HeliosRiskDisposition;
+  carryDecision: HeliosRiskCarryDecision;
+  linkedPayItemIds: string[];
+  linkedCostCodeIds: string[];
+  linkedQuantityIds: string[];
+  linkedDocumentIds: string[];
+  expectedExposureCents?: number;
   confidence: number;
   reviewStatus: HeliosEstimateReviewStatus;
   evidenceIds: string[];
@@ -627,6 +827,9 @@ export type HeliosEstimateWorkspace = {
   decisionHistory: HeliosEstimateDecisionEvent[];
   sections: HeliosEstimateSection[];
   risks: HeliosEstimateRisk[];
+  rfqs: HeliosEstimateRfq[];
+  submittals: HeliosEstimateSubmittal[];
+  evidenceLinks: HeliosEstimateEvidenceLink[];
   evidence: HeliosEvidence[];
   createdAt: number;
   updatedAt: number;
@@ -647,9 +850,9 @@ export type HeliosEstimateReviewSummary = {
 
 export type HeliosEstimateDecisionEvent = {
   id: string;
-  recordType: "section" | "pay_item" | "cost_code" | "resource" | "quantity" | "allocation" | "risk" | "estimate";
+  recordType: "section" | "pay_item" | "cost_code" | "resource" | "quantity" | "allocation" | "risk" | "rfq" | "submittal" | "evidence_link" | "estimate";
   recordId: string;
-  action: HeliosEstimateReviewAction | "accept_import" | "create" | "update";
+  action: HeliosEstimateReviewAction | "accept_import" | "create" | "update" | "generate" | "status_change" | "verify" | "dispute";
   comment?: string;
   targetRecordId?: string;
   previousValue?: unknown;
@@ -707,6 +910,62 @@ export type HeliosEstimateBuildInput = {
     targetCostCodeId?: string;
     allocationType: "quantity" | "percent" | "amount";
     controllingValue: number;
+  };
+};
+
+export type HeliosEstimateSupportInput = {
+  action: HeliosEstimateSupportAction;
+  costCodeId?: string;
+  rfqId?: string;
+  submittalId?: string;
+  riskId?: string;
+  evidenceId?: string;
+  recordType?: HeliosEstimateEvidenceRecordType;
+  recordId?: string;
+  comment?: string;
+  rfqStatus?: HeliosRfqStatus;
+  submittalStatus?: HeliosSubmittalStatus;
+  riskCarryDecision?: HeliosRiskCarryDecision;
+  rfq?: {
+    title: string;
+    packageNumber?: string;
+    requiredQuoteDate?: string;
+    deliveryLocation?: string;
+    inclusions: string[];
+    exclusions: string[];
+    scheduleConstraints: string[];
+    vendors: string[];
+  };
+  submittal?: {
+    type: HeliosSubmittalType;
+    description: string;
+    specification?: string;
+    timing?: string;
+    responsibility?: string;
+    predecessor?: string;
+    dueDate?: string;
+  };
+  risk?: {
+    category: HeliosRiskCategory;
+    severity: HeliosRiskSeverity;
+    title: string;
+    detail: string;
+    probabilityPercent: number;
+    lowCostCents?: number;
+    mostLikelyCostCents?: number;
+    highCostCents?: number;
+    lowScheduleDays?: number;
+    mostLikelyScheduleDays?: number;
+    highScheduleDays?: number;
+    mitigationCostCents?: number;
+    mitigation: string;
+    contingencyResponse?: string;
+    owner: string;
+    responseDueDate?: string;
+    disposition: HeliosRiskDisposition;
+    linkedPayItemIds: string[];
+    linkedCostCodeIds: string[];
+    linkedQuantityIds: string[];
   };
 };
 
@@ -785,9 +1044,23 @@ export type HeliosEstimateProposalSectionInput = Omit<
 export type HeliosEstimateProposalRiskInput = Omit<
   HeliosEstimateRisk,
   | "id"
+  | "category"
+  | "severity"
   | "lowCostCents"
   | "mostLikelyCostCents"
   | "highCostCents"
+  | "lowScheduleDays"
+  | "mostLikelyScheduleDays"
+  | "highScheduleDays"
+  | "mitigationCostCents"
+  | "contingencyResponse"
+  | "responseDueDate"
+  | "carryDecision"
+  | "linkedPayItemIds"
+  | "linkedCostCodeIds"
+  | "linkedQuantityIds"
+  | "linkedDocumentIds"
+  | "expectedExposureCents"
   | "reviewStatus"
 >;
 
@@ -1902,6 +2175,178 @@ export function normalizeEstimateBuildInput(value: unknown): HeliosEstimateBuild
   };
 }
 
+export function normalizeEstimateSupportInput(value: unknown): HeliosEstimateSupportInput {
+  const input = record(value, "Estimate supporting-record action");
+  const action = allowedValue(input.action, HELIOS_ESTIMATE_SUPPORT_ACTIONS, "Supporting-record action");
+  const optionalString = (candidate: unknown, label: string, maximum: number) =>
+    candidate === undefined || candidate === null || candidate === ""
+      ? undefined
+      : textValue(candidate, label, maximum);
+  const optionalId = (candidate: unknown, label: string) => optionalString(candidate, label, 128);
+  const optionalDate = (candidate: unknown, label: string) => {
+    const result = optionalString(candidate, label, 10);
+    if (result && (!/^\d{4}-\d{2}-\d{2}$/.test(result) || Number.isNaN(Date.parse(`${result}T00:00:00Z`)))) {
+      throw new HeliosValidationError(`${label} must be a valid date in YYYY-MM-DD format.`);
+    }
+    return result;
+  };
+  const stringList = (candidate: unknown, label: string, maximumItems = 80) => {
+    if (candidate === undefined || candidate === null) return [];
+    if (!Array.isArray(candidate) || candidate.length > maximumItems) {
+      throw new HeliosValidationError(`${label} must be a bounded list.`);
+    }
+    return candidate.map((item, index) => textValue(item, `${label} ${index + 1}`, 500));
+  };
+  const optionalCents = (candidate: unknown, label: string) =>
+    candidate === undefined || candidate === null || candidate === ""
+      ? undefined
+      : safeCents(candidate as number, label);
+  const optionalDays = (candidate: unknown, label: string) =>
+    candidate === undefined || candidate === null || candidate === ""
+      ? undefined
+      : finiteNonNegative(candidate, label);
+
+  const costCodeId = optionalId(input.costCodeId, "Cost code");
+  const rfqId = optionalId(input.rfqId, "RFQ");
+  const submittalId = optionalId(input.submittalId, "Submittal");
+  const riskId = optionalId(input.riskId, "Risk");
+  const evidenceId = optionalId(input.evidenceId, "Evidence");
+  const recordType = input.recordType === undefined
+    ? undefined
+    : allowedValue(input.recordType, HELIOS_ESTIMATE_EVIDENCE_RECORD_TYPES, "Evidence record type");
+  const recordId = optionalId(input.recordId, "Evidence record");
+  const comment = optionalString(input.comment, "Supporting-record note", 2_000);
+  const rfqStatus = input.rfqStatus === undefined
+    ? undefined
+    : allowedValue(input.rfqStatus, HELIOS_RFQ_STATUSES, "RFQ status");
+  const submittalStatus = input.submittalStatus === undefined
+    ? undefined
+    : allowedValue(input.submittalStatus, HELIOS_SUBMITTAL_STATUSES, "Submittal status");
+  const riskCarryDecision = input.riskCarryDecision === undefined
+    ? undefined
+    : allowedValue(input.riskCarryDecision, HELIOS_RISK_CARRY_DECISIONS, "Risk carry decision");
+
+  let rfq: HeliosEstimateSupportInput["rfq"];
+  if (input.rfq !== undefined) {
+    const source = record(input.rfq, "RFQ values");
+    rfq = {
+      title: textValue(source.title, "RFQ title", 240),
+      packageNumber: optionalString(source.packageNumber, "RFQ package number", 80),
+      requiredQuoteDate: optionalDate(source.requiredQuoteDate, "Required quote date"),
+      deliveryLocation: optionalString(source.deliveryLocation, "Delivery location", 240),
+      inclusions: stringList(source.inclusions, "RFQ inclusion"),
+      exclusions: stringList(source.exclusions, "RFQ exclusion"),
+      scheduleConstraints: stringList(source.scheduleConstraints, "RFQ schedule constraint"),
+      vendors: stringList(source.vendors, "RFQ vendor", 30),
+    };
+  }
+
+  let submittal: HeliosEstimateSupportInput["submittal"];
+  if (input.submittal !== undefined) {
+    const source = record(input.submittal, "Submittal values");
+    submittal = {
+      type: allowedValue(source.type, HELIOS_SUBMITTAL_TYPES, "Submittal type"),
+      description: textValue(source.description, "Submittal description", 400),
+      specification: optionalString(source.specification, "Submittal specification", 160),
+      timing: optionalString(source.timing, "Submittal timing", 240),
+      responsibility: optionalString(source.responsibility, "Submittal responsibility", 160),
+      predecessor: optionalString(source.predecessor, "Submittal predecessor", 240),
+      dueDate: optionalDate(source.dueDate, "Submittal due date"),
+    };
+  }
+
+  let risk: HeliosEstimateSupportInput["risk"];
+  if (input.risk !== undefined) {
+    const source = record(input.risk, "Risk values");
+    const probabilityPercent = Math.round(finiteNonNegative(source.probabilityPercent, "Risk probability"));
+    if (probabilityPercent > 100) throw new HeliosValidationError("Risk probability cannot exceed 100%.");
+    const lowCostCents = optionalCents(source.lowCostCents, "Low cost exposure");
+    const mostLikelyCostCents = optionalCents(source.mostLikelyCostCents, "Most-likely cost exposure");
+    const highCostCents = optionalCents(source.highCostCents, "High cost exposure");
+    const lowScheduleDays = optionalDays(source.lowScheduleDays, "Low schedule exposure");
+    const mostLikelyScheduleDays = optionalDays(source.mostLikelyScheduleDays, "Most-likely schedule exposure");
+    const highScheduleDays = optionalDays(source.highScheduleDays, "High schedule exposure");
+    if (lowCostCents !== undefined && mostLikelyCostCents !== undefined && lowCostCents > mostLikelyCostCents) {
+      throw new HeliosValidationError("Low cost exposure cannot exceed the most-likely exposure.");
+    }
+    if (mostLikelyCostCents !== undefined && highCostCents !== undefined && mostLikelyCostCents > highCostCents) {
+      throw new HeliosValidationError("Most-likely cost exposure cannot exceed the high exposure.");
+    }
+    if (lowScheduleDays !== undefined && mostLikelyScheduleDays !== undefined && lowScheduleDays > mostLikelyScheduleDays) {
+      throw new HeliosValidationError("Low schedule exposure cannot exceed the most-likely exposure.");
+    }
+    if (mostLikelyScheduleDays !== undefined && highScheduleDays !== undefined && mostLikelyScheduleDays > highScheduleDays) {
+      throw new HeliosValidationError("Most-likely schedule exposure cannot exceed the high exposure.");
+    }
+    risk = {
+      category: allowedValue(source.category, HELIOS_RISK_CATEGORIES, "Risk category"),
+      severity: allowedValue(source.severity, HELIOS_RISK_SEVERITIES, "Risk severity"),
+      title: textValue(source.title, "Risk title", 240),
+      detail: textValue(source.detail, "Risk detail", 1_600),
+      probabilityPercent,
+      lowCostCents,
+      mostLikelyCostCents,
+      highCostCents,
+      lowScheduleDays,
+      mostLikelyScheduleDays,
+      highScheduleDays,
+      mitigationCostCents: optionalCents(source.mitigationCostCents, "Mitigation cost"),
+      mitigation: textValue(source.mitigation, "Risk mitigation", 800),
+      contingencyResponse: optionalString(source.contingencyResponse, "Contingency response", 800),
+      owner: textValue(source.owner, "Risk owner", 160),
+      responseDueDate: optionalDate(source.responseDueDate, "Risk response due date"),
+      disposition: allowedValue(source.disposition, HELIOS_RISK_DISPOSITIONS, "Risk disposition"),
+      linkedPayItemIds: stringList(source.linkedPayItemIds, "Linked owner item", 250),
+      linkedCostCodeIds: stringList(source.linkedCostCodeIds, "Linked cost code", 500),
+      linkedQuantityIds: stringList(source.linkedQuantityIds, "Linked quantity", 500),
+    };
+  }
+
+  if (["generate_rfq", "generate_submittal"].includes(action) && !costCodeId) {
+    throw new HeliosValidationError("Select an accepted cost code.");
+  }
+  if (action === "update_rfq" && (!rfqId || !rfq)) throw new HeliosValidationError("Select an RFQ and enter its values.");
+  if (["accept_rfq", "reject_rfq", "set_rfq_status"].includes(action) && !rfqId) throw new HeliosValidationError("Select an RFQ.");
+  if (action === "set_rfq_status" && !rfqStatus) throw new HeliosValidationError("Select an RFQ status.");
+  if (action === "update_submittal" && (!submittalId || !submittal)) throw new HeliosValidationError("Select a submittal and enter its values.");
+  if (["accept_submittal", "reject_submittal", "set_submittal_status"].includes(action) && !submittalId) throw new HeliosValidationError("Select a submittal.");
+  if (action === "set_submittal_status" && !submittalStatus) throw new HeliosValidationError("Select a submittal status.");
+  if (action === "update_risk" && (!riskId || !risk)) throw new HeliosValidationError("Select a risk and enter its values.");
+  if (["accept_risk", "reject_risk", "set_risk_decision"].includes(action) && !riskId) throw new HeliosValidationError("Select a risk.");
+  if (action === "set_risk_decision" && !riskCarryDecision) throw new HeliosValidationError("Select a risk carry decision.");
+  if (["verify_evidence", "dispute_evidence"].includes(action) && (!evidenceId || !recordType || !recordId)) {
+    throw new HeliosValidationError("Select evidence and its linked estimate record.");
+  }
+  if (["reject_rfq", "reject_submittal", "reject_risk", "dispute_evidence"].includes(action) && !comment) {
+    throw new HeliosValidationError("A concise reason is required for this decision.");
+  }
+  return {
+    action,
+    costCodeId,
+    rfqId,
+    submittalId,
+    riskId,
+    evidenceId,
+    recordType,
+    recordId,
+    comment,
+    rfqStatus,
+    submittalStatus,
+    riskCarryDecision,
+    rfq,
+    submittal,
+    risk,
+  };
+}
+
+export function calculateRiskExpectedExposure(
+  probabilityPercent: number,
+  mostLikelyCostCents?: number,
+) {
+  if (mostLikelyCostCents === undefined) return undefined;
+  return Math.round((mostLikelyCostCents * probabilityPercent) / 100);
+}
+
 export function calculateEstimateReviewSummary(
   records: Array<{ reviewStatus: HeliosEstimateReviewStatus }>,
   blockers: string[] = [],
@@ -1972,7 +2417,7 @@ export function calculateDerivedUnitCost(directCostCents: number | undefined, bi
 }
 
 export function calculateAllocationBalance(
-  allocations: Array<Pick<HeliosEstimateAllocation, "quantity" | "percentBasisPoints" | "amountCents">>,
+  allocations: Array<Pick<HeliosEstimateAllocation, "quantity" | "percentBasisPoints" | "amountCents"> & { allocationType?: HeliosEstimateAllocation["allocationType"] }>,
 ): { quantity: number; percentBasisPoints: number; amountCents: number } {
   return allocations.reduce<{ quantity: number; percentBasisPoints: number; amountCents: number }>(
     (totals, allocation) => ({

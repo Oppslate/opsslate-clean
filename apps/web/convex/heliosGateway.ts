@@ -2,6 +2,7 @@ import {
   HeliosValidationError,
   normalizeFindingReviewInput,
   normalizeEstimateBuildInput,
+  normalizeEstimateSupportInput,
   normalizeEstimateReviewInput,
   normalizeProjectInput,
   type HeliosBidPackage,
@@ -12,6 +13,7 @@ import {
   type HeliosEstimateWorkspace,
   type HeliosEstimateReviewInput,
   type HeliosEstimateBuildInput,
+  type HeliosEstimateSupportInput,
   type HeliosProjectDetail,
   type HeliosProjectInput,
   type HeliosProjectSummary,
@@ -194,6 +196,16 @@ const mutateEstimateBuildReference = makeFunctionReference<
   },
   { eventId: string; recordId: string; recordType: "cost_code" | "resource" | "quantity" | "allocation"; action: string }
 >("heliosEstimateBuild:mutateBuild");
+const mutateEstimateSupportReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    estimateId: string;
+    input: HeliosEstimateSupportInput;
+  },
+  { eventId: string; recordId: string; recordType: "rfq" | "submittal" | "risk" | "evidence_link"; action: string }
+>("heliosEstimateSupport:mutateSupport");
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -848,6 +860,30 @@ export const mutateHeliosEstimateBuild = httpAction(async (ctx, request) => {
   } catch (error) {
     return json({
       error: error instanceof Error ? error.message : "Estimate build change could not be saved.",
+    }, 400);
+  }
+});
+
+export const mutateHeliosEstimateSupport = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (
+    !boundedString(payload.projectId) ||
+    !boundedString(payload.estimateId) ||
+    !isRecord(payload.input)
+  ) return json({ error: "Invalid estimate supporting-record request." }, 400);
+  try {
+    const data = await ctx.runMutation(mutateEstimateSupportReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      estimateId: payload.estimateId,
+      input: normalizeEstimateSupportInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({
+      error: error instanceof Error ? error.message : "Estimate supporting record could not be saved.",
     }, 400);
   }
 });

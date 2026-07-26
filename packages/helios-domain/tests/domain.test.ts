@@ -10,18 +10,79 @@ import {
   calculateEstimateTotals,
   calculatePricingStatus,
   calculateResourceCost,
+  calculateRiskExpectedExposure,
   deriveAllocationValues,
   canonicalPdfFileName,
   hasPdfMagicBytes,
   normalizeProjectInput,
   normalizeEstimateReviewInput,
   normalizeEstimateBuildInput,
+  normalizeEstimateSupportInput,
   parseDocumentIntelligence,
   parseEstimateProposal,
   parseProjectSynthesis,
   reconcileAllocations,
   validatePdfCandidate,
 } from "../src/index.ts";
+
+test("normalizes evidence-linked RFQ, submittal, and risk actions", () => {
+  assert.deepEqual(normalizeEstimateSupportInput({ action: "generate_rfq", costCodeId: "code-1" }), {
+    action: "generate_rfq",
+    costCodeId: "code-1",
+    rfqId: undefined,
+    submittalId: undefined,
+    riskId: undefined,
+    evidenceId: undefined,
+    recordType: undefined,
+    recordId: undefined,
+    comment: undefined,
+    rfqStatus: undefined,
+    submittalStatus: undefined,
+    riskCarryDecision: undefined,
+    rfq: undefined,
+    submittal: undefined,
+    risk: undefined,
+  });
+  assert.equal(normalizeEstimateSupportInput({
+    action: "set_risk_decision",
+    riskId: "risk-1",
+    riskCarryDecision: "qualification",
+  }).riskCarryDecision, "qualification");
+  assert.throws(() => normalizeEstimateSupportInput({ action: "dispute_evidence", evidenceId: "e-1", recordType: "risk", recordId: "r-1" }), /reason is required/i);
+});
+
+test("validates three-point risk exposure and expected monetary exposure", () => {
+  const input = normalizeEstimateSupportInput({
+    action: "update_risk",
+    riskId: "risk-1",
+    risk: {
+      category: "site_conditions",
+      severity: "high",
+      title: "Groundwater above invert",
+      detail: "Dewatering duration may exceed the planned operation.",
+      probabilityPercent: 40,
+      lowCostCents: 100_000,
+      mostLikelyCostCents: 250_000,
+      highCostCents: 500_000,
+      lowScheduleDays: 1,
+      mostLikelyScheduleDays: 4,
+      highScheduleDays: 10,
+      mitigationCostCents: 50_000,
+      mitigation: "Carry standby pumping and verify borings.",
+      owner: "Lead estimator",
+      disposition: "open",
+      linkedPayItemIds: ["item-1"],
+      linkedCostCodeIds: ["code-1"],
+      linkedQuantityIds: [],
+    },
+  });
+  assert.equal(input.risk?.mostLikelyCostCents, 250_000);
+  assert.equal(calculateRiskExpectedExposure(40, 250_000), 100_000);
+  assert.throws(() => normalizeEstimateSupportInput({
+    ...input,
+    risk: { ...input.risk, lowCostCents: 600_000, mostLikelyCostCents: 250_000 },
+  }), /Low cost exposure cannot exceed/i);
+});
 
 test("normalizes the project intake contract", () => {
   assert.deepEqual(

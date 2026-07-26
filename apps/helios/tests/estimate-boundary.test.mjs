@@ -10,18 +10,21 @@ const source = (path) => readFileSync(join(root, path), "utf8");
 const route = source("src/app/api/projects/[projectId]/estimate/propose/route.ts");
 const reviewRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/review/route.ts");
 const buildRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/build/route.ts");
+const supportRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/support/route.ts");
 const acceptRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/accept-import/route.ts");
 const acceptRemainingRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/accept-remaining/route.ts");
 const gateway = source("../web/convex/heliosGateway.ts");
 const estimates = source("../web/convex/heliosEstimates.ts");
 const estimateReviews = source("../web/convex/heliosEstimateReviews.ts");
 const estimateBuild = source("../web/convex/heliosEstimateBuild.ts");
+const estimateSupport = source("../web/convex/heliosEstimateSupport.ts");
 const actions = source("../web/convex/heliosEstimateActions.ts");
 const contracts = source("../web/convex/heliosEstimateOpenAIContracts.ts");
 const schema = source("../web/convex/schema.ts");
 const builder = source("src/components/estimate-builder.tsx");
 const importReview = source("src/components/estimate-import-review.tsx");
 const costCodeWorkspace = source("src/components/estimate-cost-code-workspace.tsx");
+const supportCenter = source("src/components/estimate-support-center.tsx");
 const navigation = source("src/lib/navigation.ts");
 const domain = source("../../packages/helios-domain/src/index.ts");
 
@@ -132,6 +135,45 @@ test("3E.3 removes unbalanced shared sources from direct rollup and preserves ap
   assert.match(estimateBuild, /heliosEstimateDecisionEvents/);
   assert.match(schema, /v\.literal\("quantity"\)/);
   assert.match(schema, /v\.literal\("allocation"\)/);
+});
+
+test("3E.4 supporting records enforce session, current revision, tenant, and hierarchy", () => {
+  assert.match(supportRoute, /isSameOrigin/);
+  assert.match(supportRoute, /readHeliosPrincipal/);
+  assert.match(supportRoute, /normalizeEstimateSupportInput/);
+  assert.match(estimateSupport, /requireHeliosPrincipal/);
+  assert.match(estimateSupport, /project\.companyId !== companyId/);
+  assert.match(estimateSupport, /latest\._id !== estimate\._id/);
+  assert.match(estimateSupport, /estimate\.sourcePackageRevision !== project\.currentPackageRevision/);
+  assert.match(estimateSupport, /Accept the cost code before creating supporting records/);
+  assert.match(estimateSupport, /heliosEstimateDecisionEvents/);
+});
+
+test("3E.4 creates procurement records only from accepted scope and keeps evidence linked", () => {
+  assert.match(schema, /heliosEstimateEvidenceLinks: defineTable/);
+  assert.match(schema, /heliosEstimateRfqs: defineTable/);
+  assert.match(schema, /heliosEstimateSubmittals: defineTable/);
+  assert.match(estimateSupport, /generate_rfq/);
+  assert.match(estimateSupport, /generate_submittal/);
+  assert.match(estimateSupport, /linkedPayItemIds/);
+  assert.match(estimateSupport, /linkedCostCodeIds/);
+  assert.match(estimateSupport, /addEvidenceLinks/);
+  assert.match(supportCenter, /Draft RFQ/);
+  assert.match(supportCenter, /Add submittal/);
+});
+
+test("3E.4 provides one-click evidence verification and risk carry decisions", () => {
+  assert.match(supportCenter, /Evidence Matrix/);
+  assert.match(supportCenter, /verify_evidence/);
+  assert.match(supportCenter, /dispute_evidence/);
+  for (const decision of ["base_estimate", "contingency", "qualification", "transfer", "no_carry"]) {
+    assert.match(supportCenter, new RegExp(decision));
+  }
+  assert.match(estimateSupport, /set_risk_decision/);
+  assert.match(estimateSupport, /previousValue/);
+  assert.match(estimateSupport, /decisionValue/);
+  assert.match(builder, /value="evidence"/);
+  assert.match(builder, /value="procurement"/);
 });
 
 test("3E.1 deterministically stages new, unchanged, changed, conflicting, and missing owner items", () => {

@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { EstimateImportReview } from "./estimate-import-review";
 import { EstimateCostCodeWorkspace } from "./estimate-cost-code-workspace";
+import { EstimateSupportCenter, EstimateSupportQuickActions } from "./estimate-support-center";
 
 function money(value?: number) {
   if (value === undefined) return "Unpriced";
@@ -109,6 +110,12 @@ export function EstimateBuilder({
       .sort((left, right) => left.officialSequence - right.officialSequence),
     [activeSections],
   );
+  const supportCollections = useMemo(() => ({
+    rfqs: workspace?.rfqs || [],
+    submittals: workspace?.submittals || [],
+    evidenceLinks: workspace?.evidenceLinks || [],
+  }), [workspace?.evidenceLinks, workspace?.rfqs, workspace?.submittals]);
+  const supportWorkspace = workspace ? { ...workspace, ...supportCollections } : null;
 
   async function generateProposal() {
     setRequesting(true);
@@ -154,7 +161,7 @@ export function EstimateBuilder({
       <header className="flex flex-col justify-between gap-4 rounded-xl border bg-card px-5 py-4 lg:flex-row lg:items-center">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-orange-500/35 text-orange-300">Foundation 3E.3</Badge>
+            <Badge variant="outline" className="border-orange-500/35 text-orange-300">Foundation 3E.4</Badge>
             <Badge variant={workspace?.status === "failed" ? "destructive" : "secondary"} className="capitalize">
               {statusLabel}
             </Badge>
@@ -227,6 +234,8 @@ export function EstimateBuilder({
               <TabsTrigger value="import">Import review ({reviewSummary.proposed + reviewSummary.deferred})</TabsTrigger>
               <TabsTrigger value="build">Build view</TabsTrigger>
               <TabsTrigger value="bid">Bid schedule view</TabsTrigger>
+              <TabsTrigger value="evidence">Evidence matrix ({supportCollections.evidenceLinks.length})</TabsTrigger>
+              <TabsTrigger value="procurement">Procurement ({supportCollections.rfqs.length + supportCollections.submittals.length})</TabsTrigger>
               <TabsTrigger value="risk">Risk register ({workspace.risks.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="import">
@@ -278,7 +287,7 @@ export function EstimateBuilder({
                               <span className="text-xs text-muted-foreground">Accept this owner item before adding cost codes.</span>
                             )}
                           </div>
-                          <Table>
+                          <div className="overflow-x-auto"><Table>
                             <TableHeader><TableRow><TableHead>Cost code</TableHead><TableHead>Production basis</TableHead><TableHead>Ownership</TableHead><TableHead>Pricing</TableHead><TableHead className="text-right">Direct cost</TableHead><TableHead className="text-right">Action</TableHead></TableRow></TableHeader>
                             <TableBody>
                               {item.costCodes.map((code) => (
@@ -288,11 +297,11 @@ export function EstimateBuilder({
                                   <TableCell className="capitalize">{code.scopeOwnership.replaceAll("_", " ")}</TableCell>
                                   <TableCell><Badge variant={code.pricingStatus === "priced" ? "secondary" : "outline"} className="capitalize">{code.pricingStatus}</Badge>{code.allocationRequired && <Badge variant="outline" className="ml-1 capitalize">Allocation {code.allocationStatus}</Badge>}<div className="mt-1 text-xs text-muted-foreground">{code.resources.length} resource{code.resources.length === 1 ? "" : "s"}</div></TableCell>
                                   <TableCell className="text-right font-medium">{money(code.directCostCents)}{code.allocationRequired && <div className="text-xs text-muted-foreground">Shared source</div>}</TableCell>
-                                  <TableCell><div className="flex justify-end gap-2">{code.reviewStatus === "proposed" && (["accepted", "corrected"] as string[]).includes(item.reviewStatus) && <Button size="sm" disabled={savingBuild !== null} onClick={() => saveBuild({ action: "accept_cost_code", costCodeId: code.id }, "Cost code accepted.")}><Check aria-hidden="true" />Accept</Button>}<EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} code={code} ownerItems={officialItems} /></div></TableCell>
+                                  <TableCell><div className="flex min-w-max justify-end gap-2">{code.reviewStatus === "proposed" && (["accepted", "corrected"] as string[]).includes(item.reviewStatus) && <Button size="sm" disabled={savingBuild !== null} onClick={() => saveBuild({ action: "accept_cost_code", costCodeId: code.id }, "Cost code accepted.")}><Check aria-hidden="true" />Accept</Button>}{(["accepted", "corrected"] as string[]).includes(code.reviewStatus) && <EstimateSupportQuickActions projectId={project.id} estimateId={workspace.id} costCodeId={code.id} hasRfq={supportCollections.rfqs.some((rfq) => rfq.linkedCostCodeIds.includes(code.id))} hasSubmittal={supportCollections.submittals.some((submittal) => submittal.linkedCostCodeIds.includes(code.id))} />}<EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} code={code} ownerItems={officialItems} /></div></TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>
-                          </Table>
+                          </Table></div>
                           <details className="mt-4 rounded-md border p-3">
                             <summary className="cursor-pointer text-sm font-medium"><FileCheck2 className="mr-2 inline size-4 text-orange-300" aria-hidden="true" />View owner-item evidence</summary>
                             <div className="mt-3"><EvidenceList ids={item.evidenceIds} workspace={workspace} /></div>
@@ -308,27 +317,20 @@ export function EstimateBuilder({
               <Card className="gap-0 overflow-hidden py-0">
                 <CardHeader className="border-b py-4"><CardTitle>Owner bid schedule</CardTitle><CardDescription>The bid view is generated from the same owner-pay-item records as the build view.</CardDescription></CardHeader>
                 <CardContent className="px-0">
-                  <Table>
+                  <div className="overflow-x-auto"><Table>
                     <TableHeader><TableRow><TableHead>Seq.</TableHead><TableHead>Item</TableHead><TableHead>Description</TableHead><TableHead>Bid quantity</TableHead><TableHead>Unit</TableHead><TableHead className="text-right">Unit cost / fixed</TableHead><TableHead className="text-right">Extended</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {officialItems.map((item) => (
                         <TableRow key={item.id}><TableCell>{item.officialSequence}</TableCell><TableCell className="font-mono text-orange-300">{item.officialItemNumber}</TableCell><TableCell className="min-w-72 whitespace-normal font-medium">{item.description}</TableCell><TableCell>{item.bidQuantity ?? "Takeoff required"}</TableCell><TableCell>{item.bidUnit}</TableCell><TableCell className="text-right">{money(item.fixedAmountCents ?? item.derivedUnitCostCents)}</TableCell><TableCell className="text-right font-semibold">{money(item.fixedAmountCents ?? item.directCostCents)}</TableCell></TableRow>
                       ))}
                     </TableBody>
-                  </Table>
+                  </Table></div>
                 </CardContent>
               </Card>
             </TabsContent>
-            <TabsContent value="risk" className="space-y-3">
-              {workspace.risks.length === 0 ? (
-                <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">No evidence-backed risks were proposed.</CardContent></Card>
-              ) : workspace.risks.map((risk) => (
-                <Card key={risk.id} className="gap-3 py-4">
-                  <CardHeader><div><CardTitle>{risk.title}</CardTitle><CardDescription>{risk.probabilityPercent}% probability · {risk.scheduleDays === undefined ? "Schedule exposure not established" : `${risk.scheduleDays} days exposure`}</CardDescription></div><Badge variant="outline" className="capitalize">{risk.disposition}</Badge></CardHeader>
-                  <CardContent className="space-y-3 text-sm"><p>{risk.detail}</p><div className="grid gap-3 rounded-md border p-3 md:grid-cols-2"><div><div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Mitigation</div><div className="mt-1">{risk.mitigation}</div></div><div><div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Owner</div><div className="mt-1">{risk.owner}</div></div></div><details><summary className="cursor-pointer font-medium">View {risk.evidenceIds.length} risk citations</summary><div className="mt-3"><EvidenceList ids={risk.evidenceIds} workspace={workspace} /></div></details></CardContent>
-                </Card>
-              ))}
-            </TabsContent>
+            <TabsContent value="evidence">{supportWorkspace && <EstimateSupportCenter projectId={project.id} workspace={supportWorkspace} mode="evidence" />}</TabsContent>
+            <TabsContent value="procurement">{supportWorkspace && <EstimateSupportCenter projectId={project.id} workspace={supportWorkspace} mode="procurement" />}</TabsContent>
+            <TabsContent value="risk">{supportWorkspace && <EstimateSupportCenter projectId={project.id} workspace={supportWorkspace} mode="risk" />}</TabsContent>
           </Tabs>
         </>
       )}
