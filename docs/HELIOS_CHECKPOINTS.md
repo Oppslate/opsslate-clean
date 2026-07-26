@@ -303,3 +303,51 @@ points.
 - Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Next approved milestone: Foundation 3E.3 quantity and allocation controls
+
+### Foundation item 3E.3 quantity and allocation controls
+
+- Application checkpoint: `3d26f57`
+- Quantity authority: owner bid quantity remains on the owner pay item while
+  governed production, comparative, and authoritative quantity records are
+  stored separately beneath the operational cost code
+- Unknown-value safety: `Takeoff Required` is a first-class quantity type and
+  status with no numeric value; zero and placeholder quantities are rejected
+- Quantity provenance: value, unit, type, use, source label, source reference,
+  calculation/takeoff method, confidence, origin, evidence, and review state
+  are retained together
+- AI quantity boundary: future estimate proposals create preliminary AI
+  takeoff or Takeoff Required records; the operational production quantity is
+  not populated until an estimator accepts the proposal
+- Bid-day speed: proposed quantities support one-click Accept, and estimators
+  can mark Takeoff Required in one click without opening a form
+- Shared-cost control: a cost code can be marked as a shared source and
+  allocated to current owner items by quantity, percent, or dollar amount
+- Server-owned math: one method is controlling; quantity, percentage, and
+  dollar comparisons are derived on the server from the current source
+  production quantity and direct cost
+- Reconciliation: exact 100 percent, source quantity, and source-dollar checks
+  identify balanced, unbalanced, incomplete, duplicate, and orphan allocation
+  states, including rounding differences
+- Double-count prevention: shared source cost is excluded from its direct
+  parent rollup until allocations balance; balanced dollars roll to each
+  destination owner item exactly once
+- Destination safety: target owner items and optional target cost codes are
+  tenant-authorized and hierarchy-validated; duplicate destinations are
+  rejected on create and update
+- Audit history: quantity and allocation create, update, accept, reject, and
+  state changes retain before/after value, reviewer, timestamp, and reason
+- Legacy rollout guard: cached pre-3E.3 cost-code records render safely while
+  the new arrays and allocation state hydrate
+- Live Seneca validation: the `01-100` worksheet created a real human-reviewed
+  Takeoff Required record in one click; no owner bid quantity or price changed
+- Responsive verification: default desktop and `390 px` mobile retained the
+  focused worksheet, primary action access, and horizontally scrollable data
+  tables
+- Automated domain tests: 19 passed
+- Automated Helios security and UI boundary tests: 44 passed
+- Helios lint, Convex schema/function generation, and Helios production build:
+  Passed
+- Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Next approved milestone: Foundation 3E.4 evidence, RFQ, submittal, and risk
+  integration
