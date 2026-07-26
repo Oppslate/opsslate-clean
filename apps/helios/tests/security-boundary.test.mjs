@@ -22,6 +22,18 @@ const gateway = readFileSync(
   join(root, "../web/convex/heliosGateway.ts"),
   "utf8",
 );
+const projectPage = readFileSync(
+  join(root, "src/app/projects/[projectId]/page.tsx"),
+  "utf8",
+);
+const projectEstimatePage = readFileSync(
+  join(root, "src/app/projects/[projectId]/estimate/page.tsx"),
+  "utf8",
+);
+const estimatePage = readFileSync(
+  join(root, "src/app/estimate/page.tsx"),
+  "utf8",
+);
 
 test("Helios authentication is independent and Clerk-verified", () => {
   assert.match(proxy, /clerkMiddleware/);
@@ -35,6 +47,21 @@ test("logout terminates the independent identity-provider session", () => {
   assert.match(shell, /useClerk/);
   assert.match(shell, /signOut\(\{ redirectUrl: "\/sign-in" \}\)/);
   assert.doesNotMatch(shell, /api\/auth\/session/);
+});
+
+test("signed-out browser entry redirects to Helios sign-in and preserves the destination", () => {
+  for (const page of [projectPage, projectEstimatePage, estimatePage]) {
+    assert.match(page, /redirect\(/);
+    assert.match(page, /\/sign-in\?redirect_url=/);
+  }
+  assert.match(projectPage, /encodeURIComponent\(`\/projects\/\$\{projectId\}`\)/);
+  assert.match(
+    projectEstimatePage,
+    /`\/projects\/\$\{projectId\}\/estimate`/,
+  );
+  assert.doesNotMatch(projectPage, /if \(!principal\) notFound\(\)/);
+  assert.doesNotMatch(projectEstimatePage, /if \(!principal\) notFound\(\)/);
+  assert.doesNotMatch(estimatePage, /if \(!principal\) notFound\(\)/);
 });
 
 test("tenant identity is provisioned and derived on the server", () => {

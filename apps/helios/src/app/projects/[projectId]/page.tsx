@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { ProjectIntake } from "@/components/project-intake";
 import { getEstimateWorkspace, getProject } from "@/lib/helios-data";
@@ -12,9 +12,13 @@ export default async function ProjectPage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  const principal = await readHeliosPrincipal();
-  if (!principal) notFound();
   const { projectId } = await params;
+  const principal = await readHeliosPrincipal();
+  if (!principal) {
+    redirect(
+      `/sign-in?redirect_url=${encodeURIComponent(`/projects/${projectId}`)}`,
+    );
+  }
   let detail;
   let workspace;
   try {

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@opss
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@opsslate/suite-ui/table";
 import { ArrowRight, Calculator } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 
 import { HeliosShell } from "@/components/helios-shell";
 import { getCockpit } from "@/lib/helios-data";
@@ -15,7 +15,9 @@ export const dynamic = "force-dynamic";
 
 export default async function EstimateProjectsPage() {
   const principal = await readHeliosPrincipal();
-  if (!principal) notFound();
+  if (!principal) {
+    redirect("/sign-in?redirect_url=%2Festimate");
+  }
   const data = await getCockpit(principal);
   return (
     <HeliosShell principal={principal}>

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { EstimateBuilder } from "@/components/estimate-builder";
 import { HeliosShell } from "@/components/helios-shell";
@@ -13,9 +13,15 @@ export default async function ProjectEstimatePage({
 }: {
   params: Promise<{ projectId: string }>;
 }) {
-  const principal = await readHeliosPrincipal();
-  if (!principal) notFound();
   const { projectId } = await params;
+  const principal = await readHeliosPrincipal();
+  if (!principal) {
+    redirect(
+      `/sign-in?redirect_url=${encodeURIComponent(
+        `/projects/${projectId}/estimate`,
+      )}`,
+    );
+  }
   let detail;
   let workspace;
   try {
