@@ -351,3 +351,52 @@ points.
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Next approved milestone: Foundation 3E.4 evidence, RFQ, submittal, and risk
   integration
+
+### Foundation item 3E.4 evidence, RFQ, submittal, and risk integration
+
+- Application checkpoint: `db4cec6`
+- Estimate schema version: advanced to version 3 with optional-field and
+  empty-collection compatibility for existing estimate workspaces
+- Evidence Matrix: section, owner-item, cost-code, quantity, resource, RFQ,
+  submittal, and risk citations resolve to exact estimate records with source,
+  relationship, provenance, and verification state
+- Evidence decisions: Verify is one click; Dispute requires a concise reason;
+  both retain reviewer, timestamp, and append-only decision history
+- RFQ generation: an estimator can draft an evidence-linked RFQ from an
+  accepted cost code in one click; proposed scope cannot create procurement
+  records
+- Submittal generation: an accepted cost code can create an evidence-linked
+  submittal requirement in one click, with type, specification, responsibility,
+  due date, and lifecycle status available in a focused edit dialog
+- Procurement desk: RFQ and submittal registers expose the current package,
+  linked scope, dates, responsibility, and one-step lifecycle advancement
+- Risk register: category, severity, probability, low/most-likely/high cost and
+  schedule exposure, expected monetary exposure, mitigation, contingency
+  response, owner, response date, disposition, and linked scope are explicit
+- Bid-day speed: base estimate, contingency, qualification, transfer, and no
+  carry are direct one-click risk decisions; edits remain focused and rejection
+  requires a reason
+- Revision safety: supporting-record mutations require the current estimate
+  version and current bid-package revision; stale or superseded workspaces fail
+  closed
+- Security: same-origin independent session validation, signed gateway, role
+  authorization, tenant ownership, project/estimate ownership, and complete
+  parent-record hierarchy validation are enforced on every mutation
+- Accepted-scope boundary: evidence can be reviewed while estimate scope is
+  proposed, but downstream RFQ/submittal generation requires accepted or
+  corrected owner-item and cost-code scope
+- Live Seneca validation: 139 legacy and current evidence links rendered, 19
+  structured risks rendered, and empty RFQ/submittal registers provided clear
+  first-action guidance; no estimate decisions, quantities, prices, or
+  procurement records were changed during validation
+- Responsive verification: default desktop, `820 px` tablet, and `390 px`
+  mobile passed with a responsive navigation drawer and no page-level
+  horizontal overflow
+- Automated domain tests: 21 passed
+- Automated Helios security and UI boundary tests: 47 passed
+- React quality review, Helios lint, Convex schema/type generation, content
+  diff check, and Helios production build: Passed
+- Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Next recommended milestone: Foundation 3E.5 estimate completeness, review
+  gates, and pricing-risk reconciliation

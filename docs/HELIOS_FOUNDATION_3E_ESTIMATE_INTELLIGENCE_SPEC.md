@@ -1,6 +1,6 @@
 # Helios Foundation 3E: Estimate Intelligence and Estimator Specification
 
-Status: approved design authority; Foundations 3E.1 through 3E.3 implemented  
+Status: approved design authority; Foundations 3E.1 through 3E.4 implemented
 Product: Helios, a standalone responsive web application in the OpsSlate product family  
 Primary market: New York heavy-highway and public works estimating  
 Design authority: OpsSlate estimating patterns through `@opsslate/suite-ui`
