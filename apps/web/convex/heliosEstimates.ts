@@ -1,6 +1,7 @@
 import {
   calculateCostCodeDirectCost,
   calculateDerivedUnitCost,
+  calculateEstimateReviewSummary,
   parseEstimateProposal,
   type HeliosEstimateWorkspace,
 } from "@opsslate/helios-domain";
@@ -194,6 +195,19 @@ export const completeEstimateProposal = internalMutation({
       evidenceRows.map((row) => String(row._id)),
     );
     const now = Date.now();
+    const projectEstimates = await ctx.db
+      .query("heliosEstimates")
+      .withIndex("by_project_version", (query) => query.eq("projectId", job.projectId))
+      .order("desc")
+      .collect();
+    const previousAccepted = projectEstimates.find(
+      (estimate) => estimate._id !== job.estimateId && estimate.status === "accepted",
+    );
+    const previousItems = previousAccepted
+      ? await ctx.db.query("heliosOwnerPayItems").withIndex("by_estimate", (query) => query.eq("estimateId", previousAccepted._id)).collect()
+      : [];
+    const previousByNumber = new Map(previousItems.map((item) => [item.officialItemNumber, item]));
+    const proposedItemNumbers = new Set<string>();
     for (const section of proposal.sections) {
       const sectionId = await ctx.db.insert("heliosEstimateSections", {
         companyId: job.companyId,
@@ -208,16 +222,33 @@ export const completeEstimateProposal = internalMutation({
         updatedAt: now,
       });
       for (const [itemIndex, item] of section.payItems.entries()) {
+        proposedItemNumbers.add(item.officialItemNumber);
+        const previousItem = previousByNumber.get(item.officialItemNumber);
+        const importChangeType = !previousItem
+          ? "new" as const
+          : previousItem.bidUnit !== item.bidUnit ||
+              (previousItem.bidQuantity !== undefined && item.bidQuantity !== undefined && previousItem.bidQuantity !== item.bidQuantity)
+            ? "conflict" as const
+            : previousItem.description !== item.description ||
+                previousItem.officialSequence !== item.officialSequence ||
+                previousItem.fixedAmountCents !== item.fixedAmountCents
+              ? "changed" as const
+              : "unchanged" as const;
         const payItemId = await ctx.db.insert("heliosOwnerPayItems", {
           companyId: job.companyId,
           projectId: job.projectId,
           estimateId: job.estimateId,
           sectionId,
+          officialSequence: item.officialSequence,
           officialItemNumber: item.officialItemNumber,
           description: item.description,
+          estimatorDescription: item.estimatorDescription,
           sequence: itemIndex,
           bidQuantity: item.bidQuantity,
           bidUnit: item.bidUnit,
+          itemType: item.itemType,
+          fixedAmountCents: item.fixedAmountCents,
+          importChangeType,
           quantityStatus: item.quantityStatus,
           confidence: item.confidence,
           reviewStatus: "proposed",
@@ -261,6 +292,47 @@ export const completeEstimateProposal = internalMutation({
             });
           }
         }
+      }
+    }
+    const missingItems = previousItems.filter(
+      (item) => item.reviewStatus !== "rejected" && !proposedItemNumbers.has(item.officialItemNumber),
+    );
+    if (missingItems.length) {
+      const missingSectionId = await ctx.db.insert("heliosEstimateSections", {
+        companyId: job.companyId,
+        projectId: job.projectId,
+        estimateId: job.estimateId,
+        key: "prior-owner-items-missing",
+        name: "Prior owner items missing from current proposal",
+        sequence: 999_999,
+        reviewStatus: "proposed",
+        evidenceIds: [...new Set(missingItems.flatMap((item) => item.evidenceIds))],
+        createdAt: now,
+        updatedAt: now,
+      });
+      for (const item of missingItems) {
+        await ctx.db.insert("heliosOwnerPayItems", {
+          companyId: job.companyId,
+          projectId: job.projectId,
+          estimateId: job.estimateId,
+          sectionId: missingSectionId,
+          officialSequence: item.officialSequence ?? item.sequence,
+          officialItemNumber: item.officialItemNumber,
+          description: item.description,
+          estimatorDescription: item.estimatorDescription,
+          sequence: item.sequence,
+          bidQuantity: item.bidQuantity,
+          bidUnit: item.bidUnit,
+          itemType: item.itemType ?? (item.bidUnit.toUpperCase() === "LS" ? "lump_sum" : "unit_price"),
+          fixedAmountCents: item.fixedAmountCents,
+          importChangeType: "missing",
+          quantityStatus: item.quantityStatus,
+          confidence: item.confidence,
+          reviewStatus: "proposed",
+          evidenceIds: item.evidenceIds,
+          createdAt: now,
+          updatedAt: now,
+        });
       }
     }
     for (const risk of proposal.risks) {
@@ -330,7 +402,7 @@ export const getWorkspace = internalQuery({
       .order("desc")
       .first();
     if (!estimate) return null;
-    const [sectionRows, payItemRows, costCodeRows, resourceRows, riskRows, evidenceRows] =
+    const [sectionRows, payItemRows, costCodeRows, resourceRows, riskRows, evidenceRows, decisionRows] =
       await Promise.all([
         ctx.db.query("heliosEstimateSections").withIndex("by_estimate_sequence", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosOwnerPayItems").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
@@ -338,7 +410,13 @@ export const getWorkspace = internalQuery({
         ctx.db.query("heliosEstimateResources").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosEstimateRisks").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosEvidence").withIndex("by_project", (q) => q.eq("projectId", project._id)).collect(),
+        ctx.db.query("heliosEstimateDecisionEvents").withIndex("by_estimate_created", (q) => q.eq("estimateId", estimate._id)).order("desc").collect(),
       ]);
+    const legacyOfficialSequence = new Map(
+      [...payItemRows]
+        .sort((left, right) => left._creationTime - right._creationTime)
+        .map((item, index) => [item._id, index + 1]),
+    );
     const resourcesFor = (costCodeId: Id<"heliosEstimateCostCodes">) =>
       resourceRows.filter((row) => row.costCodeId === costCodeId).map((resource) => ({
         id: String(resource._id),
@@ -380,10 +458,15 @@ export const getWorkspace = internalQuery({
           : codeCosts.reduce<number>((sum, cost) => sum + (cost || 0), 0);
         return {
           id: String(item._id),
+          officialSequence: item.officialSequence ?? legacyOfficialSequence.get(item._id) ?? item.sequence,
           officialItemNumber: item.officialItemNumber,
           description: item.description,
+          estimatorDescription: item.estimatorDescription,
           bidQuantity: item.bidQuantity,
           bidUnit: item.bidUnit,
+          itemType: item.itemType ?? (item.bidUnit.toUpperCase() === "LS" ? "lump_sum" : "unit_price"),
+          fixedAmountCents: item.fixedAmountCents,
+          importChangeType: item.importChangeType ?? "new",
           quantityStatus: item.quantityStatus,
           confidence: item.confidence,
           reviewStatus: item.reviewStatus,
@@ -401,6 +484,25 @@ export const getWorkspace = internalQuery({
         documentNames.set(String(row.documentId), document?.fileName || "Project document");
       }
     }));
+    const reviewRecords = [
+      ...sectionRows.map((row) => ({ reviewStatus: row.reviewStatus })),
+      ...payItemRows.map((row) => ({ reviewStatus: row.reviewStatus })),
+    ];
+    const activeItems = payItemRows.filter((row) => row.reviewStatus !== "rejected");
+    const blockers: string[] = [];
+    if (!activeItems.length) blockers.push("At least one owner pay item must be retained.");
+    const itemNumbers = new Set<string>();
+    const itemSequences = new Set<number>();
+    for (const item of activeItems) {
+      const sequence = item.officialSequence ?? legacyOfficialSequence.get(item._id) ?? item.sequence;
+      if (itemNumbers.has(item.officialItemNumber)) blockers.push(`Duplicate owner item ${item.officialItemNumber}.`);
+      if (itemSequences.has(sequence)) blockers.push(`Duplicate official sequence ${sequence}.`);
+      itemNumbers.add(item.officialItemNumber);
+      itemSequences.add(sequence);
+      if (["fixed_price", "allowance"].includes(item.itemType || "") && item.fixedAmountCents === undefined) {
+        blockers.push(`Owner item ${item.officialItemNumber} is missing its official fixed amount.`);
+      }
+    }
     return {
       id: String(estimate._id),
       projectId: String(project._id),
@@ -415,6 +517,19 @@ export const getWorkspace = internalQuery({
       profitBasisPoints: estimate.profitBasisPoints,
       bondBasisPoints: estimate.bondBasisPoints,
       taxProfileStatus: estimate.taxProfileStatus,
+      reviewSummary: calculateEstimateReviewSummary(reviewRecords, [...new Set(blockers)]),
+      decisionHistory: decisionRows.map((event) => ({
+        id: String(event._id),
+        recordType: event.recordType,
+        recordId: event.recordId,
+        action: event.action,
+        comment: event.comment,
+        targetRecordId: event.targetRecordId,
+        previousValue: event.previousValue,
+        decisionValue: event.decisionValue,
+        reviewerName: event.reviewerName,
+        createdAt: event.createdAt,
+      })),
       sections,
       risks: riskRows.map((risk) => ({
         id: String(risk._id),

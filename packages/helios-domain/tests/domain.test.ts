@@ -6,10 +6,12 @@ import {
   calculateAllocationBalance,
   calculateCostCodeDirectCost,
   calculateDerivedUnitCost,
+  calculateEstimateReviewSummary,
   calculateEstimateTotals,
   canonicalPdfFileName,
   hasPdfMagicBytes,
   normalizeProjectInput,
+  normalizeEstimateReviewInput,
   parseDocumentIntelligence,
   parseEstimateProposal,
   parseProjectSynthesis,
@@ -183,10 +185,14 @@ const culvertProposal = {
       evidenceIds: ["pay-item"],
       payItems: [
         {
+          officialSequence: 1,
           officialItemNumber: "619.0501",
           description: "Culvert replacement, complete",
+          estimatorDescription: null,
           bidQuantity: 1,
           bidUnit: "LS",
+          itemType: "lump_sum",
+          fixedAmountCents: null,
           quantityStatus: "owner_provided",
           confidence: 96,
           evidenceIds: ["pay-item"],
@@ -249,6 +255,8 @@ test("parses the evidence-backed culvert estimate proposal without inventing pri
     "risk",
   ]);
   assert.equal(proposal.sections[0]?.payItems[0]?.officialItemNumber, "619.0501");
+  assert.equal(proposal.sections[0]?.payItems[0]?.officialSequence, 1);
+  assert.equal(proposal.sections[0]?.payItems[0]?.itemType, "lump_sum");
   assert.deepEqual(
     proposal.sections[0]?.payItems[0]?.costCodes.map((item) => item.code),
     ["ENG", "EW", "FILL", "PAVE", "MAINT", "REM"],
@@ -256,6 +264,73 @@ test("parses the evidence-backed culvert estimate proposal without inventing pri
   assert.equal(
     proposal.sections[0]?.payItems[0]?.costCodes[0]?.resources[0]?.rateCents,
     undefined,
+  );
+});
+
+test("protects official sequence and fixed owner amounts", () => {
+  const allowance = structuredClone(culvertProposal);
+  allowance.sections[0].payItems[0].itemType = "allowance";
+  assert.throws(
+    () => parseEstimateProposal(allowance, ["pay-item", "general", "scope", "risk"]),
+    /requires its official fixed amount/,
+  );
+  (allowance.sections[0].payItems[0] as { fixedAmountCents: number | null }).fixedAmountCents = 2_000_000;
+  assert.equal(
+    parseEstimateProposal(allowance, ["pay-item", "general", "scope", "risk"]).sections[0]?.payItems[0]?.fixedAmountCents,
+    2_000_000,
+  );
+});
+
+test("normalizes all seven estimator import decisions and requires reasons for structural changes", () => {
+  for (const action of ["accept", "correct", "reject", "defer", "merge", "split", "map"] as const) {
+    const input: Record<string, unknown> = {
+      recordType: "pay_item",
+      recordId: "item-1",
+      action,
+      comment: action === "accept" || action === "correct" ? undefined : "Estimator review note.",
+    };
+    if (action === "correct") input.correction = { description: "Corrected owner description" };
+    if (action === "merge" || action === "map") input.targetRecordId = "target-1";
+    if (action === "split") input.split = {
+      officialSequence: 2,
+      officialItemNumber: "619.0502",
+      description: "Second culvert",
+    };
+    assert.equal(normalizeEstimateReviewInput(input).action, action);
+  }
+  assert.throws(
+    () => normalizeEstimateReviewInput({ recordType: "pay_item", recordId: "item-1", action: "merge", targetRecordId: "target-1" }),
+    /review note is required/i,
+  );
+});
+
+test("calculates deterministic import-review readiness", () => {
+  assert.deepEqual(
+    calculateEstimateReviewSummary([
+      { reviewStatus: "accepted" },
+      { reviewStatus: "corrected" },
+      { reviewStatus: "rejected" },
+      { reviewStatus: "deferred" },
+    ]),
+    {
+      total: 4,
+      proposed: 0,
+      deferred: 1,
+      accepted: 1,
+      corrected: 1,
+      rejected: 1,
+      reviewed: 3,
+      percentComplete: 75,
+      canAcceptImport: false,
+      blockers: [],
+    },
+  );
+  assert.equal(
+    calculateEstimateReviewSummary([
+      { reviewStatus: "accepted" },
+      { reviewStatus: "corrected" },
+    ]).canAcceptImport,
+    true,
   );
 });
 

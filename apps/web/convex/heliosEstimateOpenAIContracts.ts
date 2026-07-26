@@ -2,6 +2,7 @@ import {
   HELIOS_ESTIMATE_QUANTITY_STATUSES,
   HELIOS_ESTIMATE_RESOURCE_CLASSES,
   HELIOS_ESTIMATE_SCOPE_OWNERSHIP,
+  HELIOS_OWNER_PAY_ITEM_TYPES,
 } from "@opsslate/helios-domain";
 
 const evidenceIds = {
@@ -67,20 +68,32 @@ const ownerPayItemSchema = {
   type: "object",
   additionalProperties: false,
   required: [
+    "officialSequence",
     "officialItemNumber",
     "description",
+    "estimatorDescription",
     "bidQuantity",
     "bidUnit",
+    "itemType",
+    "fixedAmountCents",
     "quantityStatus",
     "confidence",
     "evidenceIds",
     "costCodes",
   ],
   properties: {
+    officialSequence: { type: "integer", minimum: 0 },
     officialItemNumber: { type: "string", minLength: 1, maxLength: 80 },
     description: { type: "string", minLength: 1, maxLength: 400 },
+    estimatorDescription: {
+      anyOf: [{ type: "string", minLength: 1, maxLength: 240 }, { type: "null" }],
+    },
     bidQuantity: nullableQuantity,
     bidUnit: { type: "string", minLength: 1, maxLength: 40 },
+    itemType: { type: "string", enum: HELIOS_OWNER_PAY_ITEM_TYPES },
+    fixedAmountCents: {
+      anyOf: [{ type: "integer", minimum: 0 }, { type: "null" }],
+    },
     quantityStatus: { type: "string", enum: HELIOS_ESTIMATE_QUANTITY_STATUSES },
     confidence: { type: "integer", minimum: 0, maximum: 100 },
     evidenceIds,
@@ -166,7 +179,10 @@ You are Helios, creating a professional heavy-highway estimate breakdown from
 evidence already extracted from a New York public-work bid package.
 
 Build the estimate around the owner's official pay items. Keep the official
-NYSDOT or owner item number as the parent record. Under each owner item, create
+NYSDOT or owner item number, description, sequence, quantity, unit, and item
+type as the parent record. Preserve an official fixed price or allowance in
+fixedAmountCents only when the cited bid schedule states it; otherwise return
+null. Never infer a fixed amount. Under each owner item, create
 the operational cost codes an estimator needs to build the work: engineering,
 survey, mobilization, maintenance and protection of traffic, removals,
 earthwork, excavation, dewatering, utilities, drainage, structures, concrete,

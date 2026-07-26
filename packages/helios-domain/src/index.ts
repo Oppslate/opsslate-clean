@@ -123,9 +123,35 @@ export const HELIOS_ESTIMATE_STATUSES = [
 
 export const HELIOS_ESTIMATE_REVIEW_STATUSES = [
   "proposed",
+  "deferred",
   "accepted",
   "corrected",
   "rejected",
+] as const;
+
+export const HELIOS_ESTIMATE_REVIEW_ACTIONS = [
+  "accept",
+  "correct",
+  "reject",
+  "defer",
+  "merge",
+  "split",
+  "map",
+] as const;
+
+export const HELIOS_OWNER_PAY_ITEM_TYPES = [
+  "unit_price",
+  "lump_sum",
+  "fixed_price",
+  "allowance",
+] as const;
+
+export const HELIOS_ESTIMATE_IMPORT_CHANGE_TYPES = [
+  "new",
+  "unchanged",
+  "changed",
+  "conflict",
+  "missing",
 ] as const;
 
 export const HELIOS_ESTIMATE_QUANTITY_STATUSES = [
@@ -180,6 +206,12 @@ export type HeliosPackageEntryStatus =
 export type HeliosEstimateStatus = (typeof HELIOS_ESTIMATE_STATUSES)[number];
 export type HeliosEstimateReviewStatus =
   (typeof HELIOS_ESTIMATE_REVIEW_STATUSES)[number];
+export type HeliosEstimateReviewAction =
+  (typeof HELIOS_ESTIMATE_REVIEW_ACTIONS)[number];
+export type HeliosOwnerPayItemType =
+  (typeof HELIOS_OWNER_PAY_ITEM_TYPES)[number];
+export type HeliosEstimateImportChangeType =
+  (typeof HELIOS_ESTIMATE_IMPORT_CHANGE_TYPES)[number];
 export type HeliosEstimateQuantityStatus =
   (typeof HELIOS_ESTIMATE_QUANTITY_STATUSES)[number];
 export type HeliosEstimateResourceClass =
@@ -406,10 +438,15 @@ export type HeliosEstimateCostCode = {
 
 export type HeliosOwnerPayItem = {
   id: string;
+  officialSequence: number;
   officialItemNumber: string;
   description: string;
+  estimatorDescription?: string;
   bidQuantity?: number;
   bidUnit: string;
+  itemType: HeliosOwnerPayItemType;
+  fixedAmountCents?: number;
+  importChangeType: HeliosEstimateImportChangeType;
   quantityStatus: HeliosEstimateQuantityStatus;
   confidence: number;
   reviewStatus: HeliosEstimateReviewStatus;
@@ -459,11 +496,71 @@ export type HeliosEstimateWorkspace = {
   profitBasisPoints: number;
   bondBasisPoints: number;
   taxProfileStatus: "not_configured" | "configured";
+  reviewSummary: HeliosEstimateReviewSummary;
+  decisionHistory: HeliosEstimateDecisionEvent[];
   sections: HeliosEstimateSection[];
   risks: HeliosEstimateRisk[];
   evidence: HeliosEvidence[];
   createdAt: number;
   updatedAt: number;
+};
+
+export type HeliosEstimateReviewSummary = {
+  total: number;
+  proposed: number;
+  deferred: number;
+  accepted: number;
+  corrected: number;
+  rejected: number;
+  reviewed: number;
+  percentComplete: number;
+  canAcceptImport: boolean;
+  blockers: string[];
+};
+
+export type HeliosEstimateDecisionEvent = {
+  id: string;
+  recordType: "section" | "pay_item" | "estimate";
+  recordId: string;
+  action: HeliosEstimateReviewAction | "accept_import";
+  comment?: string;
+  targetRecordId?: string;
+  previousValue?: unknown;
+  decisionValue?: unknown;
+  reviewerName: string;
+  createdAt: number;
+};
+
+export type HeliosEstimateReviewInput = {
+  recordType: "section" | "pay_item";
+  recordId: string;
+  action: HeliosEstimateReviewAction;
+  comment?: string;
+  targetRecordId?: string;
+  correction?: {
+    name?: string;
+    sequence?: number;
+    sectionId?: string;
+    officialSequence?: number;
+    officialItemNumber?: string;
+    description?: string;
+    estimatorDescription?: string;
+    bidQuantity?: number;
+    bidUnit?: string;
+    itemType?: HeliosOwnerPayItemType;
+    fixedAmountCents?: number;
+  };
+  split?: {
+    name?: string;
+    officialSequence?: number;
+    officialItemNumber?: string;
+    description?: string;
+    bidQuantity?: number;
+    bidUnit?: string;
+    itemType?: HeliosOwnerPayItemType;
+    fixedAmountCents?: number;
+    moveRecordIds?: string[];
+  };
 };
 
 export type HeliosEstimateProposalResourceInput = Omit<
@@ -483,6 +580,7 @@ export type HeliosEstimateProposalPayItemInput = Omit<
   | "directCostCents"
   | "derivedUnitCostCents"
   | "reviewStatus"
+  | "importChangeType"
 > & { costCodes: HeliosEstimateProposalCostCodeInput[] };
 
 export type HeliosEstimateProposalSectionInput = Omit<
@@ -1156,6 +1254,7 @@ export function parseEstimateProposal(
   }
   const sectionKeys = new Set<string>();
   const ownerItemNumbers = new Set<string>();
+  const ownerItemSequences = new Set<number>();
   const sections = input.sections.map((sectionValue, sectionIndex) => {
     const section = record(sectionValue, `Estimate section ${sectionIndex + 1}`);
     const key = textValue(section.key, `Estimate section ${sectionIndex + 1} key`, 80);
@@ -1242,11 +1341,42 @@ export function parseEstimateProposal(
           resources,
         };
       });
+      const officialSequence = Math.round(
+          finiteNonNegative(
+            item.officialSequence ?? itemIndex,
+            "Official item sequence",
+          ),
+        );
+      if (ownerItemSequences.has(officialSequence)) {
+        throw new HeliosValidationError(`Owner item sequence ${officialSequence} is duplicated.`);
+      }
+      ownerItemSequences.add(officialSequence);
+      const itemType = allowedValue(
+        item.itemType ?? (item.bidUnit === "LS" ? "lump_sum" : "unit_price"),
+        HELIOS_OWNER_PAY_ITEM_TYPES,
+        "Owner item type",
+      );
+      const fixedAmountCents =
+        item.fixedAmountCents === null || item.fixedAmountCents === undefined
+          ? undefined
+          : safeCents(item.fixedAmountCents as number, "Official fixed amount");
+      if (["fixed_price", "allowance"].includes(itemType) && fixedAmountCents === undefined) {
+        throw new HeliosValidationError(
+          `Owner item ${officialItemNumber} requires its official fixed amount.`,
+        );
+      }
       return {
+        officialSequence,
         officialItemNumber,
         description: textValue(item.description, "Owner item description", 400),
+        estimatorDescription:
+          item.estimatorDescription === null || item.estimatorDescription === undefined
+            ? undefined
+            : textValue(item.estimatorDescription, "Estimator description", 240),
         bidQuantity,
         bidUnit: textValue(item.bidUnit, "Bid unit", 40),
+        itemType,
+        fixedAmountCents,
         quantityStatus,
         confidence: confidenceValue(item.confidence, "Owner item confidence"),
         evidenceIds: citedEvidence(item.evidenceIds, "Owner item evidence", validEvidenceIds),
@@ -1286,6 +1416,114 @@ export function parseEstimateProposal(
     };
   });
   return { sections, risks };
+}
+
+export function normalizeEstimateReviewInput(
+  value: unknown,
+): HeliosEstimateReviewInput {
+  const input = record(value, "Estimate review");
+  const recordType = allowedValue(
+    input.recordType,
+    ["section", "pay_item"] as const,
+    "Estimate record type",
+  );
+  const action = allowedValue(
+    input.action,
+    HELIOS_ESTIMATE_REVIEW_ACTIONS,
+    "Estimate review action",
+  );
+  const recordId = textValue(input.recordId, "Estimate record", 128);
+  const comment =
+    input.comment === undefined || input.comment === null || input.comment === ""
+      ? undefined
+      : textValue(input.comment, "Review note", 2000);
+  if (["reject", "defer", "merge", "split", "map"].includes(action) && !comment) {
+    throw new HeliosValidationError("A review note is required for this action.");
+  }
+  const targetRecordId =
+    input.targetRecordId === undefined || input.targetRecordId === null
+      ? undefined
+      : textValue(input.targetRecordId, "Target record", 128);
+  if (["merge", "map"].includes(action) && !targetRecordId) {
+    throw new HeliosValidationError("Select a target record for this action.");
+  }
+  const correctionValue = input.correction === undefined
+    ? undefined
+    : record(input.correction, "Estimate correction");
+  if (action === "correct" && !correctionValue) {
+    throw new HeliosValidationError("Corrected record values are required.");
+  }
+  const splitValue = input.split === undefined
+    ? undefined
+    : record(input.split, "Estimate split");
+  if (action === "split" && !splitValue) {
+    throw new HeliosValidationError("Split record values are required.");
+  }
+  const optionalString = (candidate: unknown, label: string, maximum: number) =>
+    candidate === undefined || candidate === null || candidate === ""
+      ? undefined
+      : textValue(candidate, label, maximum);
+  const optionalNumber = (candidate: unknown, label: string, cents = false) => {
+    if (candidate === undefined || candidate === null || candidate === "") return undefined;
+    return cents
+      ? safeCents(candidate as number, label)
+      : optionalPositiveQuantity(candidate, label);
+  };
+  const normalizeItemFields = (source: Record<string, unknown>) => ({
+    officialSequence:
+      source.officialSequence === undefined
+        ? undefined
+        : Math.round(finiteNonNegative(source.officialSequence, "Official sequence")),
+    officialItemNumber: optionalString(source.officialItemNumber, "Official item number", 80),
+    description: optionalString(source.description, "Owner item description", 400),
+    estimatorDescription: optionalString(source.estimatorDescription, "Estimator description", 240),
+    bidQuantity: optionalNumber(source.bidQuantity, "Bid quantity"),
+    bidUnit: optionalString(source.bidUnit, "Bid unit", 40),
+    itemType:
+      source.itemType === undefined
+        ? undefined
+        : allowedValue(source.itemType, HELIOS_OWNER_PAY_ITEM_TYPES, "Owner item type"),
+    fixedAmountCents: optionalNumber(source.fixedAmountCents, "Official fixed amount", true),
+  });
+  const correction = correctionValue
+    ? {
+        ...normalizeItemFields(correctionValue),
+        name: optionalString(correctionValue.name, "Section name", 160),
+        sequence:
+          correctionValue.sequence === undefined
+            ? undefined
+            : Math.round(finiteNonNegative(correctionValue.sequence, "Section sequence")),
+        sectionId: optionalString(correctionValue.sectionId, "Section", 128),
+      }
+    : undefined;
+  const split = splitValue
+    ? {
+        ...normalizeItemFields(splitValue),
+        name: optionalString(splitValue.name, "Section name", 160),
+        moveRecordIds: Array.isArray(splitValue.moveRecordIds)
+          ? splitValue.moveRecordIds.map((id) => textValue(id, "Moved record", 128))
+          : undefined,
+      }
+    : undefined;
+  return { recordType, recordId, action, comment, targetRecordId, correction, split };
+}
+
+export function calculateEstimateReviewSummary(
+  records: Array<{ reviewStatus: HeliosEstimateReviewStatus }>,
+  blockers: string[] = [],
+): HeliosEstimateReviewSummary {
+  const counts = { proposed: 0, deferred: 0, accepted: 0, corrected: 0, rejected: 0 };
+  for (const record of records) counts[record.reviewStatus] += 1;
+  const total = records.length;
+  const reviewed = counts.accepted + counts.corrected + counts.rejected;
+  return {
+    total,
+    ...counts,
+    reviewed,
+    percentComplete: total ? Math.round((reviewed / total) * 100) : 0,
+    canAcceptImport: total > 0 && counts.proposed === 0 && counts.deferred === 0 && blockers.length === 0,
+    blockers,
+  };
 }
 
 function safeCents(value: number, label: string) {

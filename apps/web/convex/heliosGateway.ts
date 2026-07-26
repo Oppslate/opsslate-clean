@@ -1,6 +1,7 @@
 import {
   HeliosValidationError,
   normalizeFindingReviewInput,
+  normalizeEstimateReviewInput,
   normalizeProjectInput,
   type HeliosBidPackage,
   type HeliosCockpitData,
@@ -8,6 +9,7 @@ import {
   type HeliosFindingReviewEvent,
   type HeliosFindingReviewInput,
   type HeliosEstimateWorkspace,
+  type HeliosEstimateReviewInput,
   type HeliosProjectDetail,
   type HeliosProjectInput,
   type HeliosProjectSummary,
@@ -160,6 +162,26 @@ const requestEstimateProposalReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string },
   { estimateId: string; jobId: string; status: "queued" }
 >("heliosEstimates:requestProposal");
+const reviewEstimateRecordReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    estimateId: string;
+    input: HeliosEstimateReviewInput;
+  },
+  { eventId: string; status?: string }
+>("heliosEstimateReviews:reviewRecord");
+const acceptEstimateImportReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; estimateId: string },
+  { eventId: string; status: "accepted" }
+>("heliosEstimateReviews:acceptImportReview");
+const acceptRemainingEstimateRecordsReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; estimateId: string },
+  { accepted: number }
+>("heliosEstimateReviews:acceptRemainingRecords");
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -767,5 +789,71 @@ export const requestHeliosEstimateProposal = httpAction(async (ctx, request) => 
       },
       400,
     );
+  }
+});
+
+export const reviewHeliosEstimateRecord = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (
+    !boundedString(payload.projectId) ||
+    !boundedString(payload.estimateId) ||
+    !isRecord(payload.input)
+  ) return json({ error: "Invalid estimate review request." }, 400);
+  try {
+    const data = await ctx.runMutation(reviewEstimateRecordReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      estimateId: payload.estimateId,
+      input: normalizeEstimateReviewInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({
+      error: error instanceof Error ? error.message : "Estimate review could not be saved.",
+    }, 400);
+  }
+});
+
+export const acceptHeliosEstimateImport = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !boundedString(payload.estimateId)) {
+    return json({ error: "Invalid import acceptance request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(acceptEstimateImportReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      estimateId: payload.estimateId,
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({
+      error: error instanceof Error ? error.message : "Import review could not be accepted.",
+    }, 400);
+  }
+});
+
+export const acceptRemainingHeliosEstimateRecords = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !boundedString(payload.estimateId)) {
+    return json({ error: "Invalid bulk acceptance request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(acceptRemainingEstimateRecordsReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      estimateId: payload.estimateId,
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({
+      error: error instanceof Error ? error.message : "Remaining proposals could not be accepted.",
+    }, 400);
   }
 });

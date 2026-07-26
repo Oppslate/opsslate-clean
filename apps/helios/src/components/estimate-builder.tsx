@@ -2,6 +2,7 @@
 
 import {
   calculateEstimateTotals,
+  calculateEstimateReviewSummary,
   type HeliosEstimateWorkspace,
   type HeliosProjectSummary,
 } from "@opsslate/helios-domain";
@@ -15,6 +16,8 @@ import { AlertTriangle, ArrowLeft, Bot, ChevronDown, FileCheck2, RefreshCw, Shie
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+
+import { EstimateImportReview } from "./estimate-import-review";
 
 function money(value?: number) {
   if (value === undefined) return "Unpriced";
@@ -84,6 +87,25 @@ export function EstimateBuilder({
         bondBasisPoints: workspace.bondBasisPoints,
       })
     : undefined;
+  const reviewSummary = workspace?.reviewSummary ?? calculateEstimateReviewSummary(
+    workspace
+      ? [
+          ...workspace.sections.map((section) => ({ reviewStatus: section.reviewStatus })),
+          ...workspace.sections.flatMap((section) => section.payItems.map((item) => ({ reviewStatus: item.reviewStatus }))),
+        ]
+      : [],
+  );
+  const activeSections = useMemo(
+    () => workspace?.sections.filter((section) => section.reviewStatus !== "rejected") || [],
+    [workspace],
+  );
+  const officialItems = useMemo(
+    () => activeSections
+      .flatMap((section) => section.payItems)
+      .filter((item) => item.reviewStatus !== "rejected")
+      .sort((left, right) => left.officialSequence - right.officialSequence),
+    [activeSections],
+  );
 
   async function generateProposal() {
     setRequesting(true);
@@ -177,14 +199,25 @@ export function EstimateBuilder({
             AI-generated proposal · Human review required · Unpriced resources remain visibly unpriced · Accepted versions are never overwritten.
           </div>
 
-          <Tabs defaultValue="build" className="gap-4">
+          <Tabs defaultValue={workspace.status === "accepted" ? "build" : "import"} className="gap-4">
             <TabsList variant="line">
+              <TabsTrigger value="import">Import review ({reviewSummary.proposed + reviewSummary.deferred})</TabsTrigger>
               <TabsTrigger value="build">Build view</TabsTrigger>
               <TabsTrigger value="bid">Bid schedule view</TabsTrigger>
               <TabsTrigger value="risk">Risk register ({workspace.risks.length})</TabsTrigger>
             </TabsList>
+            <TabsContent value="import">
+              <EstimateImportReview
+                project={project}
+                workspace={{
+                  ...workspace,
+                  reviewSummary,
+                  decisionHistory: workspace.decisionHistory || [],
+                }}
+              />
+            </TabsContent>
             <TabsContent value="build" className="space-y-4">
-              {workspace.sections.map((section) => (
+              {activeSections.map((section) => (
                 <Card key={section.id} className="gap-0 overflow-hidden py-0">
                   <CardHeader className="border-b py-4">
                     <div>
@@ -194,13 +227,14 @@ export function EstimateBuilder({
                     <Badge variant="outline" className="capitalize">{section.reviewStatus}</Badge>
                   </CardHeader>
                   <CardContent className="px-0">
-                    {section.payItems.map((item) => (
+                    {section.payItems.filter((item) => item.reviewStatus !== "rejected").map((item) => (
                       <details key={item.id} className="group border-b last:border-b-0">
                         <summary className="flex cursor-pointer list-none flex-col gap-3 px-5 py-4 hover:bg-muted/40 md:flex-row md:items-center md:justify-between">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant="outline" className="font-mono">{item.officialItemNumber}</Badge>
                               <span className="font-semibold">{item.description}</span>
+                              <Badge variant="outline" className="capitalize">{item.reviewStatus}</Badge>
                               <Badge variant="secondary" className="capitalize">{item.quantityStatus.replaceAll("_", " ")}</Badge>
                             </div>
                             <div className="mt-2 text-sm text-muted-foreground">
@@ -243,10 +277,10 @@ export function EstimateBuilder({
                 <CardHeader className="border-b py-4"><CardTitle>Owner bid schedule</CardTitle><CardDescription>The bid view is generated from the same owner-pay-item records as the build view.</CardDescription></CardHeader>
                 <CardContent className="px-0">
                   <Table>
-                    <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Description</TableHead><TableHead>Bid quantity</TableHead><TableHead>Unit</TableHead><TableHead className="text-right">Unit cost</TableHead><TableHead className="text-right">Extended</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Seq.</TableHead><TableHead>Item</TableHead><TableHead>Description</TableHead><TableHead>Bid quantity</TableHead><TableHead>Unit</TableHead><TableHead className="text-right">Unit cost / fixed</TableHead><TableHead className="text-right">Extended</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {workspace.sections.flatMap((section) => section.payItems).map((item) => (
-                        <TableRow key={item.id}><TableCell className="font-mono text-orange-300">{item.officialItemNumber}</TableCell><TableCell className="min-w-72 whitespace-normal font-medium">{item.description}</TableCell><TableCell>{item.bidQuantity ?? "Takeoff required"}</TableCell><TableCell>{item.bidUnit}</TableCell><TableCell className="text-right">{money(item.derivedUnitCostCents)}</TableCell><TableCell className="text-right font-semibold">{money(item.directCostCents)}</TableCell></TableRow>
+                      {officialItems.map((item) => (
+                        <TableRow key={item.id}><TableCell>{item.officialSequence}</TableCell><TableCell className="font-mono text-orange-300">{item.officialItemNumber}</TableCell><TableCell className="min-w-72 whitespace-normal font-medium">{item.description}</TableCell><TableCell>{item.bidQuantity ?? "Takeoff required"}</TableCell><TableCell>{item.bidUnit}</TableCell><TableCell className="text-right">{money(item.fixedAmountCents ?? item.derivedUnitCostCents)}</TableCell><TableCell className="text-right font-semibold">{money(item.fixedAmountCents ?? item.directCostCents)}</TableCell></TableRow>
                       ))}
                     </TableBody>
                   </Table>

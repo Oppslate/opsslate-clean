@@ -10,6 +10,9 @@ import {
   listHeliosProjects,
   registerHeliosDocument,
   requestHeliosEstimateProposal,
+  reviewHeliosEstimateRecord,
+  acceptHeliosEstimateImport,
+  acceptRemainingHeliosEstimateRecords,
   reviewHeliosFinding,
   resolveIdentity,
   retryHeliosDocument,
@@ -89,6 +92,21 @@ http.route({
   path: "/helios/v1/estimates/propose",
   method: "POST",
   handler: requestHeliosEstimateProposal,
+});
+http.route({
+  path: "/helios/v1/estimates/review",
+  method: "POST",
+  handler: reviewHeliosEstimateRecord,
+});
+http.route({
+  path: "/helios/v1/estimates/accept-import",
+  method: "POST",
+  handler: acceptHeliosEstimateImport,
+});
+http.route({
+  path: "/helios/v1/estimates/accept-remaining",
+  method: "POST",
+  handler: acceptRemainingHeliosEstimateRecords,
 });
 
 export default http;
