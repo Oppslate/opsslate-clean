@@ -159,7 +159,9 @@ export function BidPackageIntake({
     }
   }
 
-  async function uploadCandidate(upload: LocalUpload) {
+  async function uploadCandidate(
+    upload: LocalUpload,
+  ): Promise<"ready" | "duplicate" | "failed"> {
     patchUpload(upload.id, {
       state: "uploading",
       progress: 0,
@@ -213,16 +215,19 @@ export function BidPackageIntake({
           registerPayload.error || "PDF registration failed.",
         );
       }
+      const state =
+        registerPayload.data.kind === "duplicate" ? "duplicate" : "ready";
       patchUpload(upload.id, {
-        state:
-          registerPayload.data.kind === "duplicate" ? "duplicate" : "ready",
+        state,
         progress: 100,
       });
+      return state;
     } catch (error) {
       patchUpload(upload.id, {
         state: "failed",
         error: error instanceof Error ? error.message : "Upload failed.",
       });
+      return "failed";
     }
   }
 
@@ -230,28 +235,43 @@ export function BidPackageIntake({
     if (!prepared) return;
     setCreating(true);
     try {
-      let bidPackage = activePackage?.status === "uploading"
-        ? activePackage
-        : undefined;
-      if (!bidPackage) {
+      const packageInput = {
+        name: prepared.name,
+        sourceType: prepared.sourceType,
+        entries: [
+          ...prepared.files.map((candidate) => ({
+            relativePath: candidate.relativePath,
+            size: candidate.file.size,
+            accepted: true,
+          })),
+          ...prepared.rejected.map((entry) => ({
+            ...entry,
+            accepted: false,
+          })),
+        ],
+      };
+      let bidPackage: HeliosBidPackage;
+      if (activePackage?.status === "uploading") {
+        const response = await fetch(
+          `/api/projects/${projectId}/packages/${activePackage.id}/entries`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(packageInput),
+          },
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            payload.error || "Files could not be added to the bid package.",
+          );
+        }
+        bidPackage = payload.data as HeliosBidPackage;
+      } else {
         const response = await fetch(`/api/projects/${projectId}/packages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: prepared.name,
-            sourceType: prepared.sourceType,
-            entries: [
-              ...prepared.files.map((candidate) => ({
-                relativePath: candidate.relativePath,
-                size: candidate.file.size,
-                accepted: true,
-              })),
-              ...prepared.rejected.map((entry) => ({
-                ...entry,
-                accepted: false,
-              })),
-            ],
-          }),
+          body: JSON.stringify(packageInput),
         });
         const payload = await response.json();
         if (!response.ok) {
@@ -281,23 +301,35 @@ export function BidPackageIntake({
           : [];
       });
       if (!uploadRows.length) {
-        throw new Error(
-          "No pending package entries matched the selected source.",
+        toast(
+          "These PDFs are already registered in the current package.",
+          "success",
         );
+        router.refresh();
+        return;
       }
       setUploads(uploadRows);
+      const results: Array<"ready" | "duplicate" | "failed"> = [];
       for (
         let index = 0;
         index < uploadRows.length;
         index += UPLOAD_CONCURRENCY
       ) {
-        await Promise.all(
-          uploadRows
-            .slice(index, index + UPLOAD_CONCURRENCY)
-            .map(uploadCandidate),
+        results.push(
+          ...(await Promise.all(
+            uploadRows
+              .slice(index, index + UPLOAD_CONCURRENCY)
+              .map(uploadCandidate),
+          )),
         );
       }
-      toast("Bid package upload finished. Review it before analysis.", "success");
+      const failureCount = results.filter((state) => state === "failed").length;
+      toast(
+        failureCount
+          ? `${failureCount} PDF${failureCount === 1 ? "" : "s"} could not be uploaded. Retry the marked files.`
+          : "Bid package upload finished. Review it before analysis.",
+        failureCount ? "error" : "success",
+      );
       router.refresh();
     } catch (error) {
       toast(
@@ -496,7 +528,7 @@ export function BidPackageIntake({
                 <UploadCloud className="size-4" aria-hidden="true" />
               )}
               {activePackage?.status === "uploading"
-                ? "Resume package upload"
+                ? "Add to current package and upload"
                 : "Create package and upload"}
             </Button>
           </div>

@@ -93,6 +93,16 @@ const createPackageReference = makeFunctionReference<
   },
   HeliosBidPackage
 >("heliosPackages:createPackage");
+const appendPackageEntriesReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    packageId: string;
+    input: HeliosPackageInput;
+  },
+  HeliosBidPackage
+>("heliosPackages:appendPackageEntries");
 const finalizePackageReference = makeFunctionReference<
   "mutation",
   {
@@ -569,6 +579,40 @@ export const createHeliosPackage = httpAction(async (ctx, request) => {
       error: error instanceof Error ? error.message : String(error),
     });
     return json({ error: "Bid package could not be created." }, 400);
+  }
+});
+
+export const appendHeliosPackageEntries = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  if (
+    !boundedString(authorization.payload.projectId) ||
+    !boundedString(authorization.payload.packageId) ||
+    !isRecord(authorization.payload.input)
+  ) {
+    return json({ error: "Invalid bid package addition." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(appendPackageEntriesReference, {
+      principal: principalFrom(authorization.payload),
+      projectId: authorization.payload.projectId,
+      packageId: authorization.payload.packageId,
+      input: authorization.payload.input as HeliosPackageInput,
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    console.error("[helios:package-append] failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Files could not be added to the bid package.",
+      },
+      400,
+    );
   }
 });
 

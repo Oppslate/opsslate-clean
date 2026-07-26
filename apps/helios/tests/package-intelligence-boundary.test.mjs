@@ -13,6 +13,9 @@ const packageRoute = source(
 const finalizeRoute = source(
   "src/app/api/projects/[projectId]/packages/[packageId]/finalize/route.ts",
 );
+const appendRoute = source(
+  "src/app/api/projects/[projectId]/packages/[packageId]/entries/route.ts",
+);
 const uploadRoute = source(
   "src/app/api/projects/[projectId]/upload-url/route.ts",
 );
@@ -25,12 +28,24 @@ const actions = source("../web/convex/heliosIntelligenceActions.ts");
 const schema = source("../web/convex/schema.ts");
 
 test("package mutations require signed session and same-origin requests", () => {
-  for (const route of [packageRoute, finalizeRoute, uploadRoute]) {
+  for (const route of [packageRoute, appendRoute, finalizeRoute, uploadRoute]) {
     assert.match(route, /readHeliosPrincipal/);
     assert.match(route, /isSameOrigin/);
   }
   assert.match(packages, /requireHeliosPrincipal/);
   assert.match(intelligence, /requireHeliosPrincipal/);
+});
+
+test("separate folders append idempotently to the current unfinalized revision", () => {
+  assert.match(packageUi, /Add to current package and upload/);
+  assert.match(appendRoute, /\/helios\/v1\/packages\/append/);
+  assert.match(packages, /export const appendPackageEntries/);
+  assert.match(packages, /project\.activePackageId !== bidPackage\._id/);
+  assert.match(packages, /bidPackage\.status !== "uploading"/);
+  assert.match(packages, /existingByPath/);
+  assert.match(packages, /HELIOS_MAX_PACKAGE_ENTRIES/);
+  assert.match(packages, /HELIOS_MAX_UPLOAD_BATCH/);
+  assert.match(packages, /HELIOS_MAX_PACKAGE_BYTES/);
 });
 
 test("folder and ZIP intake use a persistent bounded package manifest", () => {
