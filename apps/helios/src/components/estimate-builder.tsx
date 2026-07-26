@@ -273,7 +273,7 @@ export function EstimateBuilder({
                           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                             <div className="text-sm text-muted-foreground">Internal operations under owner item {item.officialItemNumber}</div>
                             {(["accepted", "corrected"] as string[]).includes(item.reviewStatus) ? (
-                              <EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} />
+                              <EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} ownerItems={officialItems} />
                             ) : (
                               <span className="text-xs text-muted-foreground">Accept this owner item before adding cost codes.</span>
                             )}
@@ -284,11 +284,11 @@ export function EstimateBuilder({
                               {item.costCodes.map((code) => (
                                 <TableRow key={code.id}>
                                   <TableCell className="min-w-64 whitespace-normal"><div className="font-mono text-xs text-orange-300">{code.code}</div><div className="font-medium">{code.description}</div><div className="mt-1 text-xs text-muted-foreground">{code.evidenceIds.length} citations · {code.confidence}% confidence</div></TableCell>
-                                  <TableCell>{quantity(code.productionQuantity, code.productionUnit)}</TableCell>
+                                  <TableCell><div>{quantity(code.productionQuantity, code.productionUnit)}</div>{(code.quantities || []).some((record) => record.reviewStatus === "proposed") && <div className="mt-1 text-xs text-orange-300">Proposed quantity awaiting one-click review</div>}</TableCell>
                                   <TableCell className="capitalize">{code.scopeOwnership.replaceAll("_", " ")}</TableCell>
-                                  <TableCell><Badge variant={code.pricingStatus === "priced" ? "secondary" : "outline"} className="capitalize">{code.pricingStatus}</Badge><div className="mt-1 text-xs text-muted-foreground">{code.resources.length} resource{code.resources.length === 1 ? "" : "s"}</div></TableCell>
-                                  <TableCell className="text-right font-medium">{money(code.directCostCents)}</TableCell>
-                                  <TableCell><div className="flex justify-end gap-2">{code.reviewStatus === "proposed" && (["accepted", "corrected"] as string[]).includes(item.reviewStatus) && <Button size="sm" disabled={savingBuild !== null} onClick={() => saveBuild({ action: "accept_cost_code", costCodeId: code.id }, "Cost code accepted.")}><Check aria-hidden="true" />Accept</Button>}<EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} code={code} /></div></TableCell>
+                                  <TableCell><Badge variant={code.pricingStatus === "priced" ? "secondary" : "outline"} className="capitalize">{code.pricingStatus}</Badge>{code.allocationRequired && <Badge variant="outline" className="ml-1 capitalize">Allocation {code.allocationStatus}</Badge>}<div className="mt-1 text-xs text-muted-foreground">{code.resources.length} resource{code.resources.length === 1 ? "" : "s"}</div></TableCell>
+                                  <TableCell className="text-right font-medium">{money(code.directCostCents)}{code.allocationRequired && <div className="text-xs text-muted-foreground">Shared source</div>}</TableCell>
+                                  <TableCell><div className="flex justify-end gap-2">{code.reviewStatus === "proposed" && (["accepted", "corrected"] as string[]).includes(item.reviewStatus) && <Button size="sm" disabled={savingBuild !== null} onClick={() => saveBuild({ action: "accept_cost_code", costCodeId: code.id }, "Cost code accepted.")}><Check aria-hidden="true" />Accept</Button>}<EstimateCostCodeWorkspace projectId={project.id} estimateId={workspace.id} payItemId={item.id} payItemNumber={item.officialItemNumber} code={code} ownerItems={officialItems} /></div></TableCell>
                                 </TableRow>
                               ))}
                             </TableBody>

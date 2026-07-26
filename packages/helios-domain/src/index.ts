@@ -195,6 +195,39 @@ export const HELIOS_ESTIMATE_PRICING_STATUSES = [
   "priced",
 ] as const;
 
+export const HELIOS_QUANTITY_RECORD_TYPES = [
+  "official_contract",
+  "plan",
+  "estimator_calculated",
+  "preliminary_ai_takeoff",
+  "vendor",
+  "allowance",
+  "estimator_assumption",
+  "takeoff_required",
+  "included_in_another_item",
+] as const;
+
+export const HELIOS_QUANTITY_RECORD_USES = [
+  "authoritative",
+  "comparative",
+  "production",
+] as const;
+
+export const HELIOS_QUANTITY_RECORD_STATUSES = [
+  "current",
+  "conflicting",
+  "superseded",
+  "takeoff_required",
+] as const;
+
+export const HELIOS_ALLOCATION_BALANCE_STATUSES = [
+  "balanced",
+  "unbalanced",
+  "incomplete",
+  "duplicate",
+  "orphan",
+] as const;
+
 export const HELIOS_ESTIMATE_BUILD_ACTIONS = [
   "create_cost_code",
   "update_cost_code",
@@ -204,6 +237,15 @@ export const HELIOS_ESTIMATE_BUILD_ACTIONS = [
   "update_resource",
   "accept_resource",
   "reject_resource",
+  "create_quantity",
+  "accept_quantity",
+  "reject_quantity",
+  "mark_takeoff_required",
+  "set_allocation_required",
+  "create_allocation",
+  "update_allocation",
+  "accept_allocation",
+  "reject_allocation",
 ] as const;
 
 export type HeliosProjectStatus = (typeof HELIOS_PROJECT_STATUSES)[number];
@@ -245,6 +287,14 @@ export type HeliosEstimatePricingStatus =
   (typeof HELIOS_ESTIMATE_PRICING_STATUSES)[number];
 export type HeliosEstimateBuildAction =
   (typeof HELIOS_ESTIMATE_BUILD_ACTIONS)[number];
+export type HeliosQuantityRecordType =
+  (typeof HELIOS_QUANTITY_RECORD_TYPES)[number];
+export type HeliosQuantityRecordUse =
+  (typeof HELIOS_QUANTITY_RECORD_USES)[number];
+export type HeliosQuantityRecordStatus =
+  (typeof HELIOS_QUANTITY_RECORD_STATUSES)[number];
+export type HeliosAllocationBalanceStatus =
+  (typeof HELIOS_ALLOCATION_BALANCE_STATUSES)[number];
 
 export type HeliosProjectInput = {
   name: string;
@@ -461,6 +511,38 @@ export type HeliosEstimateResource = {
   directCostCents?: number;
 };
 
+export type HeliosEstimateQuantityRecord = {
+  id: string;
+  costCodeId: string;
+  value?: number;
+  unit: string;
+  quantityType: HeliosQuantityRecordType;
+  sourceLabel: string;
+  sourceReference?: string;
+  method: string;
+  confidence: number;
+  use: HeliosQuantityRecordUse;
+  status: HeliosQuantityRecordStatus;
+  reviewStatus: HeliosEstimateReviewStatus;
+  origin: "ai" | "human" | "import";
+  evidenceIds: string[];
+};
+
+export type HeliosEstimateAllocation = {
+  id: string;
+  sourceCostCodeId: string;
+  targetPayItemId: string;
+  targetCostCodeId?: string;
+  allocationType: "quantity" | "percent" | "amount";
+  controllingValue: number;
+  quantity?: number;
+  percentBasisPoints?: number;
+  amountCents?: number;
+  calculationBasis: string;
+  balancingStatus: HeliosAllocationBalanceStatus;
+  reviewStatus: HeliosEstimateReviewStatus;
+};
+
 export type HeliosEstimateCostCode = {
   id: string;
   code: string;
@@ -472,6 +554,11 @@ export type HeliosEstimateCostCode = {
   reviewStatus: HeliosEstimateReviewStatus;
   evidenceIds: string[];
   resources: HeliosEstimateResource[];
+  quantities: HeliosEstimateQuantityRecord[];
+  allocations: HeliosEstimateAllocation[];
+  allocationRequired: boolean;
+  allocationStatus: HeliosAllocationBalanceStatus;
+  reconciliationIssues: string[];
   pricingStatus: HeliosEstimatePricingStatus;
   directCostCents?: number;
 };
@@ -560,7 +647,7 @@ export type HeliosEstimateReviewSummary = {
 
 export type HeliosEstimateDecisionEvent = {
   id: string;
-  recordType: "section" | "pay_item" | "cost_code" | "resource" | "risk" | "estimate";
+  recordType: "section" | "pay_item" | "cost_code" | "resource" | "quantity" | "allocation" | "risk" | "estimate";
   recordId: string;
   action: HeliosEstimateReviewAction | "accept_import" | "create" | "update";
   comment?: string;
@@ -576,7 +663,10 @@ export type HeliosEstimateBuildInput = {
   payItemId?: string;
   costCodeId?: string;
   resourceId?: string;
+  quantityId?: string;
+  allocationId?: string;
   comment?: string;
+  allocationRequired?: boolean;
   costCode?: {
     code: string;
     description: string;
@@ -601,6 +691,22 @@ export type HeliosEstimateBuildInput = {
     escalationBasisPoints: number;
     overrideRateCents?: number;
     overrideReason?: string;
+  };
+  quantity?: {
+    value?: number;
+    unit: string;
+    quantityType: HeliosQuantityRecordType;
+    sourceLabel: string;
+    sourceReference?: string;
+    method: string;
+    confidence: number;
+    use: HeliosQuantityRecordUse;
+  };
+  allocation?: {
+    targetPayItemId: string;
+    targetCostCodeId?: string;
+    allocationType: "quantity" | "percent" | "amount";
+    controllingValue: number;
   };
 };
 
@@ -649,7 +755,16 @@ export type HeliosEstimateProposalResourceInput = Pick<
 
 export type HeliosEstimateProposalCostCodeInput = Omit<
   HeliosEstimateCostCode,
-  "id" | "resources" | "pricingStatus" | "directCostCents" | "reviewStatus"
+  | "id"
+  | "resources"
+  | "quantities"
+  | "allocations"
+  | "allocationRequired"
+  | "allocationStatus"
+  | "reconciliationIssues"
+  | "pricingStatus"
+  | "directCostCents"
+  | "reviewStatus"
 > & { resources: HeliosEstimateProposalResourceInput[] };
 
 export type HeliosEstimateProposalPayItemInput = Omit<
@@ -679,13 +794,6 @@ export type HeliosEstimateProposalRiskInput = Omit<
 export type HeliosEstimateProposalInput = {
   sections: HeliosEstimateProposalSectionInput[];
   risks: HeliosEstimateProposalRiskInput[];
-};
-
-export type HeliosEstimateAllocation = {
-  allocationType: "quantity" | "percent" | "amount";
-  quantity?: number;
-  percentBasisPoints?: number;
-  amountCents?: number;
 };
 
 export type HeliosEstimateTotals = {
@@ -1608,7 +1716,15 @@ export function normalizeEstimateBuildInput(value: unknown): HeliosEstimateBuild
   const payItemId = optionalString(input.payItemId, "Owner pay item", 128);
   const costCodeId = optionalString(input.costCodeId, "Cost code", 128);
   const resourceId = optionalString(input.resourceId, "Resource", 128);
+  const quantityId = optionalString(input.quantityId, "Quantity record", 128);
+  const allocationId = optionalString(input.allocationId, "Allocation", 128);
   const comment = optionalString(input.comment, "Build note", 1_000);
+  const allocationRequired = input.allocationRequired === undefined
+    ? undefined
+    : input.allocationRequired;
+  if (allocationRequired !== undefined && typeof allocationRequired !== "boolean") {
+    throw new HeliosValidationError("Allocation-required state must be true or false.");
+  }
 
   let costCode: HeliosEstimateBuildInput["costCode"];
   if (input.costCode !== undefined) {
@@ -1677,6 +1793,57 @@ export function normalizeEstimateBuildInput(value: unknown): HeliosEstimateBuild
     };
   }
 
+  let quantity: HeliosEstimateBuildInput["quantity"];
+  if (input.quantity !== undefined) {
+    const source = record(input.quantity, "Quantity values");
+    const quantityType = allowedValue(source.quantityType, HELIOS_QUANTITY_RECORD_TYPES, "Quantity type");
+    const use = allowedValue(source.use, HELIOS_QUANTITY_RECORD_USES, "Quantity use");
+    const value = optionalQuantity(source.value, "Quantity");
+    if (!["takeoff_required", "included_in_another_item"].includes(quantityType) && value === undefined) {
+      throw new HeliosValidationError("A positive quantity is required for this quantity type.");
+    }
+    if (quantityType === "takeoff_required" && value !== undefined) {
+      throw new HeliosValidationError("Takeoff Required must remain unknown; do not enter zero or a placeholder quantity.");
+    }
+    const confidence = Math.round(finiteNonNegative(source.confidence, "Quantity confidence"));
+    if (confidence > 100) throw new HeliosValidationError("Quantity confidence cannot exceed 100%.");
+    quantity = {
+      value,
+      unit: textValue(source.unit, "Quantity unit", 40),
+      quantityType,
+      sourceLabel: textValue(source.sourceLabel, "Quantity source", 160),
+      sourceReference: optionalString(source.sourceReference, "Quantity source reference", 240),
+      method: textValue(source.method, "Quantity method", 500),
+      confidence,
+      use,
+    };
+  }
+
+  let allocation: HeliosEstimateBuildInput["allocation"];
+  if (input.allocation !== undefined) {
+    const source = record(input.allocation, "Allocation values");
+    const allocationType = allowedValue(
+      source.allocationType,
+      ["quantity", "percent", "amount"] as const,
+      "Allocation method",
+    );
+    const controllingValue = allocationType === "amount"
+      ? safeCents(source.controllingValue as number, "Allocation amount")
+      : optionalPositiveQuantity(source.controllingValue, "Allocation value");
+    if (controllingValue === undefined || controllingValue <= 0) {
+      throw new HeliosValidationError("Allocation value must be greater than zero.");
+    }
+    if (allocationType === "percent" && (!Number.isInteger(controllingValue) || controllingValue > 10_000)) {
+      throw new HeliosValidationError("Allocation percent must be whole basis points between 1 and 10,000.");
+    }
+    allocation = {
+      targetPayItemId: textValue(source.targetPayItemId, "Allocation destination", 128),
+      targetCostCodeId: optionalString(source.targetCostCodeId, "Destination cost code", 128),
+      allocationType,
+      controllingValue,
+    };
+  }
+
   if (action === "create_cost_code" && (!payItemId || !costCode)) {
     throw new HeliosValidationError("Select an owner pay item and enter cost-code values.");
   }
@@ -1695,10 +1862,44 @@ export function normalizeEstimateBuildInput(value: unknown): HeliosEstimateBuild
   if (["accept_resource", "reject_resource"].includes(action) && !resourceId) {
     throw new HeliosValidationError("Select a resource.");
   }
+  if (action === "create_quantity" && (!costCodeId || !quantity)) {
+    throw new HeliosValidationError("Select a cost code and enter quantity values.");
+  }
+  if (["accept_quantity", "reject_quantity"].includes(action) && !quantityId) {
+    throw new HeliosValidationError("Select a quantity record.");
+  }
+  if (action === "mark_takeoff_required" && !costCodeId) {
+    throw new HeliosValidationError("Select a cost code.");
+  }
+  if (action === "set_allocation_required" && (!costCodeId || allocationRequired === undefined)) {
+    throw new HeliosValidationError("Select a cost code and allocation state.");
+  }
+  if (action === "create_allocation" && (!costCodeId || !allocation)) {
+    throw new HeliosValidationError("Select a source cost code and enter allocation values.");
+  }
+  if (action === "update_allocation" && (!allocationId || !allocation)) {
+    throw new HeliosValidationError("Select an allocation and enter its corrected values.");
+  }
+  if (["accept_allocation", "reject_allocation"].includes(action) && !allocationId) {
+    throw new HeliosValidationError("Select an allocation.");
+  }
   if (action.startsWith("reject_") && !comment) {
     throw new HeliosValidationError("A rejection reason is required.");
   }
-  return { action, payItemId, costCodeId, resourceId, comment, costCode, resource };
+  return {
+    action,
+    payItemId,
+    costCodeId,
+    resourceId,
+    quantityId,
+    allocationId,
+    comment,
+    allocationRequired,
+    costCode,
+    resource,
+    quantity,
+    allocation,
+  };
 }
 
 export function calculateEstimateReviewSummary(
@@ -1770,8 +1971,10 @@ export function calculateDerivedUnitCost(directCostCents: number | undefined, bi
   return Math.round(safeCents(directCostCents, "Direct cost") / bidQuantity);
 }
 
-export function calculateAllocationBalance(allocations: HeliosEstimateAllocation[]) {
-  return allocations.reduce(
+export function calculateAllocationBalance(
+  allocations: Array<Pick<HeliosEstimateAllocation, "quantity" | "percentBasisPoints" | "amountCents">>,
+): { quantity: number; percentBasisPoints: number; amountCents: number } {
+  return allocations.reduce<{ quantity: number; percentBasisPoints: number; amountCents: number }>(
     (totals, allocation) => ({
       quantity: totals.quantity + (allocation.quantity || 0),
       percentBasisPoints: totals.percentBasisPoints + (allocation.percentBasisPoints || 0),
@@ -1779,6 +1982,104 @@ export function calculateAllocationBalance(allocations: HeliosEstimateAllocation
     }),
     { quantity: 0, percentBasisPoints: 0, amountCents: 0 },
   );
+}
+
+function roundedQuantity(value: number) {
+  return Math.round(value * 1_000_000) / 1_000_000;
+}
+
+export function deriveAllocationValues(input: {
+  allocationType: "quantity" | "percent" | "amount";
+  controllingValue: number;
+  sourceQuantity?: number;
+  sourceCostCents?: number;
+}) {
+  if (!Number.isFinite(input.controllingValue) || input.controllingValue <= 0) {
+    throw new HeliosValidationError("Allocation value must be greater than zero.");
+  }
+  const sourceQuantity = input.sourceQuantity;
+  const sourceCostCents = input.sourceCostCents;
+  let ratio: number;
+  if (input.allocationType === "quantity") {
+    if (sourceQuantity === undefined || sourceQuantity <= 0) {
+      throw new HeliosValidationError("A reviewed production quantity is required for quantity-based allocation.");
+    }
+    ratio = input.controllingValue / sourceQuantity;
+  } else if (input.allocationType === "percent") {
+    if (!Number.isInteger(input.controllingValue) || input.controllingValue > 10_000) {
+      throw new HeliosValidationError("Allocation percent must be whole basis points between 1 and 10,000.");
+    }
+    ratio = input.controllingValue / 10_000;
+  } else {
+    safeCents(input.controllingValue, "Allocation amount");
+    if (sourceCostCents === undefined || sourceCostCents <= 0) {
+      throw new HeliosValidationError("A fully priced source cost code is required for amount-based allocation.");
+    }
+    ratio = input.controllingValue / sourceCostCents;
+  }
+  if (ratio > 1) throw new HeliosValidationError("An allocation cannot exceed its source quantity or cost.");
+  return {
+    quantity: sourceQuantity === undefined ? undefined : roundedQuantity(sourceQuantity * ratio),
+    percentBasisPoints: Math.round(ratio * 10_000),
+    amountCents: sourceCostCents === undefined ? undefined : Math.round(sourceCostCents * ratio),
+  };
+}
+
+export function reconcileAllocations(input: {
+  allocationRequired: boolean;
+  sourceQuantity?: number;
+  sourceCostCents?: number;
+  allocations: Array<Pick<
+    HeliosEstimateAllocation,
+    "targetPayItemId" | "targetCostCodeId" | "quantity" | "percentBasisPoints" | "amountCents" | "reviewStatus"
+  >>;
+}) {
+  if (!input.allocationRequired) {
+    return { status: "balanced" as const, issues: [] as string[], totals: calculateAllocationBalance([]) };
+  }
+  const active = input.allocations.filter((allocation) => allocation.reviewStatus !== "rejected");
+  if (!active.length) {
+    return {
+      status: "orphan" as const,
+      issues: ["Shared cost has no allocation destinations."],
+      totals: calculateAllocationBalance([]),
+    };
+  }
+  const keys = new Set<string>();
+  const duplicateDestinations = new Set<string>();
+  for (const allocation of active) {
+    const key = `${allocation.targetPayItemId}:${allocation.targetCostCodeId || "item"}`;
+    if (keys.has(key)) duplicateDestinations.add(key);
+    keys.add(key);
+  }
+  const totals = calculateAllocationBalance(active);
+  if (duplicateDestinations.size) {
+    return {
+      status: "duplicate" as const,
+      issues: ["The same destination receives this source cost more than once."],
+      totals,
+    };
+  }
+  const issues: string[] = [];
+  if (input.sourceQuantity === undefined || input.sourceCostCents === undefined) {
+    issues.push("Source production quantity and fully priced direct cost are required before allocations can balance.");
+  }
+  if (totals.percentBasisPoints !== 10_000) issues.push("Allocated percentages must total exactly 100%. ");
+  if (input.sourceQuantity !== undefined && Math.abs(totals.quantity - input.sourceQuantity) > 0.000001) {
+    issues.push("Allocated quantities do not reconcile to the source production quantity.");
+  }
+  if (input.sourceCostCents !== undefined && totals.amountCents !== input.sourceCostCents) {
+    issues.push("Allocated dollars do not reconcile to the source direct cost.");
+  }
+  return {
+    status: issues.length
+      ? input.sourceQuantity === undefined || input.sourceCostCents === undefined
+        ? "incomplete" as const
+        : "unbalanced" as const
+      : "balanced" as const,
+    issues,
+    totals,
+  };
 }
 
 export function calculateEstimateTotals(input: {

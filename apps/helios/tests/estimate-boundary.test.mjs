@@ -103,6 +103,37 @@ test("3E.2 supports seven resources, focused worksheets, one-click acceptance, a
   assert.doesNotMatch(builder, /code\.resources\.map\(\(resource\) => <Badge/);
 });
 
+test("3E.3 separates governed production quantities from immutable owner bid quantities", () => {
+  assert.match(schema, /heliosEstimateQuantities: defineTable/);
+  assert.match(schema, /v\.literal\("takeoff_required"\)/);
+  assert.match(estimates, /productionQuantity: undefined/);
+  assert.match(estimates, /preliminary_ai_takeoff/);
+  assert.match(estimateBuild, /applyProductionQuantity/);
+  assert.match(costCodeWorkspace, /Unknown never means zero/);
+  assert.match(costCodeWorkspace, /mark_takeoff_required/);
+  assert.match(costCodeWorkspace, /accept_quantity/);
+});
+
+test("3E.3 derives allocations on the server and prevents duplicate or orphan cost", () => {
+  assert.match(estimateBuild, /deriveAllocationValues/);
+  assert.match(estimateBuild, /reconcileAllocations/);
+  assert.match(estimateBuild, /already allocated to that destination/);
+  assert.match(domain, /Shared cost has no allocation destinations/);
+  assert.match(domain, /Allocated percentages must total exactly 100%/);
+  assert.match(costCodeWorkspace, /Treat as shared cost/);
+  assert.match(costCodeWorkspace, /Orphan cost/);
+});
+
+test("3E.3 removes unbalanced shared sources from direct rollup and preserves append-only review", () => {
+  assert.match(estimates, /filter\(\(code\) => !code\.allocationRequired\)/);
+  assert.match(estimates, /invalidAllocationItems/);
+  assert.match(estimateBuild, /recordType = "quantity"/);
+  assert.match(estimateBuild, /recordType = "allocation"/);
+  assert.match(estimateBuild, /heliosEstimateDecisionEvents/);
+  assert.match(schema, /v\.literal\("quantity"\)/);
+  assert.match(schema, /v\.literal\("allocation"\)/);
+});
+
 test("3E.1 deterministically stages new, unchanged, changed, conflicting, and missing owner items", () => {
   for (const state of ["new", "unchanged", "changed", "conflict", "missing"]) {
     assert.match(schema + estimates + importReview, new RegExp(`\\b${state}\\b`));

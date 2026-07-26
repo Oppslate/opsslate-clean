@@ -5,6 +5,7 @@ import {
   calculatePricingStatus,
   calculateResourceCost,
   parseEstimateProposal,
+  reconcileAllocations,
   type HeliosEstimateWorkspace,
 } from "@opsslate/helios-domain";
 import { makeFunctionReference } from "convex/server";
@@ -268,10 +269,32 @@ export const completeEstimateProposal = internalMutation({
             description: code.description,
             sequence: codeIndex,
             scopeOwnership: code.scopeOwnership,
-            productionQuantity: code.productionQuantity,
+            productionQuantity: undefined,
             productionUnit: code.productionUnit,
+            allocationRequired: false,
             confidence: code.confidence,
             reviewStatus: "proposed",
+            evidenceIds: code.evidenceIds.map((id) => evidenceId(ctx, id)),
+            createdAt: now,
+            updatedAt: now,
+          });
+          await ctx.db.insert("heliosEstimateQuantities", {
+            companyId: job.companyId,
+            projectId: job.projectId,
+            estimateId: job.estimateId,
+            costCodeId,
+            value: code.productionQuantity,
+            unit: code.productionUnit,
+            quantityType: code.productionQuantity === undefined ? "takeoff_required" : "preliminary_ai_takeoff",
+            sourceLabel: "Helios estimate proposal",
+            method: code.productionQuantity === undefined
+              ? "Detailed takeoff required before production pricing and allocation."
+              : "Preliminary AI quantity inferred from cited bid documents; estimator verification required.",
+            confidence: code.confidence,
+            use: "production",
+            status: code.productionQuantity === undefined ? "takeoff_required" : "current",
+            reviewStatus: "proposed",
+            origin: "ai",
             evidenceIds: code.evidenceIds.map((id) => evidenceId(ctx, id)),
             createdAt: now,
             updatedAt: now,
@@ -407,12 +430,14 @@ export const getWorkspace = internalQuery({
       .order("desc")
       .first();
     if (!estimate) return null;
-    const [sectionRows, payItemRows, costCodeRows, resourceRows, riskRows, evidenceRows, decisionRows] =
+    const [sectionRows, payItemRows, costCodeRows, resourceRows, quantityRows, allocationRows, riskRows, evidenceRows, decisionRows] =
       await Promise.all([
         ctx.db.query("heliosEstimateSections").withIndex("by_estimate_sequence", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosOwnerPayItems").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosEstimateCostCodes").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosEstimateResources").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
+        ctx.db.query("heliosEstimateQuantities").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
+        ctx.db.query("heliosEstimateAllocations").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosEstimateRisks").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
         ctx.db.query("heliosEvidence").withIndex("by_project", (q) => q.eq("projectId", project._id)).collect(),
         ctx.db.query("heliosEstimateDecisionEvents").withIndex("by_estimate_created", (q) => q.eq("estimateId", estimate._id)).order("desc").collect(),
@@ -458,6 +483,88 @@ export const getWorkspace = internalQuery({
         directCostCents: calculateResourceCost(calculatedResource),
       };
       });
+    const costCodeModels = new Map(costCodeRows
+      .filter((code) => code.reviewStatus !== "rejected")
+      .map((code) => {
+        const resources = resourcesFor(code._id);
+        const directCostCents = calculateCostCodeDirectCost(resources);
+        const quantities = quantityRows
+          .filter((row) => row.costCodeId === code._id && row.reviewStatus !== "rejected")
+          .map((row) => ({
+            id: String(row._id),
+            costCodeId: String(row.costCodeId),
+            value: row.value,
+            unit: row.unit,
+            quantityType: row.quantityType,
+            sourceLabel: row.sourceLabel,
+            sourceReference: row.sourceReference,
+            method: row.method,
+            confidence: row.confidence,
+            use: row.use,
+            status: row.status,
+            reviewStatus: row.reviewStatus,
+            origin: row.origin,
+            evidenceIds: row.evidenceIds.map(String),
+          }));
+        const allocations = allocationRows
+          .filter((row) => row.sourceCostCodeId === code._id && (row.reviewStatus || "proposed") !== "rejected")
+          .map((row) => ({
+            id: String(row._id),
+            sourceCostCodeId: String(row.sourceCostCodeId),
+            targetPayItemId: String(row.targetPayItemId),
+            targetCostCodeId: row.targetCostCodeId ? String(row.targetCostCodeId) : undefined,
+            allocationType: row.allocationType,
+            controllingValue: row.controllingValue ?? row.quantity ?? row.percentBasisPoints ?? row.amountCents ?? 0,
+            quantity: row.quantity,
+            percentBasisPoints: row.percentBasisPoints,
+            amountCents: row.amountCents,
+            calculationBasis: row.calculationBasis || "Legacy allocation; estimator review required.",
+            balancingStatus: row.balancingStatus || "incomplete",
+            reviewStatus: row.reviewStatus || "proposed",
+          }));
+        const reconciliation = reconcileAllocations({
+          allocationRequired: code.allocationRequired || false,
+          sourceQuantity: code.productionQuantity,
+          sourceCostCents: directCostCents,
+          allocations,
+        });
+        return [String(code._id), {
+          id: String(code._id),
+          code: code.code,
+          description: code.description,
+          scopeOwnership: code.scopeOwnership,
+          productionQuantity: code.productionQuantity,
+          productionUnit: code.productionUnit,
+          confidence: code.confidence,
+          reviewStatus: code.reviewStatus,
+          evidenceIds: code.evidenceIds.map(String),
+          resources,
+          quantities,
+          allocations,
+          allocationRequired: code.allocationRequired || false,
+          allocationStatus: reconciliation.status,
+          reconciliationIssues: reconciliation.issues,
+          pricingStatus: calculatePricingStatus(resources),
+          directCostCents,
+        }] as const;
+      }));
+    const allocatedAmounts = new Map<string, number>();
+    const invalidAllocationItems = new Set<string>();
+    for (const code of costCodeRows.filter((row) => row.reviewStatus !== "rejected" && row.allocationRequired)) {
+      const model = costCodeModels.get(String(code._id));
+      if (!model) continue;
+      if (model.allocationStatus !== "balanced") {
+        invalidAllocationItems.add(String(code.payItemId));
+        model.allocations.forEach((allocation) => invalidAllocationItems.add(allocation.targetPayItemId));
+        continue;
+      }
+      model.allocations.forEach((allocation) => {
+        allocatedAmounts.set(
+          allocation.targetPayItemId,
+          (allocatedAmounts.get(allocation.targetPayItemId) || 0) + (allocation.amountCents || 0),
+        );
+      });
+    }
     const sections = sectionRows.map((section) => ({
       id: String(section._id),
       name: section.name,
@@ -465,27 +572,16 @@ export const getWorkspace = internalQuery({
       reviewStatus: section.reviewStatus,
       evidenceIds: section.evidenceIds.map(String),
       payItems: payItemRows.filter((item) => item.sectionId === section._id).map((item) => {
-        const costCodes = costCodeRows.filter((code) => code.payItemId === item._id && code.reviewStatus !== "rejected").map((code) => {
-          const resources = resourcesFor(code._id);
-          return {
-            id: String(code._id),
-            code: code.code,
-            description: code.description,
-            scopeOwnership: code.scopeOwnership,
-            productionQuantity: code.productionQuantity,
-            productionUnit: code.productionUnit,
-            confidence: code.confidence,
-            reviewStatus: code.reviewStatus,
-            evidenceIds: code.evidenceIds.map(String),
-            resources,
-            pricingStatus: calculatePricingStatus(resources),
-            directCostCents: calculateCostCodeDirectCost(resources),
-          };
-        });
-        const codeCosts = costCodes.map((code) => code.directCostCents);
-        const directCostCents = codeCosts.some((cost) => cost === undefined)
+        const costCodes = costCodeRows
+          .filter((code) => code.payItemId === item._id && code.reviewStatus !== "rejected")
+          .map((code) => costCodeModels.get(String(code._id))!)
+          .filter(Boolean);
+        const codeCosts = costCodes
+          .filter((code) => !code.allocationRequired)
+          .map((code) => code.directCostCents);
+        const directCostCents = invalidAllocationItems.has(String(item._id)) || codeCosts.some((cost) => cost === undefined)
           ? undefined
-          : codeCosts.reduce<number>((sum, cost) => sum + (cost || 0), 0);
+          : codeCosts.reduce<number>((sum, cost) => sum + (cost || 0), allocatedAmounts.get(String(item._id)) || 0);
         return {
           id: String(item._id),
           officialSequence: item.officialSequence ?? legacyOfficialSequence.get(item._id) ?? item.sequence,

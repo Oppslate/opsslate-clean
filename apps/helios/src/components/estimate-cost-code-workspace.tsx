@@ -4,8 +4,11 @@ import {
   HELIOS_ESTIMATE_RATE_STATUSES,
   HELIOS_ESTIMATE_RESOURCE_CLASSES,
   HELIOS_ESTIMATE_SCOPE_OWNERSHIP,
+  HELIOS_QUANTITY_RECORD_TYPES,
   type HeliosEstimateBuildInput,
+  type HeliosEstimateAllocation,
   type HeliosEstimateCostCode,
+  type HeliosEstimateQuantityRecord,
   type HeliosEstimateResource,
   type HeliosEstimateScopeOwnership,
 } from "@opsslate/helios-domain";
@@ -32,7 +35,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@opsslate/suite-ui/table";
 import { Textarea } from "@opsslate/suite-ui/textarea";
 import { useToast } from "@opsslate/suite-ui/toast";
-import { Check, Pencil, Plus, ShieldCheck } from "lucide-react";
+import { Calculator, Check, Pencil, Plus, ShieldCheck, Split } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -61,12 +64,14 @@ export function EstimateCostCodeWorkspace({
   payItemId,
   payItemNumber,
   code,
+  ownerItems = [],
 }: {
   projectId: string;
   estimateId: string;
   payItemId: string;
   payItemNumber: string;
   code?: HeliosEstimateCostCode;
+  ownerItems?: Array<{ id: string; officialItemNumber: string; description: string }>;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -102,7 +107,7 @@ export function EstimateCostCodeWorkspace({
       code: String(form.get("code") || ""),
       description: String(form.get("description") || ""),
       scopeOwnership: String(form.get("scopeOwnership")) as HeliosEstimateScopeOwnership,
-      productionQuantity: optionalNumber(form.get("productionQuantity")),
+      productionQuantity: undefined,
       productionUnit: String(form.get("productionUnit") || ""),
     };
     return mutate(
@@ -161,9 +166,11 @@ export function EstimateCostCodeWorkspace({
           <div className="space-y-2"><Label htmlFor={`code-${code?.id || payItemId}`}>NYSDOT / cost code</Label><Input id={`code-${code?.id || payItemId}`} name="code" defaultValue={code?.code} required /></div>
           <div className="space-y-2 sm:col-span-2"><Label htmlFor={`description-${code?.id || payItemId}`}>Operation description</Label><Input id={`description-${code?.id || payItemId}`} name="description" defaultValue={code?.description} required /></div>
           <div className="space-y-2"><Label>Scope ownership</Label><Select name="scopeOwnership" defaultValue={code?.scopeOwnership || "undecided"}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{HELIOS_ESTIMATE_SCOPE_OWNERSHIP.filter((value) => value !== "unassigned").map((value) => <SelectItem key={value} value={value}>{value.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div>
-          <div className="grid grid-cols-2 gap-2"><div className="space-y-2"><Label htmlFor={`production-${code?.id || payItemId}`}>Production qty.</Label><Input id={`production-${code?.id || payItemId}`} name="productionQuantity" type="number" min="0" step="any" defaultValue={code?.productionQuantity} /></div><div className="space-y-2"><Label htmlFor={`production-unit-${code?.id || payItemId}`}>Unit</Label><Input id={`production-unit-${code?.id || payItemId}`} name="productionUnit" defaultValue={code?.productionUnit || "LS"} required /></div></div>
+          <div className="space-y-2"><Label htmlFor={`production-unit-${code?.id || payItemId}`}>Default production unit</Label><Input id={`production-unit-${code?.id || payItemId}`} name="productionUnit" defaultValue={code?.productionUnit || "LS"} readOnly={Boolean(code)} required /><p className="text-xs text-muted-foreground">Existing quantity and unit decisions are controlled in the register below.</p></div>
           <div className="flex justify-end gap-2 sm:col-span-2 lg:col-span-5">{code && <Button type="button" variant="destructive" onClick={() => setRejecting({ type: "cost_code", id: code.id, label: code.code })}>Reject cost code</Button>}<Button type="submit" disabled={saving !== null}>{code ? "Save cost code" : "Add cost code"}</Button></div>
         </form>
+
+        {code && <QuantityAllocationPanel code={code} ownerItems={ownerItems} saving={saving !== null} mutate={mutate} />}
 
         {code && (
           <section className="space-y-3" aria-labelledby={`resources-${code.id}`}>
@@ -197,6 +204,134 @@ export function EstimateCostCodeWorkspace({
         <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Close</Button></DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function QuantityAllocationPanel({
+  code,
+  ownerItems,
+  saving,
+  mutate,
+}: {
+  code: HeliosEstimateCostCode;
+  ownerItems: Array<{ id: string; officialItemNumber: string; description: string }>;
+  saving: boolean;
+  mutate: (input: HeliosEstimateBuildInput, success: string) => Promise<void>;
+}) {
+  const [addingQuantity, setAddingQuantity] = useState(false);
+  const [addingAllocation, setAddingAllocation] = useState(false);
+  const [allocationType, setAllocationType] = useState<HeliosEstimateAllocation["allocationType"]>("percent");
+
+  function saveQuantity(form: FormData) {
+    const quantityType = String(form.get("quantityType")) as HeliosEstimateQuantityRecord["quantityType"];
+    return mutate({
+      action: "create_quantity",
+      costCodeId: code.id,
+      quantity: {
+        value: optionalNumber(form.get("quantityValue")),
+        unit: String(form.get("quantityUnit") || code.productionUnit),
+        quantityType,
+        sourceLabel: String(form.get("quantitySource") || ""),
+        sourceReference: String(form.get("quantityReference") || "") || undefined,
+        method: String(form.get("quantityMethod") || ""),
+        confidence: Number(form.get("quantityConfidence") || 100),
+        use: String(form.get("quantityUse")) as HeliosEstimateQuantityRecord["use"],
+      },
+    }, "Quantity saved as a reviewed estimator decision.").then(() => setAddingQuantity(false));
+  }
+
+  function saveAllocation(form: FormData) {
+    const entered = Number(form.get("allocationValue"));
+    const controllingValue = allocationType === "percent"
+      ? Math.round(entered * 100)
+      : allocationType === "amount"
+        ? Math.round(entered * 100)
+        : entered;
+    return mutate({
+      action: "create_allocation",
+      costCodeId: code.id,
+      allocation: {
+        targetPayItemId: String(form.get("targetPayItemId")),
+        allocationType,
+        controllingValue,
+      },
+    }, "Allocation added; balance checks recalculated.").then(() => setAddingAllocation(false));
+  }
+
+  function rejectRecord(type: "quantity" | "allocation", id: string, label: string) {
+    const comment = globalThis.prompt(`Why are you rejecting ${label}?`);
+    if (!comment?.trim()) return;
+    void mutate(
+      type === "quantity"
+        ? { action: "reject_quantity", quantityId: id, comment }
+        : { action: "reject_allocation", allocationId: id, comment },
+      `${type === "quantity" ? "Quantity" : "Allocation"} rejected and retained in audit history.`,
+    );
+  }
+
+  return (
+    <section className="space-y-4 rounded-lg border border-orange-500/25 bg-orange-500/5 p-4" aria-labelledby={`quantity-allocation-${code.id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id={`quantity-allocation-${code.id}`} className="flex items-center gap-2 font-semibold"><Calculator className="size-4 text-orange-300" aria-hidden="true" />Quantity and allocation control</h3>
+          <p className="text-sm text-muted-foreground">Production quantities are separate from owner bid quantities. Unknown never means zero.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant="outline" disabled={saving} onClick={() => mutate({ action: "mark_takeoff_required", costCodeId: code.id }, "Marked Takeoff Required without creating a placeholder quantity.")}>
+            Takeoff required
+          </Button>
+          <Button type="button" size="sm" onClick={() => setAddingQuantity(true)}><Plus aria-hidden="true" />Add quantity</Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border bg-background/40">
+        <Table>
+          <TableHeader><TableRow><TableHead>Use / type</TableHead><TableHead>Quantity</TableHead><TableHead>Source and method</TableHead><TableHead>Confidence</TableHead><TableHead className="text-right">Review</TableHead></TableRow></TableHeader>
+          <TableBody>
+            {(code.quantities || []).length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="h-20 text-center text-muted-foreground">No governed quantity record. Add a quantity or mark Takeoff Required.</TableCell></TableRow>
+            ) : (code.quantities || []).map((quantityRecord) => (
+              <TableRow key={quantityRecord.id}>
+                <TableCell><div className="flex flex-wrap gap-1"><Badge variant="secondary" className="capitalize">{quantityRecord.use}</Badge><Badge variant="outline" className="capitalize">{quantityRecord.quantityType.replaceAll("_", " ")}</Badge></div><div className="mt-1 text-xs capitalize text-muted-foreground">{quantityRecord.origin} · {quantityRecord.status.replaceAll("_", " ")}</div></TableCell>
+                <TableCell className="font-medium">{quantityRecord.value === undefined ? "Takeoff Required" : `${quantityRecord.value.toLocaleString()} ${quantityRecord.unit}`}</TableCell>
+                <TableCell className="min-w-72 whitespace-normal"><div>{quantityRecord.sourceLabel}</div><div className="text-xs text-muted-foreground">{quantityRecord.method}</div></TableCell>
+                <TableCell>{quantityRecord.confidence}%</TableCell>
+                <TableCell><div className="flex justify-end gap-2">{quantityRecord.reviewStatus === "proposed" && <Button type="button" size="sm" disabled={saving} onClick={() => mutate({ action: "accept_quantity", quantityId: quantityRecord.id }, "Production quantity accepted.")}><Check aria-hidden="true" />Accept</Button>}<Button type="button" size="sm" variant="destructive" disabled={saving} onClick={() => rejectRecord("quantity", quantityRecord.id, quantityRecord.sourceLabel)}>Reject</Button></div></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {addingQuantity && (
+        <form action={saveQuantity} className="grid gap-3 rounded-md border bg-card p-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2"><Label>Quantity type</Label><Select name="quantityType" defaultValue="estimator_calculated"><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{HELIOS_QUANTITY_RECORD_TYPES.filter((value) => value !== "takeoff_required").map((value) => <SelectItem key={value} value={value}>{value.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div>
+          <div className="grid grid-cols-2 gap-2"><div className="space-y-2"><Label htmlFor={`quantity-value-${code.id}`}>Quantity</Label><Input id={`quantity-value-${code.id}`} name="quantityValue" type="number" min="0" step="any" required /></div><div className="space-y-2"><Label htmlFor={`quantity-unit-${code.id}`}>Unit</Label><Input id={`quantity-unit-${code.id}`} name="quantityUnit" defaultValue={code.productionUnit} required /></div></div>
+          <div className="space-y-2"><Label>Use</Label><Select name="quantityUse" defaultValue="production"><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="production">Production</SelectItem><SelectItem value="comparative">Comparative</SelectItem><SelectItem value="authoritative">Authoritative</SelectItem></SelectContent></Select></div>
+          <div className="space-y-2"><Label htmlFor={`quantity-confidence-${code.id}`}>Confidence %</Label><Input id={`quantity-confidence-${code.id}`} name="quantityConfidence" type="number" min="0" max="100" defaultValue="100" required /></div>
+          <div className="space-y-2 lg:col-span-2"><Label htmlFor={`quantity-source-${code.id}`}>Source</Label><Input id={`quantity-source-${code.id}`} name="quantitySource" placeholder="Estimator takeoff, drawing, vendor schedule" required /></div>
+          <div className="space-y-2 lg:col-span-2"><Label htmlFor={`quantity-reference-${code.id}`}>Source reference</Label><Input id={`quantity-reference-${code.id}`} name="quantityReference" placeholder="Sheet, page, detail, quote, or calculation ID" /></div>
+          <div className="space-y-2 sm:col-span-2 lg:col-span-4"><Label htmlFor={`quantity-method-${code.id}`}>Calculation / takeoff method</Label><Textarea id={`quantity-method-${code.id}`} name="quantityMethod" placeholder="Explain how the production quantity was established." required /></div>
+          <div className="flex justify-end gap-2 sm:col-span-2 lg:col-span-4"><Button type="button" variant="outline" onClick={() => setAddingQuantity(false)}>Cancel</Button><Button type="submit" disabled={saving}>Save quantity</Button></div>
+        </form>
+      )}
+
+      <div className="border-t border-orange-500/20 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><h4 className="flex items-center gap-2 font-semibold"><Split className="size-4 text-orange-300" aria-hidden="true" />Shared-cost allocation</h4><p className="text-sm text-muted-foreground">A shared source is removed from its direct parent rollup until every destination balances.</p></div>
+          <Button type="button" size="sm" variant={code.allocationRequired ? "secondary" : "outline"} disabled={saving} onClick={() => mutate({ action: "set_allocation_required", costCodeId: code.id, allocationRequired: !code.allocationRequired }, code.allocationRequired ? "Shared-cost allocation disabled." : "Shared-cost allocation enabled; destinations are now required.")}>{code.allocationRequired ? "Use as direct cost" : "Treat as shared cost"}</Button>
+        </div>
+        {code.allocationRequired && (
+          <div className="mt-3 space-y-3">
+            <div className="flex flex-wrap items-center gap-2"><Badge variant={code.allocationStatus === "balanced" ? "secondary" : "outline"} className="capitalize">{code.allocationStatus}</Badge><span className="text-sm text-muted-foreground">Source: {code.productionQuantity === undefined ? "Takeoff Required" : `${code.productionQuantity.toLocaleString()} ${code.productionUnit}`} · {money(code.directCostCents)}</span></div>
+            {(code.reconciliationIssues || []).length > 0 && <ul className="space-y-1 text-sm text-amber-300">{(code.reconciliationIssues || []).map((issue) => <li key={issue}>• {issue}</li>)}</ul>}
+            <div className="overflow-x-auto rounded-md border bg-background/40"><Table><TableHeader><TableRow><TableHead>Destination owner item</TableHead><TableHead>Control</TableHead><TableHead>Quantity</TableHead><TableHead>Percent</TableHead><TableHead>Dollars</TableHead><TableHead className="text-right">Review</TableHead></TableRow></TableHeader><TableBody>{(code.allocations || []).length === 0 ? <TableRow><TableCell colSpan={6} className="h-20 text-center text-muted-foreground">Orphan cost: add at least one destination.</TableCell></TableRow> : (code.allocations || []).map((allocation) => { const destination = ownerItems.find((item) => item.id === allocation.targetPayItemId); return <TableRow key={allocation.id}><TableCell className="min-w-64 whitespace-normal"><span className="font-mono text-xs text-orange-300">{destination?.officialItemNumber || "Missing"}</span><div>{destination?.description || "Destination is not current"}</div></TableCell><TableCell className="capitalize">{allocation.allocationType} · {allocation.allocationType === "percent" ? `${allocation.controllingValue / 100}%` : allocation.allocationType === "amount" ? money(allocation.controllingValue) : allocation.controllingValue.toLocaleString()}</TableCell><TableCell>{allocation.quantity?.toLocaleString() ?? "Pending"}</TableCell><TableCell>{allocation.percentBasisPoints === undefined ? "Pending" : `${allocation.percentBasisPoints / 100}%`}</TableCell><TableCell>{money(allocation.amountCents)}</TableCell><TableCell><div className="flex justify-end gap-2">{allocation.reviewStatus === "proposed" && <Button type="button" size="sm" disabled={saving} onClick={() => mutate({ action: "accept_allocation", allocationId: allocation.id }, "Allocation accepted.")}><Check aria-hidden="true" />Accept</Button>}<Button type="button" size="sm" variant="destructive" disabled={saving} onClick={() => rejectRecord("allocation", allocation.id, destination?.officialItemNumber || "allocation")}>Reject</Button></div></TableCell></TableRow>; })}</TableBody></Table></div>
+            <div className="flex justify-end"><Button type="button" size="sm" onClick={() => setAddingAllocation(true)}><Plus aria-hidden="true" />Add destination</Button></div>
+            {addingAllocation && <form action={saveAllocation} className="grid gap-3 rounded-md border bg-card p-3 sm:grid-cols-3"><div className="space-y-2"><Label>Destination owner item</Label><Select name="targetPayItemId"><SelectTrigger className="w-full"><SelectValue placeholder="Select item" /></SelectTrigger><SelectContent>{ownerItems.map((item) => <SelectItem key={item.id} value={item.id}>{item.officialItemNumber} · {item.description}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Controlling method</Label><Select value={allocationType} onValueChange={(value) => setAllocationType(value as HeliosEstimateAllocation["allocationType"])}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="percent">Percent</SelectItem><SelectItem value="quantity">Quantity</SelectItem><SelectItem value="amount">Dollar amount</SelectItem></SelectContent></Select></div><div className="space-y-2"><Label htmlFor={`allocation-value-${code.id}`}>{allocationType === "percent" ? "Percent (%)" : allocationType === "amount" ? "Amount ($)" : `Quantity (${code.productionUnit})`}</Label><Input id={`allocation-value-${code.id}`} name="allocationValue" type="number" min="0" step={allocationType === "quantity" ? "any" : "0.01"} required /></div><div className="flex justify-end gap-2 sm:col-span-3"><Button type="button" variant="outline" onClick={() => setAddingAllocation(false)}>Cancel</Button><Button type="submit" disabled={saving}>Add allocation</Button></div></form>}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

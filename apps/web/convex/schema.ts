@@ -563,6 +563,7 @@ export default defineSchema({
     ),
     productionQuantity: v.optional(v.number()),
     productionUnit: v.string(),
+    allocationRequired: v.optional(v.boolean()),
     confidence: v.number(),
     reviewStatus: v.union(
       v.literal("proposed"),
@@ -634,6 +635,54 @@ export default defineSchema({
     .index("by_estimate", ["estimateId", "sequence"])
     .index("by_cost_code", ["costCodeId", "sequence"]),
 
+  heliosEstimateQuantities: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    costCodeId: v.id("heliosEstimateCostCodes"),
+    value: v.optional(v.number()),
+    unit: v.string(),
+    quantityType: v.union(
+      v.literal("official_contract"),
+      v.literal("plan"),
+      v.literal("estimator_calculated"),
+      v.literal("preliminary_ai_takeoff"),
+      v.literal("vendor"),
+      v.literal("allowance"),
+      v.literal("estimator_assumption"),
+      v.literal("takeoff_required"),
+      v.literal("included_in_another_item"),
+    ),
+    sourceLabel: v.string(),
+    sourceReference: v.optional(v.string()),
+    method: v.string(),
+    confidence: v.number(),
+    use: v.union(
+      v.literal("authoritative"),
+      v.literal("comparative"),
+      v.literal("production"),
+    ),
+    status: v.union(
+      v.literal("current"),
+      v.literal("conflicting"),
+      v.literal("superseded"),
+      v.literal("takeoff_required"),
+    ),
+    reviewStatus: v.union(
+      v.literal("proposed"),
+      v.literal("deferred"),
+      v.literal("accepted"),
+      v.literal("corrected"),
+      v.literal("rejected"),
+    ),
+    origin: v.union(v.literal("ai"), v.literal("human"), v.literal("import")),
+    evidenceIds: v.array(v.id("heliosEvidence")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_estimate", ["estimateId", "createdAt"])
+    .index("by_cost_code", ["costCodeId", "createdAt"]),
+
   heliosEstimateAllocations: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),
@@ -646,9 +695,25 @@ export default defineSchema({
       v.literal("percent"),
       v.literal("amount"),
     ),
+    controllingValue: v.optional(v.number()),
     quantity: v.optional(v.number()),
     percentBasisPoints: v.optional(v.number()),
     amountCents: v.optional(v.number()),
+    calculationBasis: v.optional(v.string()),
+    balancingStatus: v.optional(v.union(
+      v.literal("balanced"),
+      v.literal("unbalanced"),
+      v.literal("incomplete"),
+      v.literal("duplicate"),
+      v.literal("orphan"),
+    )),
+    reviewStatus: v.optional(v.union(
+      v.literal("proposed"),
+      v.literal("deferred"),
+      v.literal("accepted"),
+      v.literal("corrected"),
+      v.literal("rejected"),
+    )),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -696,6 +761,8 @@ export default defineSchema({
       v.literal("pay_item"),
       v.literal("cost_code"),
       v.literal("resource"),
+      v.literal("quantity"),
+      v.literal("allocation"),
       v.literal("risk"),
       v.literal("estimate"),
     ),

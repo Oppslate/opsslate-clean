@@ -192,7 +192,7 @@ const mutateEstimateBuildReference = makeFunctionReference<
     estimateId: string;
     input: HeliosEstimateBuildInput;
   },
-  { eventId: string; recordId: string; recordType: "cost_code" | "resource"; action: string }
+  { eventId: string; recordId: string; recordType: "cost_code" | "resource" | "quantity" | "allocation"; action: string }
 >("heliosEstimateBuild:mutateBuild");
 
 function json(body: unknown, status: number) {

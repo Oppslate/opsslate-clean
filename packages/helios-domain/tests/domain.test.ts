@@ -10,6 +10,7 @@ import {
   calculateEstimateTotals,
   calculatePricingStatus,
   calculateResourceCost,
+  deriveAllocationValues,
   canonicalPdfFileName,
   hasPdfMagicBytes,
   normalizeProjectInput,
@@ -18,6 +19,7 @@ import {
   parseDocumentIntelligence,
   parseEstimateProposal,
   parseProjectSynthesis,
+  reconcileAllocations,
   validatePdfCandidate,
 } from "../src/index.ts";
 
@@ -482,4 +484,112 @@ test("calculates the golden culvert direct cost, allocation, and independent glo
       grandTotalCents: 15_000_000,
     },
   );
+});
+
+test("keeps production quantity decisions separate and never converts Takeoff Required to zero", () => {
+  assert.deepEqual(
+    normalizeEstimateBuildInput({
+      action: "create_quantity",
+      costCodeId: "cost-1",
+      quantity: {
+        value: 125,
+        unit: "CY",
+        quantityType: "estimator_calculated",
+        sourceLabel: "Estimator takeoff",
+        sourceReference: "C-104, Sta. 10+00 to 12+50",
+        method: "Average end area calculation",
+        confidence: 95,
+        use: "production",
+      },
+    }).quantity,
+    {
+      value: 125,
+      unit: "CY",
+      quantityType: "estimator_calculated",
+      sourceLabel: "Estimator takeoff",
+      sourceReference: "C-104, Sta. 10+00 to 12+50",
+      method: "Average end area calculation",
+      confidence: 95,
+      use: "production",
+    },
+  );
+  assert.throws(
+    () => normalizeEstimateBuildInput({
+      action: "create_quantity",
+      costCodeId: "cost-1",
+      quantity: {
+        value: 0,
+        unit: "CY",
+        quantityType: "takeoff_required",
+        sourceLabel: "Estimator review",
+        method: "Detailed takeoff required",
+        confidence: 100,
+        use: "production",
+      },
+    }),
+    /greater than zero|must remain unknown/,
+  );
+});
+
+test("derives quantity, percent, and dollar allocations from one controlling method", () => {
+  assert.deepEqual(
+    deriveAllocationValues({
+      allocationType: "percent",
+      controllingValue: 4_000,
+      sourceQuantity: 250,
+      sourceCostCents: 1_000_000,
+    }),
+    { quantity: 100, percentBasisPoints: 4_000, amountCents: 400_000 },
+  );
+  assert.deepEqual(
+    deriveAllocationValues({
+      allocationType: "quantity",
+      controllingValue: 150,
+      sourceQuantity: 250,
+      sourceCostCents: 1_000_000,
+    }),
+    { quantity: 150, percentBasisPoints: 6_000, amountCents: 600_000 },
+  );
+  assert.deepEqual(
+    deriveAllocationValues({
+      allocationType: "amount",
+      controllingValue: 250_000,
+      sourceQuantity: 250,
+      sourceCostCents: 1_000_000,
+    }),
+    { quantity: 62.5, percentBasisPoints: 2_500, amountCents: 250_000 },
+  );
+});
+
+test("blocks orphan, duplicate, and unbalanced shared costs and passes exact reconciliation", () => {
+  const allocation = (targetPayItemId: string, quantity: number, percentBasisPoints: number, amountCents: number) => ({
+    targetPayItemId,
+    quantity,
+    percentBasisPoints,
+    amountCents,
+    reviewStatus: "corrected" as const,
+  });
+  assert.equal(reconcileAllocations({ allocationRequired: true, sourceQuantity: 100, sourceCostCents: 1_000_000, allocations: [] }).status, "orphan");
+  assert.equal(reconcileAllocations({
+    allocationRequired: true,
+    sourceQuantity: 100,
+    sourceCostCents: 1_000_000,
+    allocations: [allocation("item-1", 50, 5_000, 500_000), allocation("item-1", 50, 5_000, 500_000)],
+  }).status, "duplicate");
+  assert.equal(reconcileAllocations({
+    allocationRequired: true,
+    sourceQuantity: 100,
+    sourceCostCents: 1_000_000,
+    allocations: [allocation("item-1", 40, 4_000, 400_000)],
+  }).status, "unbalanced");
+  assert.deepEqual(reconcileAllocations({
+    allocationRequired: true,
+    sourceQuantity: 100,
+    sourceCostCents: 1_000_000,
+    allocations: [allocation("item-1", 40, 4_000, 400_000), allocation("item-2", 60, 6_000, 600_000)],
+  }), {
+    status: "balanced",
+    issues: [],
+    totals: { quantity: 100, percentBasisPoints: 10_000, amountCents: 1_000_000 },
+  });
 });
