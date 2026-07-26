@@ -59,9 +59,6 @@ export const heliosNavigation: SuiteNavigationItem[] = [
     href: "/estimate",
     label: "Estimate Builder",
     icon: icon(TableProperties),
-    disabled: true,
-    disabledLabel: "Gated",
-    disabledReason: gatedReason,
   },
   {
     type: "link",

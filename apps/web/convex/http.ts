@@ -5,9 +5,11 @@ import {
   createHeliosPackage,
   createHeliosUploadIntent,
   getHeliosProject,
+  getHeliosEstimate,
   finalizeHeliosPackage,
   listHeliosProjects,
   registerHeliosDocument,
+  requestHeliosEstimateProposal,
   reviewHeliosFinding,
   resolveIdentity,
   retryHeliosDocument,
@@ -77,6 +79,16 @@ http.route({
   path: "/helios/v1/findings/review",
   method: "POST",
   handler: reviewHeliosFinding,
+});
+http.route({
+  path: "/helios/v1/estimates/get",
+  method: "POST",
+  handler: getHeliosEstimate,
+});
+http.route({
+  path: "/helios/v1/estimates/propose",
+  method: "POST",
+  handler: requestHeliosEstimateProposal,
 });
 
 export default http;

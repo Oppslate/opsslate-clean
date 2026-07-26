@@ -112,6 +112,53 @@ export const HELIOS_FINDING_REVIEW_STATUSES = [
   "superseded",
 ] as const;
 
+export const HELIOS_ESTIMATE_STATUSES = [
+  "draft",
+  "proposal_processing",
+  "ready_for_review",
+  "accepted",
+  "superseded",
+  "failed",
+] as const;
+
+export const HELIOS_ESTIMATE_REVIEW_STATUSES = [
+  "proposed",
+  "accepted",
+  "corrected",
+  "rejected",
+] as const;
+
+export const HELIOS_ESTIMATE_QUANTITY_STATUSES = [
+  "owner_provided",
+  "ai_preliminary",
+  "takeoff_required",
+] as const;
+
+export const HELIOS_ESTIMATE_RESOURCE_CLASSES = [
+  "labor",
+  "equipment",
+  "material",
+  "subcontract",
+  "trucking",
+  "disposal",
+  "other",
+] as const;
+
+export const HELIOS_ESTIMATE_SCOPE_OWNERSHIP = [
+  "self_perform",
+  "subcontract",
+  "supplier",
+  "allowance",
+  "unassigned",
+] as const;
+
+export const HELIOS_ESTIMATE_RATE_STATUSES = [
+  "unpriced",
+  "user_entered",
+  "cost_database",
+  "vendor_quote",
+] as const;
+
 export type HeliosProjectStatus = (typeof HELIOS_PROJECT_STATUSES)[number];
 export type HeliosIntelligenceStatus =
   (typeof HELIOS_INTELLIGENCE_STATUSES)[number];
@@ -130,6 +177,17 @@ export type HeliosPackageSourceType =
 export type HeliosPackageStatus = (typeof HELIOS_PACKAGE_STATUSES)[number];
 export type HeliosPackageEntryStatus =
   (typeof HELIOS_PACKAGE_ENTRY_STATUSES)[number];
+export type HeliosEstimateStatus = (typeof HELIOS_ESTIMATE_STATUSES)[number];
+export type HeliosEstimateReviewStatus =
+  (typeof HELIOS_ESTIMATE_REVIEW_STATUSES)[number];
+export type HeliosEstimateQuantityStatus =
+  (typeof HELIOS_ESTIMATE_QUANTITY_STATUSES)[number];
+export type HeliosEstimateResourceClass =
+  (typeof HELIOS_ESTIMATE_RESOURCE_CLASSES)[number];
+export type HeliosEstimateScopeOwnership =
+  (typeof HELIOS_ESTIMATE_SCOPE_OWNERSHIP)[number];
+export type HeliosEstimateRateStatus =
+  (typeof HELIOS_ESTIMATE_RATE_STATUSES)[number];
 
 export type HeliosProjectInput = {
   name: string;
@@ -318,6 +376,147 @@ export type HeliosProjectDetail = {
   activePackageId?: string;
   latestIntelligenceError?: string;
   intelligence?: HeliosProjectIntelligence;
+};
+
+export type HeliosEstimateResource = {
+  id: string;
+  resourceClass: HeliosEstimateResourceClass;
+  description: string;
+  quantity?: number;
+  unit: string;
+  rateCents?: number;
+  rateStatus: HeliosEstimateRateStatus;
+  taxStatus: "taxable" | "exempt" | "unknown";
+  directCostCents?: number;
+};
+
+export type HeliosEstimateCostCode = {
+  id: string;
+  code: string;
+  description: string;
+  scopeOwnership: HeliosEstimateScopeOwnership;
+  productionQuantity?: number;
+  productionUnit: string;
+  confidence: number;
+  reviewStatus: HeliosEstimateReviewStatus;
+  evidenceIds: string[];
+  resources: HeliosEstimateResource[];
+  directCostCents?: number;
+};
+
+export type HeliosOwnerPayItem = {
+  id: string;
+  officialItemNumber: string;
+  description: string;
+  bidQuantity?: number;
+  bidUnit: string;
+  quantityStatus: HeliosEstimateQuantityStatus;
+  confidence: number;
+  reviewStatus: HeliosEstimateReviewStatus;
+  evidenceIds: string[];
+  costCodes: HeliosEstimateCostCode[];
+  directCostCents?: number;
+  derivedUnitCostCents?: number;
+};
+
+export type HeliosEstimateSection = {
+  id: string;
+  name: string;
+  sequence: number;
+  reviewStatus: HeliosEstimateReviewStatus;
+  evidenceIds: string[];
+  payItems: HeliosOwnerPayItem[];
+};
+
+export type HeliosEstimateRisk = {
+  id: string;
+  title: string;
+  detail: string;
+  probabilityPercent: number;
+  lowCostCents?: number;
+  mostLikelyCostCents?: number;
+  highCostCents?: number;
+  scheduleDays?: number;
+  mitigation: string;
+  owner: string;
+  disposition: "open" | "mitigated" | "accepted" | "transferred";
+  confidence: number;
+  reviewStatus: HeliosEstimateReviewStatus;
+  evidenceIds: string[];
+};
+
+export type HeliosEstimateWorkspace = {
+  id: string;
+  projectId: string;
+  version: number;
+  schemaVersion: number;
+  status: HeliosEstimateStatus;
+  sourceIntelligenceId: string;
+  sourcePackageRevision?: number;
+  model?: string;
+  error?: string;
+  overheadBasisPoints: number;
+  profitBasisPoints: number;
+  bondBasisPoints: number;
+  taxProfileStatus: "not_configured" | "configured";
+  sections: HeliosEstimateSection[];
+  risks: HeliosEstimateRisk[];
+  evidence: HeliosEvidence[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type HeliosEstimateProposalResourceInput = Omit<
+  HeliosEstimateResource,
+  "id" | "directCostCents"
+>;
+
+export type HeliosEstimateProposalCostCodeInput = Omit<
+  HeliosEstimateCostCode,
+  "id" | "resources" | "directCostCents" | "reviewStatus"
+> & { resources: HeliosEstimateProposalResourceInput[] };
+
+export type HeliosEstimateProposalPayItemInput = Omit<
+  HeliosOwnerPayItem,
+  | "id"
+  | "costCodes"
+  | "directCostCents"
+  | "derivedUnitCostCents"
+  | "reviewStatus"
+> & { costCodes: HeliosEstimateProposalCostCodeInput[] };
+
+export type HeliosEstimateProposalSectionInput = Omit<
+  HeliosEstimateSection,
+  "id" | "payItems" | "reviewStatus"
+> & { key: string; payItems: HeliosEstimateProposalPayItemInput[] };
+
+export type HeliosEstimateProposalRiskInput = Omit<
+  HeliosEstimateRisk,
+  | "id"
+  | "lowCostCents"
+  | "mostLikelyCostCents"
+  | "highCostCents"
+  | "reviewStatus"
+>;
+
+export type HeliosEstimateProposalInput = {
+  sections: HeliosEstimateProposalSectionInput[];
+  risks: HeliosEstimateProposalRiskInput[];
+};
+
+export type HeliosEstimateAllocation = {
+  allocationType: "quantity" | "percent" | "amount";
+  quantity?: number;
+  percentBasisPoints?: number;
+  amountCents?: number;
+};
+
+export type HeliosEstimateTotals = {
+  directCostCents: number;
+  overheadCents: number;
+  profitCents: number;
+  bondCents: number;
+  grandTotalCents: number;
 };
 
 export class HeliosValidationError extends Error {
@@ -903,5 +1102,257 @@ export function parseProjectSynthesis(
     ),
     confidence: confidenceValue(input.confidence, "Project confidence"),
     findings,
+  };
+}
+
+function finiteNonNegative(value: unknown, label: string) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new HeliosValidationError(`${label} must be a non-negative number.`);
+  }
+  return value;
+}
+
+function optionalPositiveQuantity(value: unknown, label: string) {
+  if (value === null || value === undefined) return undefined;
+  const quantity = finiteNonNegative(value, label);
+  if (quantity === 0) {
+    throw new HeliosValidationError(`${label} must be greater than zero when known.`);
+  }
+  return quantity;
+}
+
+function allowedValue<T extends readonly string[]>(
+  value: unknown,
+  allowed: T,
+  label: string,
+): T[number] {
+  if (typeof value !== "string" || !allowed.includes(value)) {
+    throw new HeliosValidationError(`${label} is invalid.`);
+  }
+  return value as T[number];
+}
+
+function citedEvidence(
+  value: unknown,
+  label: string,
+  validEvidenceIds: Set<string>,
+) {
+  const evidenceIds = stringArray(value, label, 80);
+  if (!evidenceIds.length || evidenceIds.some((id) => !validEvidenceIds.has(id))) {
+    throw new HeliosValidationError(`${label} must cite valid project evidence.`);
+  }
+  return evidenceIds;
+}
+
+/** Parse the untrusted model proposal. Prices are deliberately forbidden. */
+export function parseEstimateProposal(
+  value: unknown,
+  validEvidence: Iterable<string>,
+): HeliosEstimateProposalInput {
+  const input = record(value, "Estimate proposal");
+  const validEvidenceIds = new Set(validEvidence);
+  if (!Array.isArray(input.sections) || !input.sections.length || input.sections.length > 80) {
+    throw new HeliosValidationError("Estimate sections must be a bounded, non-empty list.");
+  }
+  const sectionKeys = new Set<string>();
+  const ownerItemNumbers = new Set<string>();
+  const sections = input.sections.map((sectionValue, sectionIndex) => {
+    const section = record(sectionValue, `Estimate section ${sectionIndex + 1}`);
+    const key = textValue(section.key, `Estimate section ${sectionIndex + 1} key`, 80);
+    if (sectionKeys.has(key)) throw new HeliosValidationError("Estimate section keys must be unique.");
+    sectionKeys.add(key);
+    if (!Array.isArray(section.payItems) || !section.payItems.length || section.payItems.length > 250) {
+      throw new HeliosValidationError(`Estimate section ${sectionIndex + 1} must contain pay items.`);
+    }
+    const payItems = section.payItems.map((itemValue, itemIndex) => {
+      const item = record(itemValue, `Pay item ${itemIndex + 1}`);
+      const officialItemNumber = textValue(item.officialItemNumber, "Official item number", 80);
+      if (ownerItemNumbers.has(officialItemNumber)) {
+        throw new HeliosValidationError(`Owner item ${officialItemNumber} is duplicated.`);
+      }
+      ownerItemNumbers.add(officialItemNumber);
+      const quantityStatus = allowedValue(
+        item.quantityStatus,
+        HELIOS_ESTIMATE_QUANTITY_STATUSES,
+        "Bid quantity status",
+      );
+      const bidQuantity = optionalPositiveQuantity(item.bidQuantity, "Bid quantity");
+      if (quantityStatus === "takeoff_required" && bidQuantity !== undefined) {
+        throw new HeliosValidationError("Takeoff-required items cannot contain a confirmed bid quantity.");
+      }
+      if (quantityStatus === "owner_provided" && bidQuantity === undefined) {
+        throw new HeliosValidationError("Owner-provided quantities require a bid quantity.");
+      }
+      if (!Array.isArray(item.costCodes) || !item.costCodes.length || item.costCodes.length > 80) {
+        throw new HeliosValidationError(`Owner item ${officialItemNumber} must contain cost codes.`);
+      }
+      const costCodeNames = new Set<string>();
+      const costCodes = item.costCodes.map((codeValue, codeIndex) => {
+        const code = record(codeValue, `Cost code ${codeIndex + 1}`);
+        const codeName = textValue(code.code, "Cost code", 80);
+        if (costCodeNames.has(codeName)) {
+          throw new HeliosValidationError(`Cost code ${codeName} is duplicated within ${officialItemNumber}.`);
+        }
+        costCodeNames.add(codeName);
+        if (!Array.isArray(code.resources) || code.resources.length > 100) {
+          throw new HeliosValidationError(`Cost code ${codeName} resources are invalid.`);
+        }
+        const resources = code.resources.map((resourceValue, resourceIndex) => {
+          const resource = record(resourceValue, `Resource ${resourceIndex + 1}`);
+          if (resource.rateCents !== null && resource.rateCents !== undefined) {
+            throw new HeliosValidationError("AI estimate proposals cannot contain prices.");
+          }
+          const rateStatus = allowedValue(resource.rateStatus, HELIOS_ESTIMATE_RATE_STATUSES, "Rate status");
+          if (rateStatus !== "unpriced") {
+            throw new HeliosValidationError("AI estimate proposal resources must remain unpriced.");
+          }
+          return {
+            resourceClass: allowedValue(
+              resource.resourceClass,
+              HELIOS_ESTIMATE_RESOURCE_CLASSES,
+              "Resource class",
+            ),
+            description: textValue(resource.description, "Resource description", 240),
+            quantity: optionalPositiveQuantity(resource.quantity, "Resource quantity"),
+            unit: textValue(resource.unit, "Resource unit", 40),
+            rateCents: undefined,
+            rateStatus,
+            taxStatus: allowedValue(
+              resource.taxStatus,
+              ["taxable", "exempt", "unknown"] as const,
+              "Tax status",
+            ),
+          };
+        });
+        return {
+          code: codeName,
+          description: textValue(code.description, "Cost code description", 240),
+          scopeOwnership: allowedValue(
+            code.scopeOwnership,
+            HELIOS_ESTIMATE_SCOPE_OWNERSHIP,
+            "Scope ownership",
+          ),
+          productionQuantity: optionalPositiveQuantity(
+            code.productionQuantity,
+            "Production quantity",
+          ),
+          productionUnit: textValue(code.productionUnit, "Production unit", 40),
+          confidence: confidenceValue(code.confidence, "Cost code confidence"),
+          evidenceIds: citedEvidence(code.evidenceIds, "Cost code evidence", validEvidenceIds),
+          resources,
+        };
+      });
+      return {
+        officialItemNumber,
+        description: textValue(item.description, "Owner item description", 400),
+        bidQuantity,
+        bidUnit: textValue(item.bidUnit, "Bid unit", 40),
+        quantityStatus,
+        confidence: confidenceValue(item.confidence, "Owner item confidence"),
+        evidenceIds: citedEvidence(item.evidenceIds, "Owner item evidence", validEvidenceIds),
+        costCodes,
+      };
+    });
+    return {
+      key,
+      name: textValue(section.name, "Estimate section name", 160),
+      sequence: Math.round(finiteNonNegative(section.sequence, "Estimate section sequence")),
+      evidenceIds: citedEvidence(section.evidenceIds, "Estimate section evidence", validEvidenceIds),
+      payItems,
+    };
+  });
+
+  if (!Array.isArray(input.risks) || input.risks.length > 150) {
+    throw new HeliosValidationError("Estimate risks must be a bounded list.");
+  }
+  const risks = input.risks.map((riskValue, riskIndex) => {
+    const risk = record(riskValue, `Estimate risk ${riskIndex + 1}`);
+    return {
+      title: textValue(risk.title, "Risk title", 240),
+      detail: textValue(risk.detail, "Risk detail", 1600),
+      probabilityPercent: confidenceValue(risk.probabilityPercent, "Risk probability"),
+      scheduleDays: risk.scheduleDays === null || risk.scheduleDays === undefined
+        ? undefined
+        : finiteNonNegative(risk.scheduleDays, "Risk schedule exposure"),
+      mitigation: textValue(risk.mitigation, "Risk mitigation", 800),
+      owner: textValue(risk.owner, "Risk owner", 160),
+      disposition: allowedValue(
+        risk.disposition,
+        ["open", "mitigated", "accepted", "transferred"] as const,
+        "Risk disposition",
+      ),
+      confidence: confidenceValue(risk.confidence, "Risk confidence"),
+      evidenceIds: citedEvidence(risk.evidenceIds, "Risk evidence", validEvidenceIds),
+    };
+  });
+  return { sections, risks };
+}
+
+function safeCents(value: number, label: string) {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new HeliosValidationError(`${label} must be a non-negative integer number of cents.`);
+  }
+  return value;
+}
+
+export function calculateResourceCost(resource: Pick<HeliosEstimateResource, "quantity" | "rateCents">) {
+  if (resource.quantity === undefined || resource.rateCents === undefined) return undefined;
+  safeCents(resource.rateCents, "Resource rate");
+  const total = Math.round(resource.quantity * resource.rateCents);
+  if (!Number.isSafeInteger(total)) throw new HeliosValidationError("Resource cost exceeds the supported range.");
+  return total;
+}
+
+export function calculateCostCodeDirectCost(resources: Array<Pick<HeliosEstimateResource, "quantity" | "rateCents">>) {
+  let total = 0;
+  for (const resource of resources) {
+    const cost = calculateResourceCost(resource);
+    if (cost === undefined) return undefined;
+    total = safeCents(total + cost, "Cost code total");
+  }
+  return total;
+}
+
+export function calculateDerivedUnitCost(directCostCents: number | undefined, bidQuantity: number | undefined) {
+  if (directCostCents === undefined || bidQuantity === undefined || bidQuantity <= 0) return undefined;
+  return Math.round(safeCents(directCostCents, "Direct cost") / bidQuantity);
+}
+
+export function calculateAllocationBalance(allocations: HeliosEstimateAllocation[]) {
+  return allocations.reduce(
+    (totals, allocation) => ({
+      quantity: totals.quantity + (allocation.quantity || 0),
+      percentBasisPoints: totals.percentBasisPoints + (allocation.percentBasisPoints || 0),
+      amountCents: totals.amountCents + (allocation.amountCents || 0),
+    }),
+    { quantity: 0, percentBasisPoints: 0, amountCents: 0 },
+  );
+}
+
+export function calculateEstimateTotals(input: {
+  directCostCents: number;
+  overheadBasisPoints: number;
+  profitBasisPoints: number;
+  bondBasisPoints: number;
+}): HeliosEstimateTotals {
+  const directCostCents = safeCents(input.directCostCents, "Estimate direct cost");
+  const markup = (basisPoints: number, label: string) => {
+    if (!Number.isSafeInteger(basisPoints) || basisPoints < 0 || basisPoints > 100_000) {
+      throw new HeliosValidationError(`${label} basis points are invalid.`);
+    }
+    return Math.round((directCostCents * basisPoints) / 10_000);
+  };
+  const overheadCents = markup(input.overheadBasisPoints, "Overhead");
+  const profitCents = markup(input.profitBasisPoints, "Profit");
+  const bondCents = markup(input.bondBasisPoints, "Bond");
+  return {
+    directCostCents,
+    overheadCents,
+    profitCents,
+    bondCents,
+    grandTotalCents: safeCents(
+      directCostCents + overheadCents + profitCents + bondCents,
+      "Estimate grand total",
+    ),
   };
 }

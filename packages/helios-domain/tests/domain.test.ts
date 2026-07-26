@@ -3,10 +3,15 @@ import test from "node:test";
 
 import {
   HELIOS_MAX_PDF_BYTES,
+  calculateAllocationBalance,
+  calculateCostCodeDirectCost,
+  calculateDerivedUnitCost,
+  calculateEstimateTotals,
   canonicalPdfFileName,
   hasPdfMagicBytes,
   normalizeProjectInput,
   parseDocumentIntelligence,
+  parseEstimateProposal,
   parseProjectSynthesis,
   validatePdfCandidate,
 } from "../src/index.ts";
@@ -166,5 +171,169 @@ test("rejects project synthesis that cites evidence outside the project", () => 
   assert.throws(
     () => parseProjectSynthesis(synthesis, ["different-evidence"]),
     /summary must cite valid evidence/i,
+  );
+});
+
+const culvertProposal = {
+  sections: [
+    {
+      key: "culvert-replacement",
+      name: "Culvert Replacement",
+      sequence: 10,
+      evidenceIds: ["pay-item"],
+      payItems: [
+        {
+          officialItemNumber: "619.0501",
+          description: "Culvert replacement, complete",
+          bidQuantity: 1,
+          bidUnit: "LS",
+          quantityStatus: "owner_provided",
+          confidence: 96,
+          evidenceIds: ["pay-item"],
+          costCodes: [
+            {
+              code: "ENG",
+              description: "Engineering and layout",
+              scopeOwnership: "self_perform",
+              productionQuantity: 1,
+              productionUnit: "LS",
+              confidence: 90,
+              evidenceIds: ["general"],
+              resources: [
+                {
+                  resourceClass: "labor",
+                  description: "Project engineer",
+                  quantity: 100,
+                  unit: "HR",
+                  rateCents: null,
+                  rateStatus: "unpriced",
+                  taxStatus: "exempt",
+                },
+              ],
+            },
+            ...["EW", "FILL", "PAVE", "MAINT", "REM"].map((code) => ({
+              code,
+              description: `${code} culvert operation`,
+              scopeOwnership: "self_perform",
+              productionQuantity: null,
+              productionUnit: "LS",
+              confidence: 82,
+              evidenceIds: ["scope"],
+              resources: [],
+            })),
+          ],
+        },
+      ],
+    },
+  ],
+  risks: [
+    {
+      title: "Unknown subsurface conditions",
+      detail: "Rock and unsuitable material quantities require field verification.",
+      probabilityPercent: 45,
+      scheduleDays: 5,
+      mitigation: "Review borings and carry a pre-bid clarification.",
+      owner: "Chief estimator",
+      disposition: "open",
+      confidence: 78,
+      evidenceIds: ["risk"],
+    },
+  ],
+};
+
+test("parses the evidence-backed culvert estimate proposal without inventing prices", () => {
+  const proposal = parseEstimateProposal(culvertProposal, [
+    "pay-item",
+    "general",
+    "scope",
+    "risk",
+  ]);
+  assert.equal(proposal.sections[0]?.payItems[0]?.officialItemNumber, "619.0501");
+  assert.deepEqual(
+    proposal.sections[0]?.payItems[0]?.costCodes.map((item) => item.code),
+    ["ENG", "EW", "FILL", "PAVE", "MAINT", "REM"],
+  );
+  assert.equal(
+    proposal.sections[0]?.payItems[0]?.costCodes[0]?.resources[0]?.rateCents,
+    undefined,
+  );
+});
+
+test("rejects duplicate owner items, invalid evidence, and AI-generated prices", () => {
+  assert.throws(
+    () => parseEstimateProposal(culvertProposal, ["different"]),
+    /valid project evidence/,
+  );
+  assert.throws(
+    () =>
+      parseEstimateProposal(
+        {
+          ...culvertProposal,
+          sections: [
+            culvertProposal.sections[0],
+            { ...culvertProposal.sections[0], key: "duplicate" },
+          ],
+        },
+        ["pay-item", "general", "scope", "risk"],
+      ),
+    /duplicated/,
+  );
+  const priced = structuredClone(culvertProposal);
+  (priced.sections[0].payItems[0].costCodes[0].resources[0] as {
+    rateCents: number | null;
+  }).rateCents = 12_500;
+  assert.throws(
+    () => parseEstimateProposal(priced, ["pay-item", "general", "scope", "risk"]),
+    /cannot contain prices/,
+  );
+});
+
+test("keeps unknown quantities unknown instead of treating them as zero", () => {
+  const proposal = parseEstimateProposal(culvertProposal, [
+    "pay-item",
+    "general",
+    "scope",
+    "risk",
+  ]);
+  assert.equal(
+    proposal.sections[0]?.payItems[0]?.costCodes[1]?.productionQuantity,
+    undefined,
+  );
+  assert.equal(calculateCostCodeDirectCost([{ quantity: 4, rateCents: undefined }]), undefined);
+});
+
+test("calculates the golden culvert direct cost, allocation, and independent global markups", () => {
+  const directCosts = [
+    calculateCostCodeDirectCost([{ quantity: 100, rateCents: 10_000 }]),
+    calculateCostCodeDirectCost([{ quantity: 200, rateCents: 15_000 }]),
+    calculateCostCodeDirectCost([{ quantity: 1_000, rateCents: 2_500 }]),
+    calculateCostCodeDirectCost([{ quantity: 500, rateCents: 8_000 }]),
+    calculateCostCodeDirectCost([{ quantity: 1, rateCents: 1_200_000 }]),
+    calculateCostCodeDirectCost([{ quantity: 1, rateCents: 800_000 }]),
+  ];
+  assert.deepEqual(directCosts, [1_000_000, 3_000_000, 2_500_000, 4_000_000, 1_200_000, 800_000]);
+  const directCostCents = directCosts.reduce<number>((sum, value) => sum + (value || 0), 0);
+  assert.equal(calculateDerivedUnitCost(directCostCents, 1), 12_500_000);
+  assert.deepEqual(
+    calculateAllocationBalance([
+      { allocationType: "percent", percentBasisPoints: 4_000 },
+      { allocationType: "percent", percentBasisPoints: 6_000 },
+    ]),
+    { quantity: 0, percentBasisPoints: 10_000, amountCents: 0 },
+  );
+  assert.deepEqual(
+    calculateEstimateTotals({
+      directCostCents,
+      overheadBasisPoints: 1_000,
+      profitBasisPoints: 800,
+      bondBasisPoints: 200,
+    }),
+    {
+      directCostCents: 12_500_000,
+      overheadCents: 1_250_000,
+      profitCents: 1_000_000,
+      bondCents: 250_000,
+      grandTotalCents: 15_000_000,
+    },
   );
 });

@@ -415,6 +415,259 @@ export default defineSchema({
     ])
     .index("by_project_created", ["projectId", "createdAt"]),
 
+  heliosEstimates: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    createdBy: v.id("users"),
+    sourceIntelligenceId: v.id("heliosProjectIntelligence"),
+    sourcePackageRevision: v.optional(v.number()),
+    version: v.number(),
+    schemaVersion: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("proposal_processing"),
+      v.literal("ready_for_review"),
+      v.literal("accepted"),
+      v.literal("superseded"),
+      v.literal("failed"),
+    ),
+    model: v.optional(v.string()),
+    error: v.optional(v.string()),
+    overheadBasisPoints: v.number(),
+    profitBasisPoints: v.number(),
+    bondBasisPoints: v.number(),
+    taxProfileStatus: v.union(
+      v.literal("not_configured"),
+      v.literal("configured"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project_version", ["projectId", "version"])
+    .index("by_project_status", ["projectId", "status", "updatedAt"])
+    .index("by_company_updated", ["companyId", "updatedAt"]),
+
+  heliosEstimateJobs: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    sourceIntelligenceId: v.id("heliosProjectIntelligence"),
+    packageRevision: v.optional(v.number()),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    openaiResponseId: v.optional(v.string()),
+    model: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalTokens: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_estimate", ["estimateId", "createdAt"])
+    .index("by_project_status", ["projectId", "status", "createdAt"]),
+
+  heliosEstimateSections: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    key: v.string(),
+    name: v.string(),
+    sequence: v.number(),
+    reviewStatus: v.union(
+      v.literal("proposed"),
+      v.literal("accepted"),
+      v.literal("corrected"),
+      v.literal("rejected"),
+    ),
+    evidenceIds: v.array(v.id("heliosEvidence")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_estimate_sequence", ["estimateId", "sequence"]),
+
+  heliosOwnerPayItems: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    sectionId: v.id("heliosEstimateSections"),
+    officialItemNumber: v.string(),
+    description: v.string(),
+    sequence: v.number(),
+    bidQuantity: v.optional(v.number()),
+    bidUnit: v.string(),
+    quantityStatus: v.union(
+      v.literal("owner_provided"),
+      v.literal("ai_preliminary"),
+      v.literal("takeoff_required"),
+    ),
+    confidence: v.number(),
+    reviewStatus: v.union(
+      v.literal("proposed"),
+      v.literal("accepted"),
+      v.literal("corrected"),
+      v.literal("rejected"),
+    ),
+    evidenceIds: v.array(v.id("heliosEvidence")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_estimate", ["estimateId", "sequence"])
+    .index("by_section", ["sectionId", "sequence"]),
+
+  heliosEstimateCostCodes: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    payItemId: v.id("heliosOwnerPayItems"),
+    code: v.string(),
+    description: v.string(),
+    sequence: v.number(),
+    scopeOwnership: v.union(
+      v.literal("self_perform"),
+      v.literal("subcontract"),
+      v.literal("supplier"),
+      v.literal("allowance"),
+      v.literal("unassigned"),
+    ),
+    productionQuantity: v.optional(v.number()),
+    productionUnit: v.string(),
+    confidence: v.number(),
+    reviewStatus: v.union(
+      v.literal("proposed"),
+      v.literal("accepted"),
+      v.literal("corrected"),
+      v.literal("rejected"),
+    ),
+    evidenceIds: v.array(v.id("heliosEvidence")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_estimate", ["estimateId", "sequence"])
+    .index("by_pay_item", ["payItemId", "sequence"]),
+
+  heliosEstimateResources: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    costCodeId: v.id("heliosEstimateCostCodes"),
+    sequence: v.number(),
+    resourceClass: v.union(
+      v.literal("labor"),
+      v.literal("equipment"),
+      v.literal("material"),
+      v.literal("subcontract"),
+      v.literal("trucking"),
+      v.literal("disposal"),
+      v.literal("other"),
+    ),
+    description: v.string(),
+    quantity: v.optional(v.number()),
+    unit: v.string(),
+    rateCents: v.optional(v.number()),
+    rateStatus: v.union(
+      v.literal("unpriced"),
+      v.literal("user_entered"),
+      v.literal("cost_database"),
+      v.literal("vendor_quote"),
+    ),
+    taxStatus: v.union(
+      v.literal("taxable"),
+      v.literal("exempt"),
+      v.literal("unknown"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_estimate", ["estimateId", "sequence"])
+    .index("by_cost_code", ["costCodeId", "sequence"]),
+
+  heliosEstimateAllocations: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    sourceCostCodeId: v.id("heliosEstimateCostCodes"),
+    targetPayItemId: v.id("heliosOwnerPayItems"),
+    targetCostCodeId: v.optional(v.id("heliosEstimateCostCodes")),
+    allocationType: v.union(
+      v.literal("quantity"),
+      v.literal("percent"),
+      v.literal("amount"),
+    ),
+    quantity: v.optional(v.number()),
+    percentBasisPoints: v.optional(v.number()),
+    amountCents: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_estimate", ["estimateId", "createdAt"])
+    .index("by_source_cost_code", ["sourceCostCodeId", "createdAt"]),
+
+  heliosEstimateRisks: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    title: v.string(),
+    detail: v.string(),
+    probabilityPercent: v.number(),
+    lowCostCents: v.optional(v.number()),
+    mostLikelyCostCents: v.optional(v.number()),
+    highCostCents: v.optional(v.number()),
+    scheduleDays: v.optional(v.number()),
+    mitigation: v.string(),
+    owner: v.string(),
+    disposition: v.union(
+      v.literal("open"),
+      v.literal("mitigated"),
+      v.literal("accepted"),
+      v.literal("transferred"),
+    ),
+    confidence: v.number(),
+    reviewStatus: v.union(
+      v.literal("proposed"),
+      v.literal("accepted"),
+      v.literal("corrected"),
+      v.literal("rejected"),
+    ),
+    evidenceIds: v.array(v.id("heliosEvidence")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_estimate", ["estimateId", "createdAt"]),
+
+  heliosEstimateDecisionEvents: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    estimateId: v.id("heliosEstimates"),
+    recordType: v.union(
+      v.literal("section"),
+      v.literal("pay_item"),
+      v.literal("cost_code"),
+      v.literal("resource"),
+      v.literal("risk"),
+    ),
+    recordId: v.string(),
+    action: v.union(
+      v.literal("accept"),
+      v.literal("correct"),
+      v.literal("reject"),
+      v.literal("split"),
+      v.literal("merge"),
+      v.literal("map"),
+    ),
+    comment: v.optional(v.string()),
+    payload: v.optional(v.any()),
+    reviewerUserId: v.id("users"),
+    reviewerName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_estimate_created", ["estimateId", "createdAt"])
+    .index("by_record_created", ["recordId", "createdAt"]),
+
   equipment: defineTable({
     companyId: v.id("companies"),
     name: v.string(),

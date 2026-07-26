@@ -7,6 +7,7 @@ import {
   type HeliosDocumentSummary,
   type HeliosFindingReviewEvent,
   type HeliosFindingReviewInput,
+  type HeliosEstimateWorkspace,
   type HeliosProjectDetail,
   type HeliosProjectInput,
   type HeliosProjectSummary,
@@ -149,6 +150,16 @@ const reviewFindingReference = makeFunctionReference<
   },
   HeliosFindingReviewEvent
 >("heliosReviews:reviewFinding");
+const getEstimateWorkspaceReference = makeFunctionReference<
+  "query",
+  { principal: GatewayPrincipal; projectId: string },
+  HeliosEstimateWorkspace | null
+>("heliosEstimates:getWorkspace");
+const requestEstimateProposalReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string },
+  { estimateId: string; jobId: string; status: "queued" }
+>("heliosEstimates:requestProposal");
 
 function json(body: unknown, status: number) {
   return new Response(JSON.stringify(body), {
@@ -708,6 +719,51 @@ export const reviewHeliosFinding = httpAction(async (ctx, request) => {
           error instanceof HeliosValidationError
             ? error.message
             : "Finding review could not be saved.",
+      },
+      400,
+    );
+  }
+});
+
+export const getHeliosEstimate = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  if (!boundedString(authorization.payload.projectId)) {
+    return json({ error: "Invalid estimate request." }, 400);
+  }
+  try {
+    const data = await ctx.runQuery(getEstimateWorkspaceReference, {
+      principal: principalFrom(authorization.payload),
+      projectId: authorization.payload.projectId,
+    });
+    return json({ data }, 200);
+  } catch (error) {
+    console.error("[helios:estimate-get] failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return json({ error: "Estimate workspace could not be loaded." }, 404);
+  }
+});
+
+export const requestHeliosEstimateProposal = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  if (!boundedString(authorization.payload.projectId)) {
+    return json({ error: "Invalid estimate proposal request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(requestEstimateProposalReference, {
+      principal: principalFrom(authorization.payload),
+      projectId: authorization.payload.projectId,
+    });
+    return json({ data }, 202);
+  } catch (error) {
+    return json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Estimate proposal could not be requested.",
       },
       400,
     );
