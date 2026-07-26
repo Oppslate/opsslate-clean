@@ -212,3 +212,42 @@ points.
   global horizontal overflow and no errors in a clean browser session
 - Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
 - Vercel deployment, production promotion, and domain changes: Not performed
+
+### Foundation item 3E.1 owner pay-item register and import review
+
+- Application checkpoint: `262e6f9`
+- Official owner-item contract: sequence, item number, official and estimator
+  descriptions, quantity, unit, item type, fixed amount, evidence, confidence,
+  and review state added and validated
+- Import comparison: new, unchanged, changed, conflicting, and missing owner
+  records are staged deterministically against the prior accepted version
+- Estimator decisions: accept, correct, reject, defer, merge, split, and map
+  implemented as real tenant-authorized mutations
+- Decision history: append-only reviewer, timestamp, reason, target, original
+  value, and decided value retained for every action
+- Bid-day speed: Accept and Defer are one-click row actions; Accept Remaining
+  Unchanged is one click and writes a separate audit event for every record
+- Import acceptance: deterministic checks block unresolved proposals, deferred
+  records, duplicate owner items, duplicate official sequence, missing fixed
+  amounts, and an empty retained schedule
+- Version safety: accepted owner-item registers are immutable; later analysis
+  creates a new reviewable estimate version
+- Build View and Bid Schedule View: verified to use the same owner-item records;
+  Bid Schedule preserves global official sequence independently of operational
+  section order
+- Legacy version compatibility: pre-3E.1 items receive deterministic sequence,
+  item-type, change-type, review-summary, and history fallbacks
+- Live Seneca validation: one-click Defer and Accept persisted with separate
+  audit events; the review dialog exposed all official fields; import remained
+  unlocked with the other records still proposed
+- Accessibility: modal keyboard focus returns to the originating Review button
+- Desktop, `820 px` tablet, and `390 px` mobile: Passed; no global horizontal
+  overflow and the mobile review dialog remained within the viewport
+- Automated domain tests: 14 passed
+- Automated Helios security and UI boundary tests: 39 passed
+- Helios lint, targeted Convex lint/type generation, and Helios production
+  build: Passed
+- Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Next approved milestone: Foundation 3E.2 internal cost-code and resource
+  build-up
