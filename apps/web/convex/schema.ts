@@ -292,6 +292,244 @@ export default defineSchema({
     .index("by_project_hash", ["projectId", "sha256"])
     .index("by_company_updated", ["companyId", "updatedAt"]),
 
+  // Foundation 5A: additive canonical engineering-record boundary. Existing
+  // document, plan, and geometry tables remain authoritative until an explicit
+  // shadow-mode comparison and cutover milestone is approved.
+  heliosEngineeringRecords: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    bidBasisFingerprint: v.string(),
+    sourceFingerprint: v.string(),
+    schemaVersion: v.number(),
+    processingVersion: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("indexing"),
+      v.literal("ready"),
+      v.literal("partially_ready"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    isCurrent: v.boolean(),
+    coverage: v.object({
+      documentIntelligence: v.union(
+        v.literal("not_applicable"), v.literal("pending"), v.literal("processing"),
+        v.literal("ready"), v.literal("partially_ready"), v.literal("failed"),
+      ),
+      planReconstruction: v.union(
+        v.literal("not_applicable"), v.literal("pending"), v.literal("processing"),
+        v.literal("ready"), v.literal("partially_ready"), v.literal("failed"),
+      ),
+      civilGeometry: v.union(
+        v.literal("not_applicable"), v.literal("pending"), v.literal("processing"),
+        v.literal("ready"), v.literal("partially_ready"), v.literal("failed"),
+      ),
+    }),
+    sourceCount: v.number(),
+    pageCount: v.number(),
+    assetCount: v.number(),
+    unresolvedIssueCount: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_package", ["packageId", "createdAt"])
+    .index("by_source_fingerprint", ["sourceFingerprint"]),
+
+  heliosEngineeringSources: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    sourceKind: v.union(v.literal("pdf"), v.literal("written_scope")),
+    documentId: v.optional(v.id("heliosDocuments")),
+    writtenScopeId: v.optional(v.id("heliosWrittenScopes")),
+    originalStorageId: v.optional(v.id("_storage")),
+    originalSha256: v.string(),
+    originalFileName: v.string(),
+    relativePath: v.string(),
+    contentType: v.string(),
+    byteSize: v.number(),
+    sourceVersion: v.number(),
+    sourceFingerprint: v.string(),
+    status: v.union(
+      v.literal("registered"),
+      v.literal("extracting"),
+      v.literal("ready"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    immutable: v.boolean(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_record", ["engineeringRecordId", "createdAt"])
+    .index("by_document", ["documentId"])
+    .index("by_written_scope", ["writtenScopeId"])
+    .index("by_record_fingerprint", ["engineeringRecordId", "sourceFingerprint"]),
+
+  heliosEngineeringPages: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    physicalPageNumber: v.number(),
+    widthPoints: v.number(),
+    heightPoints: v.number(),
+    rotationDegrees: v.number(),
+    pageSha256: v.string(),
+    modality: v.union(
+      v.literal("vector"),
+      v.literal("scanned"),
+      v.literal("hybrid"),
+      v.literal("unusable"),
+    ),
+    nativeTextStatus: v.union(
+      v.literal("not_applicable"), v.literal("pending"),
+      v.literal("ready"), v.literal("failed"),
+    ),
+    ocrStatus: v.union(
+      v.literal("not_applicable"), v.literal("pending"),
+      v.literal("ready"), v.literal("failed"),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_source_page", ["engineeringSourceId", "physicalPageNumber"])
+    .index("by_record", ["engineeringRecordId", "physicalPageNumber"]),
+
+  heliosEngineeringTextSpans: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    pageId: v.id("heliosEngineeringPages"),
+    channel: v.union(v.literal("native"), v.literal("ocr")),
+    readingOrder: v.number(),
+    text: v.string(),
+    boundary: v.object({
+      x: v.number(), y: v.number(), width: v.number(), height: v.number(),
+    }),
+    confidence: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_page_channel", ["pageId", "channel", "readingOrder"])
+    .index("by_source", ["engineeringSourceId", "createdAt"]),
+
+  heliosEngineeringAssets: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    pageId: v.id("heliosEngineeringPages"),
+    viewKey: v.optional(v.string()),
+    kind: v.union(
+      v.literal("page_render"),
+      v.literal("page_thumbnail"),
+      v.literal("view_crop"),
+    ),
+    storageId: v.id("_storage"),
+    contentType: v.string(),
+    sha256: v.string(),
+    boundary: v.optional(v.object({
+      x: v.number(), y: v.number(), width: v.number(), height: v.number(),
+    })),
+    pixelWidth: v.number(),
+    pixelHeight: v.number(),
+    dpi: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_page_kind", ["pageId", "kind"])
+    .index("by_source", ["engineeringSourceId", "createdAt"]),
+
+  heliosEngineeringArtifacts: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.optional(v.id("heliosEngineeringSources")),
+    kind: v.union(
+      v.literal("document_intelligence"),
+      v.literal("plan_inventory"),
+      v.literal("civil_geometry"),
+    ),
+    status: v.union(
+      v.literal("pending"), v.literal("processing"), v.literal("ready"),
+      v.literal("partially_ready"), v.literal("failed"), v.literal("superseded"),
+    ),
+    sourceFingerprint: v.string(),
+    schemaVersion: v.number(),
+    processingVersion: v.number(),
+    extractorVersion: v.string(),
+    promptVersion: v.string(),
+    modelVersion: v.string(),
+    recordCount: v.number(),
+    unresolvedIssueCount: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_record_kind", ["engineeringRecordId", "kind", "createdAt"])
+    .index("by_source_kind", ["engineeringSourceId", "kind", "createdAt"]),
+
+  heliosEngineeringProvenance: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    artifactId: v.id("heliosEngineeringArtifacts"),
+    pageId: v.optional(v.id("heliosEngineeringPages")),
+    evidenceId: v.optional(v.id("heliosEvidence")),
+    provenanceKind: v.union(
+      v.literal("source"),
+      v.literal("page"),
+      v.literal("text_span"),
+      v.literal("visual_region"),
+    ),
+    recordType: v.string(),
+    recordId: v.string(),
+    sourceLocator: v.string(),
+    boundary: v.optional(v.object({
+      x: v.number(), y: v.number(), width: v.number(), height: v.number(),
+    })),
+    textSpanIds: v.array(v.id("heliosEngineeringTextSpans")),
+    confidence: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_artifact", ["artifactId", "createdAt"])
+    .index("by_source_record", ["engineeringSourceId", "recordType", "recordId"]),
+
+  heliosEngineeringRemoteFiles: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    provider: v.literal("openai"),
+    remoteFileId: v.string(),
+    purpose: v.literal("user_data"),
+    status: v.union(
+      v.literal("uploaded"), v.literal("active"), v.literal("deleting"),
+      v.literal("deleted"), v.literal("delete_failed"), v.literal("expired"),
+    ),
+    referenceCount: v.number(),
+    uploadedAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    expiresAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    cleanupAttempts: v.number(),
+    lastError: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_source_status", ["engineeringSourceId", "status"])
+    .index("by_provider_file", ["provider", "remoteFileId"])
+    .index("by_status_expiration", ["status", "expiresAt"]),
+
   heliosUploadIntents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

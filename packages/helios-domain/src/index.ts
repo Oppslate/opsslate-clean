@@ -3,6 +3,7 @@ export * from "./bid-basis.ts";
 export * from "./plan-intelligence.ts";
 export * from "./takeoff-intelligence.ts";
 export * from "./civil-geometry.ts";
+export * from "./engineering-record.ts";
 
 import {
   classifyEstimateWbsSection,
