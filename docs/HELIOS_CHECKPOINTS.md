@@ -32,7 +32,7 @@ points.
 | Foundation item 3D.1.1: above-fold decision dock | 2026-07-24 | Preview ready at `576a728`; tagged `helios-foundation-3d.1.1`; visual confirmation pending | Confirm the raised cockpit and decision-button visibility on the preview |
 | Foundation item 4 architecture: Bid Scout handoff, plan intelligence, deterministic takeoff, and bid digital twin | 2026-07-27 | Architecture approved at `2edd38b`; tagged `helios-foundation-4-architecture`; superseded by R1 before implementation | Preserve as the original architecture restore point; use R1 for implementation |
 | Foundation item 4 architecture R1: variable bid-basis profiles | 2026-07-27 | Architecture revised at `1eba29b`; tagged `helios-foundation-4-architecture-r1`; superseded by R2 before implementation | Preserve the variable bid-basis decision; use R2 for implementation |
-| Foundation item 4 architecture R2: manual-first canonical intake with future Bid Scout adapter | 2026-07-27 | Architecture revised at `667f3a7`; tagged `helios-foundation-4-architecture-r2`; implementation not started | Build manual PDF/folder/ZIP/written-scope intake and bid-basis profiling first; keep live Bid Scout disabled while contract fixtures prove future adapter compatibility |
+| Foundation item 4 architecture R2: manual-first canonical intake with future Bid Scout adapter | 2026-07-27 | Architecture revised at `667f3a7`; tagged `helios-foundation-4-architecture-r2`; implementation complete through Foundation 4C | Build Foundation 4D governed quantity intelligence; keep live Bid Scout disabled while contract fixtures prove future adapter compatibility |
 
 ### Foundation item 2 evidence
 
@@ -473,3 +473,43 @@ points.
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Next approved milestone: Foundation 4C plan-set reconstruction and spatial
   sheet intelligence
+
+### Foundation 4C mixed-mode plan-sheet intelligence
+
+- Application checkpoint: `513b4a5`
+- Revision control: every run is bound to company, project, active package,
+  package revision, and the Foundation 4B source fingerprint; superseded runs
+  remain intact and become non-current
+- Source control: the browser submits only the requested action; plan document
+  IDs are derived on the server from the authenticated current bid basis
+- Mixed-mode reasoning: vector, scanned, hybrid, and unusable pages are handled
+  explicitly by the OpenAI plan-document contract
+- Page exit gate: every physical PDF page is a construction sheet,
+  intentional non-sheet, or exception; omitted model pages become deterministic
+  exception records requiring reanalysis
+- Sheet/view register: title-block metadata, revisions, addendum association,
+  discipline, modality, view bounds, north orientation, measurability, and
+  unresolved issues are normalized without modifying the source PDF
+- Relationship graph: detail, section, match-line, continuation, plan/profile,
+  key-map, schedule, specification, and standard-detail references resolve only
+  against one current sheet; duplicates and missing targets remain visible
+- Scale safety: scale belongs to an individual view; candidates remain proposed
+  or conflicted until one-click estimator approval, and uncalibrated measurable
+  views stay blocked from quantity use
+- Variable bid basis: specs-only and written-scope projects show an explicit
+  nonblocking not-applicable state; plans are never required to open estimating
+- Non-regression: estimator, contractor WBS, Cockpit 2.0, Foundation 3C
+  findings, bid basis, quantity, pricing, procurement, evidence, and risk
+  contracts were not replaced
+- Automated domain tests: 36 passed
+- Automated Helios security and UI boundary tests: 65 passed
+- React quality review, Helios lint, targeted Foundation 4C Convex lint, domain
+  build, Convex schema/function generation, Helios production build, and shared
+  OpsSlate web production build: Passed
+- Authenticated browser verification: plans-enabled and specs-only projects
+  passed; desktop, 1024px tablet, and 390px mobile had no page-level horizontal
+  overflow, framework overlay, or console error
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Next approved milestone: Foundation 4D governed quantity intelligence and
+  calibrated plan takeoff
