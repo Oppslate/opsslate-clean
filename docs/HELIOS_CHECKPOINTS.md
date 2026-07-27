@@ -403,3 +403,36 @@ points.
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Next recommended milestone: Foundation 3E.5 estimate completeness, review
   gates, and pricing-risk reconciliation
+
+### Foundation 4A canonical manual package intake
+
+- Application checkpoint: `4830ec0`
+- Active acquisition: authenticated manual intake supports individual PDFs,
+  repeated folder selections, ZIP packages, supplemental/addendum revisions,
+  and exact written-scope evidence
+- Canonical contract: every selection creates a versioned manual envelope with
+  stable ID, manifest version, revision purpose, optional issued label,
+  normalized paths, source categories, counts, bytes, creator, timestamps, and
+  a deterministic fingerprint
+- Integrity: accepted PDFs are SHA-256 hashed before upload and independently
+  compared with secure-storage metadata before registration; written-scope size
+  and hash are recomputed on the server
+- Idempotency: replaying an identical envelope returns the existing receipt;
+  reusing an envelope ID with changed contents is rejected
+- Revision control: same-path changed content creates an immutable superseding
+  version; exact project duplicates do not create duplicate source records
+- Scope-only behavior: written-scope-only packages reach bid-basis review
+  without entering or stalling the Foundation 3C PDF queue
+- Bid Scout boundary: the canonical contract accepts a disabled Bid Scout test
+  fixture with the same manifest shape, while all live Bid Scout mutations
+  remain reject-closed
+- Non-regression: estimator, contractor WBS, Cockpit 2.0, pricing, procurement,
+  risk, and existing PDF intelligence contracts were not replaced
+- Automated domain tests: 27 passed
+- Automated Helios security and UI boundary tests: 56 passed
+- React quality review, Helios lint, domain build, Convex schema/function
+  generation, Helios production build, and authenticated browser check: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Next approved milestone: Foundation 4B bid-basis profiling and document
+  control
