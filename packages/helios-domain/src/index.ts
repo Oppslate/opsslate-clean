@@ -22,6 +22,41 @@ export const HELIOS_MAX_PACKAGE_DEPTH = 12;
 export const HELIOS_MANIFEST_VERSION = 1;
 export const HELIOS_MAX_WRITTEN_SCOPE_BYTES = 128 * 1024;
 
+const BASE64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+export function sha256HexToBase64(value: string) {
+  if (!/^[a-f0-9]{64}$/i.test(value)) {
+    throw new HeliosValidationError("SHA-256 digest must be 64 hexadecimal characters.");
+  }
+  const bytes = Array.from({ length: 32 }, (_, index) =>
+    Number.parseInt(value.slice(index * 2, index * 2 + 2), 16),
+  );
+  let encoded = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index];
+    const second = bytes[index + 1];
+    const third = bytes[index + 2];
+    const combined = (first << 16) | ((second || 0) << 8) | (third || 0);
+    encoded += BASE64_ALPHABET[(combined >> 18) & 63];
+    encoded += BASE64_ALPHABET[(combined >> 12) & 63];
+    encoded += second === undefined ? "=" : BASE64_ALPHABET[(combined >> 6) & 63];
+    encoded += third === undefined ? "=" : BASE64_ALPHABET[combined & 63];
+  }
+  return encoded;
+}
+
+export function sha256MatchesStorageDigest(
+  manifestHexDigest: string,
+  storageBase64Digest: string,
+) {
+  try {
+    return sha256HexToBase64(manifestHexDigest) === storageBase64Digest;
+  } catch {
+    return false;
+  }
+}
+
 export const HELIOS_PROJECT_STATUSES = [
   "draft",
   "intake",

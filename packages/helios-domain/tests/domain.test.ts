@@ -27,8 +27,19 @@ import {
   parseEstimateProposal,
   parseProjectSynthesis,
   reconcileAllocations,
+  sha256HexToBase64,
+  sha256MatchesStorageDigest,
   validatePdfCandidate,
 } from "../src/index.ts";
+
+test("compares browser hexadecimal SHA-256 with Convex Base64 storage metadata", () => {
+  const hexadecimal =
+    "eaabc4702f84ca61f1b74631cf405b4cdb64598618cc39edbc429644f06b2ab1";
+  const base64 = "6qvEcC+EymHxt0Yxz0BbTNtkWYYYzDntvEKWRPBrKrE=";
+  assert.equal(sha256HexToBase64(hexadecimal), base64);
+  assert.equal(sha256MatchesStorageDigest(hexadecimal, base64), true);
+  assert.equal(sha256MatchesStorageDigest(hexadecimal, `${base64.slice(0, -2)}A=`), false);
+});
 
 test("defines the ordered contractor WBS independently of owner specification groupings", () => {
   assert.deepEqual(

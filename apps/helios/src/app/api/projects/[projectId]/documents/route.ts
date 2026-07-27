@@ -1,4 +1,4 @@
-import { callHeliosGateway } from "@/lib/helios-gateway";
+import { callHeliosGateway, HeliosGatewayError } from "@/lib/helios-gateway";
 import { readHeliosPrincipal } from "@/lib/helios-session";
 import { apiJson, isSameOrigin } from "@/lib/request-security";
 
@@ -39,7 +39,10 @@ export async function POST(
       },
     );
     return apiJson({ data }, 201);
-  } catch {
+  } catch (error) {
+    if (error instanceof HeliosGatewayError && error.status === 400) {
+      return apiJson({ error: error.message }, 400);
+    }
     return apiJson({ error: "PDF validation or registration failed." }, 400);
   }
 }

@@ -7,6 +7,7 @@ import {
   canonicalPdfFileName,
   deriveHeliosBidBasis,
   normalizeProjectInput,
+  sha256MatchesStorageDigest,
   type HeliosBidBasisAvailabilityState,
   type HeliosBidBasisCategory,
   type HeliosBidBasisProfileType,
@@ -933,7 +934,8 @@ export const registerDocument = internalMutation({
             ? "Uploaded PDF exceeds the allowed size."
             : packageEntry && metadata.size !== packageEntry.size
               ? "Uploaded PDF size does not match the package manifest."
-            : packageEntry?.sha256 && metadata.sha256 !== packageEntry.sha256
+            : packageEntry?.sha256 &&
+                !sha256MatchesStorageDigest(packageEntry.sha256, metadata.sha256)
               ? "Uploaded PDF hash does not match the package manifest."
             : !args.magicValid
               ? "Uploaded file does not contain a valid PDF signature."

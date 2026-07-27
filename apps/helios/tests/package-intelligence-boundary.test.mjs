@@ -90,7 +90,7 @@ test("upload authorization is bound to one package entry", () => {
   assert.match(uploadRoute, /packageEntryId/);
   assert.match(projects, /entry\.packageId !== bidPackage\._id/);
   assert.match(projects, /metadata\.size !== packageEntry\.size/);
-  assert.match(projects, /metadata\.sha256 !== packageEntry\.sha256/);
+  assert.match(projects, /sha256MatchesStorageDigest/);
   assert.match(projects, /packageEntryId: packageEntry\?\._id/);
   assert.match(projects, /if \(!bidPackage\)/);
 });

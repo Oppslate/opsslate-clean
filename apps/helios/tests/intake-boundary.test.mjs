@@ -47,8 +47,14 @@ test("storage registration validates server-observed PDF data", () => {
   assert.match(gateway, /response\.body\.getReader\(\)/);
   assert.match(gateway, /PDF_SIGNATURE = "%PDF-"/);
   assert.match(projectStore, /metadata\.contentType !== "application\/pdf"/);
-  assert.match(projectStore, /metadata\.sha256/);
+  assert.match(projectStore, /sha256MatchesStorageDigest/);
   assert.match(projectStore, /by_project_hash/);
   assert.match(projectStore, /ctx\.storage\.delete/);
   assert.doesNotMatch(projectStore, /getUrl\(/);
+});
+
+test("registration returns safe actionable validation errors to the uploader", () => {
+  assert.match(documentRoute, /HeliosGatewayError/);
+  assert.match(documentRoute, /error\.message/);
+  assert.match(gateway, /document_registration_validation_failed/);
 });
