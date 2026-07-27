@@ -436,3 +436,40 @@ points.
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Next approved milestone: Foundation 4B bid-basis profiling and document
   control
+
+### Foundation 4B bid-basis profiling and document control
+
+- Application checkpoint: `e0e0e24`
+- Revision profile: each active package is classified as plans and
+  specifications, plans-only, specifications-only, written-scope-only, or
+  mixed/other without requiring a conventional full bid set
+- Category control: plans, specifications, written scope, owner bid schedule,
+  proposal forms, addenda, geotechnical, utility, environmental/permit, and
+  referenced-standard sources retain independent availability and processing
+  states
+- Capability readiness: estimate access, plan takeoff, specification
+  compliance, owner-item reconciliation, and bid-submission review are
+  evaluated independently with plain-language limitations
+- Bid-day workflow: `Proceed with available basis`, `Not issued`, and `N/A`
+  are one-click decisions; focused profile and document corrections require an
+  auditable reason
+- Integrity: automatic classification uses retained paths, filenames,
+  document-intelligence categories, AI document type, and intake source hints;
+  estimator corrections never alter immutable source or AI records
+- Safety: one usable scope basis opens estimating, missing categories limit
+  only dependent capabilities, and unsupported quantities remain unknown or
+  takeoff-required rather than zero
+- Audit: profile decisions and document corrections are tenant/project/package
+  authorized and recorded as append-only before/after events per revision
+- Non-regression: estimator, contractor WBS, Cockpit 2.0, quantity, pricing,
+  procurement, evidence, risk, authentication, canonical intake, and existing
+  document-intelligence contracts were not replaced
+- Automated domain tests: 33 passed
+- Automated Helios security and UI boundary tests: 60 passed
+- React quality review, Helios lint, domain build, Convex schema/function
+  generation, Helios production build, and authenticated browser review:
+  Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Next approved milestone: Foundation 4C plan-set reconstruction and spatial
+  sheet intelligence
