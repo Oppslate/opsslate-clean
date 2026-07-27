@@ -665,3 +665,40 @@ points.
 - Convex development schema/functions: deployed to `kindly-tiger-289`
 - Approval gate: stop before Stage 3 golden-project plan/geometry parity and any
   consumer cutover
+
+### Canonical engineering record — Stage 3 golden-project parity
+
+- Application checkpoint: `48f758e`
+- Scope: internal exact-parity evaluator and shadow-backfill hardening only;
+  no application consumer, prompt, upload path, or OpenAI lifecycle cutover
+- Stored parity: versioned `heliosEngineeringParityRuns` retain the compared
+  package revision, canonical record, input fingerprint, per-area result,
+  exact mismatched IDs, issues, author, and completion time
+- Exact coverage: source identities, document-intelligence records, evidence,
+  plan pages, plan views, calibrations, references, and civil-geometry records
+  compare by deterministic content fingerprint rather than count alone
+- Fail-closed behavior: missing, unexpected, or altered records fail; unfinished
+  authoritative workflows remain incomplete; valid absent capabilities remain
+  not applicable
+- Large-package reliability: per-document, plan-document, and geometry-document
+  shadow workers no longer rewrite shared roots or the full source registry;
+  final aggregate refreshes run after isolated workers
+- Live golden parity, specifications-only project: 1/1 source, 1/1 document-
+  intelligence record, and 20/20 evidence records matched exactly; all plan and
+  geometry areas were correctly not applicable; overall status passed
+- Live staged parity, 34-source project: 34/34 sources, 34/34 document-
+  intelligence records, and 523/523 evidence records matched exactly after one
+  backfill; plan and geometry areas were correctly incomplete because no
+  authoritative plan run exists in the development data
+- Honest validation boundary: no plan or geometry success was fabricated; an
+  actual completed plan/geometry golden project is required before cutover
+- Automated domain tests: 60 passed
+- Automated Helios security and boundary tests: 78 passed
+- Targeted modified-file lint, domain build, shared web TypeScript, Helios
+  production build, shared OpsSlate web production build, and Convex
+  schema/function deployment: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, domain changes, consumer cutover,
+  remote-file reuse, and duplicate OpenAI-call removal: Not performed
+- Approval gate: stop before Stage 4 canonical-reader pilot and wait for owner
+  approval
