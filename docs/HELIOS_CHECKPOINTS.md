@@ -252,6 +252,7 @@ points.
   build: Passed
 - Isolated Convex development schema/functions: Deployed to `kindly-tiger-289`
 - Vercel deployment, production promotion, and domain changes: Not performed
+
 - Next approved milestone: Foundation 3E.2 internal cost-code and resource
   build-up
 
@@ -576,3 +577,43 @@ points.
   Convex schema/function deployment, and Helios production build: Passed
 - Convex development schema/functions: deployed to `kindly-tiger-289`
 - Vercel deployment, production promotion, and domain changes: Not performed
+
+### Canonical engineering record — Stage 1 foundation
+
+- Application checkpoint: `235564a`
+- Scope: additive contract, schema, provenance, compatibility boundaries, and
+  remote-file lifecycle only; no existing workflow was redirected
+- Canonical root: versioned company, project, package, revision, bid-basis,
+  source-fingerprint, coverage, and current/superseded identity
+- Immutable sources: existing protected PDF and written-scope records remain
+  the source of truth; canonical sources retain hashes, versions, paths, size,
+  content type, and original storage linkage
+- Reusable channels: physical pages, dimensions, rotation, page hashes,
+  native/OCR coordinate spans, protected page renders, thumbnails, and view
+  crops now have explicit additive storage contracts
+- Artifacts and provenance: future document, plan, and civil-geometry outputs
+  can be versioned and traced to sources, pages, text spans, visual regions, and
+  existing Helios evidence records
+- Remote lifecycle: one temporary OpenAI `user_data` file per source can be
+  tracked through upload, reuse, expiration, deletion, retry, and failure
+- Compatibility: browser hexadecimal and Convex Base64 SHA-256 values normalize
+  to one source fingerprint; company, project, package, revision, source, and
+  version mismatches fail closed
+- Variable bid basis: PDF and written-scope sources are supported; document,
+  plan, and civil-geometry coverage can be explicitly not applicable
+- Non-regression: existing Document Intelligence, Plan Reconstruction, Civil
+  Geometry, Project Intelligence, WBS, Estimate Builder, Cockpit 2.0, quantity,
+  pricing, procurement, evidence, risk, and estimator decisions remain
+  authoritative and unchanged
+- Duplicate OpenAI uploads: intentionally still present in Stage 1; removal is
+  prohibited until shadow ingestion and parity comparison are approved
+- Automated domain tests: 53 passed
+- Automated Helios security and UI boundary tests: 73 passed
+- Domain build, Helios lint, targeted Convex schema lint, shared web TypeScript,
+  Helios production build, shared OpsSlate web production build, and Convex
+  schema/function generation: Passed
+- Convex development schema: deployed empty additive tables and indexes to
+  `kindly-tiger-289`; existing records were not migrated
+- Vercel deployment, production promotion, domain changes, canonical writers,
+  workflow cutover, and remote-file reuse: Not performed
+- Approval gate: stop before Stage 2 shadow ingestion
