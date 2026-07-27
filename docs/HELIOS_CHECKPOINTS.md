@@ -555,3 +555,24 @@ points.
   domain changes: Not performed
 - Next recommended milestone: Foundation 4E golden-project validation and
   automated quantity execution
+
+### Plan PDF upload digest hotfix
+
+- Application checkpoint: `3778fe3`
+- Root cause: browser manifests stored SHA-256 digests as lowercase hexadecimal,
+  while Convex storage metadata returned the identical digest as Base64; direct
+  string comparison caused every valid plan PDF to fail registration
+- Integrity control: manifest digests are deterministically converted before
+  comparison; only byte-identical SHA-256 values pass and invalid or mismatched
+  digests still fail closed
+- Retry behavior: existing failed and pending package entries remain reusable,
+  so reselecting the same folder or ZIP resumes the current package revision
+  without duplicating registered documents
+- Operator feedback: safe validation messages are returned for actionable
+  upload failures instead of collapsing every failure into one generic message
+- Automated domain tests: 49 passed
+- Automated Helios security and UI boundary tests: 69 passed
+- Helios lint, targeted Convex lint, TypeScript validation, domain build,
+  Convex schema/function deployment, and Helios production build: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Vercel deployment, production promotion, and domain changes: Not performed
