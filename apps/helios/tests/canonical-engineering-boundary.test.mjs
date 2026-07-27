@@ -85,3 +85,53 @@ test("Stage 1 keeps all three downstream coverage decisions explicit", async () 
   assert.match(schema, /civilGeometry/);
   assert.match(schema, /not_applicable/);
 });
+
+test("Stage 2 mirrors authoritative outputs without making another OpenAI request", async () => {
+  const [shadow, scheduler, documentActions, planActions, geometryActions] =
+    await Promise.all([
+      source("web/convex/heliosEngineeringShadow.ts"),
+      source("web/convex/heliosEngineeringShadowSchedule.ts"),
+      source("web/convex/heliosIntelligenceActions.ts"),
+      source("web/convex/heliosPlanActions.ts"),
+      source("web/convex/heliosCivilGeometryActions.ts"),
+    ]);
+  assert.match(shadow, /shadowMode: true/);
+  assert.match(shadow, /heliosDocumentIntelligence/);
+  assert.match(shadow, /heliosPlanPages/);
+  assert.match(shadow, /heliosCivilGeometryRecords/);
+  assert.match(shadow, /ensureProvenance/);
+  assert.doesNotMatch(shadow, /from "openai"|files\.create|responses\.create/);
+  assert.match(scheduler, /scheduleWithoutBlocking/);
+  for (const activeAction of [documentActions, planActions, geometryActions]) {
+    assert.doesNotMatch(activeAction, /heliosEngineeringShadow/);
+  }
+});
+
+test("Stage 2 remains a write-only shadow boundary for estimator workflows", async () => {
+  const consumers = await Promise.all([
+    source("web/convex/heliosGateway.ts"),
+    source("web/convex/heliosEstimates.ts"),
+    source("web/convex/heliosEstimateBuild.ts"),
+    source("web/convex/heliosTakeoffIntelligence.ts"),
+  ]);
+  for (const consumer of consumers) {
+    assert.doesNotMatch(
+      consumer,
+      /heliosEngineeringRecords|heliosEngineeringArtifacts|heliosEngineeringPages/,
+    );
+  }
+});
+
+test("Stage 2 exposes an internal parity report and idempotent source identities", async () => {
+  const [shadow, schema] = await Promise.all([
+    source("web/convex/heliosEngineeringShadow.ts"),
+    source("web/convex/schema.ts"),
+  ]);
+  assert.match(shadow, /getShadowParity = internalQuery/);
+  assert.match(shadow, /by_record_document/);
+  assert.match(shadow, /by_authoritative_record/);
+  assert.match(shadow, /by_artifact_record/);
+  assert.match(schema, /authoritativeRecordType/);
+  assert.match(schema, /authoritativeRecordId/);
+  assert.match(schema, /shadowMode: v\.boolean/);
+});

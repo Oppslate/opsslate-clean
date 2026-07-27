@@ -338,6 +338,7 @@ export default defineSchema({
   })
     .index("by_project_current", ["projectId", "isCurrent"])
     .index("by_package", ["packageId", "createdAt"])
+    .index("by_package_current", ["packageId", "isCurrent"])
     .index("by_source_fingerprint", ["sourceFingerprint"]),
 
   heliosEngineeringSources: defineTable({
@@ -371,6 +372,8 @@ export default defineSchema({
     .index("by_record", ["engineeringRecordId", "createdAt"])
     .index("by_document", ["documentId"])
     .index("by_written_scope", ["writtenScopeId"])
+    .index("by_record_document", ["engineeringRecordId", "documentId"])
+    .index("by_record_written_scope", ["engineeringRecordId", "writtenScopeId"])
     .index("by_record_fingerprint", ["engineeringRecordId", "sourceFingerprint"]),
 
   heliosEngineeringPages: defineTable({
@@ -378,11 +381,16 @@ export default defineSchema({
     projectId: v.id("heliosProjects"),
     engineeringRecordId: v.id("heliosEngineeringRecords"),
     engineeringSourceId: v.id("heliosEngineeringSources"),
+    sourcePlanPageId: v.optional(v.id("heliosPlanPages")),
     physicalPageNumber: v.number(),
-    widthPoints: v.number(),
-    heightPoints: v.number(),
-    rotationDegrees: v.number(),
-    pageSha256: v.string(),
+    widthPoints: v.optional(v.number()),
+    heightPoints: v.optional(v.number()),
+    rotationDegrees: v.optional(v.number()),
+    pageSha256: v.optional(v.string()),
+    printedPageNumber: v.optional(v.string()),
+    sheetNumber: v.optional(v.string()),
+    title: v.optional(v.string()),
+    confidence: v.optional(v.number()),
     modality: v.union(
       v.literal("vector"),
       v.literal("scanned"),
@@ -401,6 +409,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_source_page", ["engineeringSourceId", "physicalPageNumber"])
+    .index("by_source_plan_page", ["sourcePlanPageId"])
     .index("by_record", ["engineeringRecordId", "physicalPageNumber"]),
 
   heliosEngineeringTextSpans: defineTable({
@@ -445,6 +454,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_page_kind", ["pageId", "kind"])
+    .index("by_record", ["engineeringRecordId", "createdAt"])
     .index("by_source", ["engineeringSourceId", "createdAt"]),
 
   heliosEngineeringArtifacts: defineTable({
@@ -468,6 +478,9 @@ export default defineSchema({
     extractorVersion: v.string(),
     promptVersion: v.string(),
     modelVersion: v.string(),
+    authoritativeRecordType: v.string(),
+    authoritativeRecordId: v.string(),
+    shadowMode: v.boolean(),
     recordCount: v.number(),
     unresolvedIssueCount: v.number(),
     lastError: v.optional(v.string()),
@@ -476,7 +489,12 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
   })
     .index("by_record_kind", ["engineeringRecordId", "kind", "createdAt"])
-    .index("by_source_kind", ["engineeringSourceId", "kind", "createdAt"]),
+    .index("by_source_kind", ["engineeringSourceId", "kind", "createdAt"])
+    .index("by_authoritative_record", [
+      "engineeringRecordId",
+      "authoritativeRecordType",
+      "authoritativeRecordId",
+    ]),
 
   heliosEngineeringProvenance: defineTable({
     companyId: v.id("companies"),
@@ -503,6 +521,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_artifact", ["artifactId", "createdAt"])
+    .index("by_record", ["engineeringRecordId", "createdAt"])
+    .index("by_artifact_record", ["artifactId", "recordType", "recordId"])
     .index("by_source_record", ["engineeringSourceId", "recordType", "recordId"]),
 
   heliosEngineeringRemoteFiles: defineTable({

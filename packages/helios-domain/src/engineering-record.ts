@@ -117,6 +117,12 @@ export type HeliosEngineeringCoverage = Record<
   HeliosEngineeringCoverageStatus
 >;
 
+export type HeliosEngineeringRecordCoverage = {
+  documentIntelligence: HeliosEngineeringCoverageStatus;
+  planReconstruction: HeliosEngineeringCoverageStatus;
+  civilGeometry: HeliosEngineeringCoverageStatus;
+};
+
 export type HeliosEngineeringSourceFingerprintInput = {
   sha256: string;
   packageRevision: number;
@@ -136,6 +142,16 @@ export type HeliosEngineeringCompatibilityIdentity = {
   writtenScopeId?: string;
   sha256: string;
   sourceVersion: number;
+};
+
+export type HeliosEngineeringShadowCoverageInput = {
+  pdfSourceCount: number;
+  completedDocumentCount: number;
+  failedDocumentCount: number;
+  activeDocumentCount: number;
+  plansApplicable: boolean;
+  planRunStatus?: string;
+  geometryRunStatus?: string;
 };
 
 export class HeliosEngineeringRecordError extends Error {}
@@ -239,4 +255,55 @@ export function assertHeliosEngineeringCompatibility(
     );
   }
   return true;
+}
+
+function processingCoverageStatus(status?: string): HeliosEngineeringCoverageStatus {
+  if (!status) return "pending";
+  if (["queued", "uploading", "analyzing", "processing"].includes(status)) {
+    return "processing";
+  }
+  if (["ready", "ready_for_review", "completed"].includes(status)) return "ready";
+  if (status === "partially_ready") return "partially_ready";
+  if (status === "failed") return "failed";
+  if (status === "not_applicable_to_current_basis") return "not_applicable";
+  return "pending";
+}
+
+export function deriveHeliosEngineeringShadowCoverage(
+  input: HeliosEngineeringShadowCoverageInput,
+): HeliosEngineeringRecordCoverage {
+  const documentIntelligence: HeliosEngineeringCoverageStatus =
+    input.pdfSourceCount === 0
+      ? "not_applicable"
+      : input.activeDocumentCount > 0
+        ? "processing"
+        : input.completedDocumentCount === input.pdfSourceCount
+          ? "ready"
+          : input.completedDocumentCount > 0
+            ? "partially_ready"
+            : input.failedDocumentCount === input.pdfSourceCount
+              ? "failed"
+              : "pending";
+  const planReconstruction = input.plansApplicable
+    ? processingCoverageStatus(input.planRunStatus)
+    : "not_applicable";
+  const civilGeometry = input.plansApplicable
+    ? processingCoverageStatus(input.geometryRunStatus)
+    : "not_applicable";
+  return { documentIntelligence, planReconstruction, civilGeometry };
+}
+
+export function deriveHeliosEngineeringShadowRecordStatus(
+  coverage: HeliosEngineeringRecordCoverage,
+): HeliosEngineeringRecordStatus {
+  const applicable = Object.values(coverage).filter(
+    (status) => status !== "not_applicable",
+  );
+  if (!applicable.length) return "ready";
+  if (applicable.every((status) => status === "ready")) return "ready";
+  if (applicable.every((status) => status === "failed")) return "failed";
+  if (applicable.some((status) => ["ready", "partially_ready", "failed"].includes(status))) {
+    return "partially_ready";
+  }
+  return "indexing";
 }

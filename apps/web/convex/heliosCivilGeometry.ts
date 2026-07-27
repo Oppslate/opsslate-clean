@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { heliosPrincipalValidator, requireHeliosPrincipal } from "./heliosAuthorization";
+import { scheduleGeometryRunShadow } from "./heliosEngineeringShadowSchedule";
 
 const PROCESSING_VERSION = 1;
 const startGeometryDocumentReference = makeFunctionReference<"action", { jobId: Id<"heliosCivilGeometryJobs"> }, null>("heliosCivilGeometryActions:startGeometryDocument");
@@ -13,7 +14,7 @@ async function finalizeGeometryRun(ctx: MutationCtx, runId: Id<"heliosCivilGeome
   const run = await ctx.db.get(runId);
   if (!run) return;
   const jobs = await ctx.db.query("heliosCivilGeometryJobs").withIndex("by_run", (query) => query.eq("geometryRunId", runId)).collect();
-  if (jobs.some((job) => !["completed", "failed"].includes(job.status))) return;
+  if (jobs.some((job) => !["completed", "failed"].includes(job.status))) return false;
   const records = await ctx.db.query("heliosCivilGeometryRecords").withIndex("by_run_created", (query) => query.eq("geometryRunId", runId)).collect();
   const failed = jobs.filter((job) => job.status === "failed");
   const now = Date.now();
@@ -26,6 +27,8 @@ async function finalizeGeometryRun(ctx: MutationCtx, runId: Id<"heliosCivilGeome
     updatedAt: now,
     completedAt: now,
   });
+  await scheduleGeometryRunShadow(ctx, runId);
+  return true;
 }
 
 export const reviewGeometry = internalMutation({

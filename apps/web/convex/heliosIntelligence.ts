@@ -17,6 +17,10 @@ import {
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
 import { ensureBidBasisProfile } from "./heliosBidBasis";
+import {
+  scheduleDocumentShadow,
+  scheduleProjectShadow,
+} from "./heliosEngineeringShadowSchedule";
 
 const startDocumentReference = makeFunctionReference<
   "action",
@@ -326,6 +330,7 @@ export const finalizePackage = internalMutation({
       if (finalizedPackage) {
         await ensureBidBasisProfile(ctx, project, finalizedPackage);
       }
+      await scheduleProjectShadow(ctx, project._id, bidPackage._id);
       return {
         packageId: String(bidPackage._id),
         status: "ready_for_review" as const,
@@ -356,6 +361,7 @@ export const finalizePackage = internalMutation({
     if (finalizedPackage) {
       await ensureBidBasisProfile(ctx, project, finalizedPackage);
     }
+    await scheduleProjectShadow(ctx, project._id, bidPackage._id);
     return {
       packageId: String(bidPackage._id),
       status: "processing" as const,
@@ -574,6 +580,7 @@ export const failDocumentJob = internalMutation({
     if (!hasActive && hasCompleted) {
       await maybeStartProjectSynthesis(ctx, job.projectId, job.packageId);
     }
+    await scheduleDocumentShadow(ctx, job._id);
     return null;
   },
 });
@@ -675,6 +682,7 @@ export const completeDocumentJob = internalMutation({
       completedAt: now,
       updatedAt: now,
     });
+    await scheduleDocumentShadow(ctx, job._id);
 
     const documents = await ctx.db
       .query("heliosDocuments")

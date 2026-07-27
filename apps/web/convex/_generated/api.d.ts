@@ -79,6 +79,8 @@ import type * as heliosBidBasis from "../heliosBidBasis.js";
 import type * as heliosCivilGeometry from "../heliosCivilGeometry.js";
 import type * as heliosCivilGeometryActions from "../heliosCivilGeometryActions.js";
 import type * as heliosCivilGeometryOpenAIContracts from "../heliosCivilGeometryOpenAIContracts.js";
+import type * as heliosEngineeringShadow from "../heliosEngineeringShadow.js";
+import type * as heliosEngineeringShadowSchedule from "../heliosEngineeringShadowSchedule.js";
 import type * as heliosEstimateActions from "../heliosEstimateActions.js";
 import type * as heliosEstimateBuild from "../heliosEstimateBuild.js";
 import type * as heliosEstimateOpenAIContracts from "../heliosEstimateOpenAIContracts.js";
@@ -218,6 +220,8 @@ declare const fullApi: ApiFromModules<{
   heliosCivilGeometry: typeof heliosCivilGeometry;
   heliosCivilGeometryActions: typeof heliosCivilGeometryActions;
   heliosCivilGeometryOpenAIContracts: typeof heliosCivilGeometryOpenAIContracts;
+  heliosEngineeringShadow: typeof heliosEngineeringShadow;
+  heliosEngineeringShadowSchedule: typeof heliosEngineeringShadowSchedule;
   heliosEstimateActions: typeof heliosEstimateActions;
   heliosEstimateBuild: typeof heliosEstimateBuild;
   heliosEstimateOpenAIContracts: typeof heliosEstimateOpenAIContracts;

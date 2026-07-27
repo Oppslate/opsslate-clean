@@ -18,6 +18,7 @@ import {
   type HeliosPrincipalArgs,
 } from "./heliosAuthorization";
 import { deriveProjectBidBasis } from "./heliosBidBasis";
+import { schedulePlanRunShadow } from "./heliosEngineeringShadowSchedule";
 
 const PROCESSING_VERSION = 1;
 
@@ -132,7 +133,7 @@ async function finalizeRun(ctx: MutationCtx, runId: Id<"heliosPlanRuns">) {
   const run = await ctx.db.get(runId);
   if (!run) return;
   const jobs = await ctx.db.query("heliosPlanJobs").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
-  if (jobs.some((job) => !["completed", "failed"].includes(job.status))) return;
+  if (jobs.some((job) => !["completed", "failed"].includes(job.status))) return false;
   const pages = await ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", runId)).collect();
   const references = await ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
   const calibrations = await ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
@@ -188,6 +189,8 @@ async function finalizeRun(ctx: MutationCtx, runId: Id<"heliosPlanRuns">) {
     updatedAt: now,
     completedAt: now,
   });
+  await schedulePlanRunShadow(ctx, runId);
+  return true;
 }
 
 export const reviewPlanIntelligence = internalMutation({
