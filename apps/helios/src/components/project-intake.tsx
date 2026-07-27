@@ -3,6 +3,7 @@
 import type {
   HeliosEstimateWorkspace,
   HeliosProjectDetail,
+  HeliosTakeoffWorkspace,
 } from "@opsslate/helios-domain";
 import type { HeliosPrincipal } from "@/lib/helios-principal";
 import { Badge } from "@opsslate/suite-ui/badge";
@@ -17,15 +18,18 @@ import { ProjectIntelligenceCockpit } from "./project-intelligence-cockpit";
 import { ProjectIntelligencePanel } from "./project-intelligence-panel";
 import { BidBasisPanel } from "./bid-basis-panel";
 import { PlanIntelligencePanel } from "./plan-intelligence-panel";
+import { QuantityIntelligencePanel } from "./quantity-intelligence-panel";
 
 export function ProjectIntake({
   detail,
   principal,
   workspace,
+  takeoff,
 }: {
   detail: HeliosProjectDetail;
   principal: HeliosPrincipal;
   workspace: HeliosEstimateWorkspace | null;
+  takeoff: HeliosTakeoffWorkspace | null;
 }) {
   const router = useRouter();
   const { project } = detail;
@@ -41,7 +45,8 @@ export function ProjectIntake({
         "uploading_to_openai",
         "analyzing",
       ].includes(document.status),
-    ) || Boolean(detail.planSet && ["queued", "processing"].includes(detail.planSet.status));
+    ) || Boolean(detail.planSet && ["queued", "processing"].includes(detail.planSet.status)) ||
+    Boolean(takeoff?.geometry && ["queued", "processing"].includes(takeoff.geometry.status));
 
   useEffect(() => {
     if (!processing) return;
@@ -70,6 +75,11 @@ export function ProjectIntake({
               projectId={project.id}
               bidBasis={detail.bidBasis}
               planSet={detail.planSet}
+            />
+            <QuantityIntelligencePanel
+              projectId={project.id}
+              planSet={detail.planSet}
+              workspace={takeoff}
             />
           </>
         )}

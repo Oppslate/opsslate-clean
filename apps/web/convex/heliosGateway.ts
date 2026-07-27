@@ -3,6 +3,8 @@ import {
   normalizeFindingReviewInput,
   normalizeBidBasisReviewInput,
   normalizePlanReviewInput,
+  normalizeTakeoffReviewInput,
+  normalizeCivilGeometryReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
   normalizeEstimateReviewInput,
@@ -11,6 +13,9 @@ import {
   type HeliosBidBasisProfile,
   type HeliosBidBasisReviewInput,
   type HeliosPlanReviewInput,
+  type HeliosTakeoffReviewInput,
+  type HeliosTakeoffWorkspace,
+  type HeliosCivilGeometryReviewInput,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
   type HeliosFindingReviewEvent,
@@ -189,6 +194,21 @@ const reviewPlanIntelligenceReference = makeFunctionReference<
   },
   unknown
 >("heliosPlanIntelligence:reviewPlanIntelligence");
+const getTakeoffWorkspaceReference = makeFunctionReference<
+  "query",
+  { principal: GatewayPrincipal; projectId: string },
+  HeliosTakeoffWorkspace | null
+>("heliosTakeoffIntelligence:getWorkspace");
+const mutateTakeoffReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosTakeoffReviewInput },
+  { eventId: string; measurementId?: string; quantityId?: string }
+>("heliosTakeoffIntelligence:mutateTakeoff");
+const reviewCivilGeometryReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosCivilGeometryReviewInput },
+  unknown
+>("heliosCivilGeometry:reviewGeometry");
 const getEstimateWorkspaceReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal; projectId: string },
@@ -891,6 +911,63 @@ export const reviewHeliosPlanIntelligence = httpAction(async (ctx, request) => {
     return json({
       error: error instanceof Error ? error.message : "Plan-intelligence action could not be saved.",
     }, 400);
+  }
+});
+
+export const getHeliosTakeoff = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  if (!boundedString(authorization.payload.projectId)) {
+    return json({ error: "Invalid takeoff request." }, 400);
+  }
+  try {
+    const data = await ctx.runQuery(getTakeoffWorkspaceReference, {
+      principal: principalFrom(authorization.payload),
+      projectId: authorization.payload.projectId,
+    });
+    return json({ data }, 200);
+  } catch {
+    return json({ error: "Quantity intelligence could not be loaded." }, 404);
+  }
+});
+
+export const mutateHeliosTakeoff = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid quantity-intelligence request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(mutateTakeoffReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeTakeoffReviewInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({
+      error: error instanceof Error ? error.message : "Quantity-intelligence action could not be saved.",
+    }, 400);
+  }
+});
+
+export const reviewHeliosCivilGeometry = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid civil-geometry request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(reviewCivilGeometryReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeCivilGeometryReviewInput(payload.input),
+    });
+    return json({ data }, 202);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Civil geometry action could not be saved." }, 400);
   }
 });
 

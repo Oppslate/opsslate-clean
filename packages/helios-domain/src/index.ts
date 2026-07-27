@@ -1,6 +1,8 @@
 export * from "./wbs.ts";
 export * from "./bid-basis.ts";
 export * from "./plan-intelligence.ts";
+export * from "./takeoff-intelligence.ts";
+export * from "./civil-geometry.ts";
 
 import {
   classifyEstimateWbsSection,
@@ -715,6 +717,7 @@ export type HeliosProjectDetail = {
   intelligence?: HeliosProjectIntelligence;
   bidBasis?: import("./bid-basis.ts").HeliosBidBasisProfile;
   planSet?: import("./plan-intelligence.ts").HeliosPlanSetIntelligence;
+  takeoff?: import("./takeoff-intelligence.ts").HeliosTakeoffWorkspace;
 };
 
 export type HeliosEstimateResource = {

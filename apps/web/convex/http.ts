@@ -7,10 +7,12 @@ import {
   createHeliosUploadIntent,
   getHeliosProject,
   getHeliosEstimate,
+  getHeliosTakeoff,
   finalizeHeliosPackage,
   listHeliosProjects,
   mutateHeliosEstimateBuild,
   mutateHeliosEstimateSupport,
+  mutateHeliosTakeoff,
   registerHeliosDocument,
   requestHeliosEstimateProposal,
   reclassifyHeliosEstimateWbs,
@@ -20,6 +22,7 @@ import {
   reviewHeliosFinding,
   reviewHeliosBidBasis,
   reviewHeliosPlanIntelligence,
+  reviewHeliosCivilGeometry,
   resolveIdentity,
   retryHeliosDocument,
   retryHeliosProject,
@@ -103,6 +106,21 @@ http.route({
   path: "/helios/v1/plan-intelligence/review",
   method: "POST",
   handler: reviewHeliosPlanIntelligence,
+});
+http.route({
+  path: "/helios/v1/takeoff/get",
+  method: "POST",
+  handler: getHeliosTakeoff,
+});
+http.route({
+  path: "/helios/v1/takeoff/review",
+  method: "POST",
+  handler: mutateHeliosTakeoff,
+});
+http.route({
+  path: "/helios/v1/civil-geometry/review",
+  method: "POST",
+  handler: reviewHeliosCivilGeometry,
 });
 http.route({
   path: "/helios/v1/estimates/get",

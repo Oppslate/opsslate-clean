@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { ProjectIntake } from "@/components/project-intake";
-import { getEstimateWorkspace, getProject } from "@/lib/helios-data";
+import { getEstimateWorkspace, getProject, getTakeoffWorkspace } from "@/lib/helios-data";
 import { HeliosGatewayError } from "@/lib/helios-gateway";
 import { readHeliosPrincipal } from "@/lib/helios-session";
 
@@ -21,10 +21,12 @@ export default async function ProjectPage({
   }
   let detail;
   let workspace;
+  let takeoff;
   try {
-    [detail, workspace] = await Promise.all([
+    [detail, workspace, takeoff] = await Promise.all([
       getProject(principal, projectId),
       getEstimateWorkspace(principal, projectId),
+      getTakeoffWorkspace(principal, projectId),
     ]);
   } catch (error) {
     if (error instanceof HeliosGatewayError && error.status === 404) {
@@ -37,6 +39,7 @@ export default async function ProjectPage({
       detail={detail}
       principal={principal}
       workspace={workspace}
+      takeoff={takeoff}
     />
   );
 }

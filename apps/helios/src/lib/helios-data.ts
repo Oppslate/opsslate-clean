@@ -6,6 +6,7 @@ import type {
   HeliosProjectDetail,
   HeliosProjectInput,
   HeliosProjectSummary,
+  HeliosTakeoffWorkspace,
 } from "@opsslate/helios-domain";
 import type { HeliosPrincipal } from "@/lib/helios-principal";
 
@@ -43,6 +44,17 @@ export function getEstimateWorkspace(
 ) {
   return callHeliosGateway<HeliosEstimateWorkspace | null>(
     "/helios/v1/estimates/get",
+    principal,
+    { projectId },
+  );
+}
+
+export function getTakeoffWorkspace(
+  principal: HeliosPrincipal,
+  projectId: string,
+) {
+  return callHeliosGateway<HeliosTakeoffWorkspace | null>(
+    "/helios/v1/takeoff/get",
     principal,
     { projectId },
   );
