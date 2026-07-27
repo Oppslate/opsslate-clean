@@ -13,9 +13,11 @@ to the existing Helios estimate
 
 Golden project: Kreese Mills Road Culvert
 
-Upstream acquisition system: Bid Scout
+Current acquisition path: authenticated manual upload to Helios
 
-Initial source handled by Bid Scout: Construction Exchange of Buffalo & WNY
+Planned upstream integration: Bid Scout through the canonical package adapter
+
+Initial external source reference: Construction Exchange of Buffalo & WNY
 Online Plan Room
 
 ## 1. Executive decision
@@ -46,9 +48,15 @@ The governing principle is:
 
 ```text
 Construction Exchange or other authorized bid source
-  -> Bid Scout acquisition and secure storage staging
-  -> versioned Bid Scout-to-Helios package handoff
-  -> Helios receipt and integrity verification
+  -> authorized user download
+  -> Helios manual PDF/folder/ZIP/written-scope intake (active)
+
+Future parallel path:
+Bid Scout acquisition and secure storage staging
+  -> versioned Bid Scout adapter (planned)
+
+Both paths
+  -> canonical package envelope and integrity verification
   -> immutable package manifest
   -> document and sheet classification
   -> bid-basis profile and capability determination
@@ -66,17 +74,18 @@ source record, and the viewer remains an evidence surface. The working product
 is a bid digital twin connected to traceable takeoffs and the existing
 contractor estimate.
 
-## 3. Bid Scout-to-Helios acquisition boundary
+## 3. Canonical package intake and future Bid Scout boundary
 
-Bid Scout owns all interaction with Construction Exchange and other approved
-construction bidding sources. Bid Scout discovers opportunities, performs the
-authorized download, stages the issued source materials in secure storage, and
-hands a declared bid-package revision to Helios.
+Manual upload is the approved active acquisition path. An authorized user
+downloads the available bid documents from Construction Exchange or another
+source and submits individual PDFs, folders, ZIP packages, or a written scope
+to Helios.
 
 Helios does not log in to, browse, scrape, or download from Construction
-Exchange. Helios begins at the authenticated package-handoff boundary. This
-keeps source-site automation and credentials outside Helios while preserving
-one evidence and intelligence pipeline after receipt.
+Exchange. The planned Bid Scout integration will later own that upstream
+automation, but Foundation 4 does not depend on Bid Scout availability. Both
+paths must create the same canonical Helios package envelope so downstream
+document intelligence and estimating behavior remain identical.
 
 The Construction Exchange publicly describes web access to project plans and
 specifications through its Online Plan Room, including specifications divided
@@ -87,38 +96,39 @@ Reference:
 
 - [Construction Exchange Online Plan Room](https://conexbuff.com/online-plan-room/)
 
-### 3.1 System ownership
+### 3.1 Active manual workflow
 
-The approved responsibility split is:
+The approved current workflow is:
 
-1. Bid Scout interacts with the authorized source and downloads the selected
-   plans, specifications, bid forms, addenda, and supporting documents.
-2. Bid Scout stores immutable source objects and creates a versioned package
-   manifest.
-3. Bid Scout initiates an authenticated, tenant-scoped handoff to Helios.
-4. Helios independently verifies authorization, manifest integrity, object
-   hashes, package revision, and safe object access.
-5. Helios durably copies every accepted object into its own protected project
-   storage, recomputes the hash, and only then acknowledges durable receipt.
-6. Helios registers the received package revision and applies the existing
-   document-intelligence pipeline.
-7. Helios reports every manifest entry as accepted, duplicate, superseded,
-   rejected, missing, or requiring attention before analysis can finalize.
+1. An authorized user downloads the available source package through the
+   source site's normal controls.
+2. The user selects individual PDFs, one or more folders, a ZIP package, or
+   enters an issued written scope in Helios.
+3. Helios creates a local manifest preview showing filenames, relative paths,
+   sizes, categories, duplicates, and detected revisions before finalization.
+4. Helios authorizes the current session, company, project, and role; validates
+   each object; and safely expands ZIP packages.
+5. Helios copies accepted objects into protected tenant/project storage,
+   computes hashes, and registers one immutable package revision.
+6. Helios reports every manifest entry as accepted, duplicate, superseded,
+   rejected, missing, or requiring attention.
+7. The existing document-intelligence pipeline receives only successfully
+   registered objects and the canonical package metadata.
 
-Helios may retain its current manual PDF, folder, and ZIP intake as a controlled
-fallback and test harness. That path is not the normal Construction Exchange
-workflow after Bid Scout integration and must produce the same canonical
-handoff manifest.
+Manual intake is not temporary throwaway code. It is the first supported
+adapter and remains available for direct packages, testing, recovery, and bid
+sources that Bid Scout does not cover.
 
-### 3.2 Handoff contract
+### 3.2 Canonical package-envelope contract
 
-Bid Scout must hand Helios a versioned package envelope containing:
+Every intake adapter must produce a versioned package envelope containing:
 
-- handoff ID, contract version, created time, and idempotency key;
+- envelope ID, contract version, created time, and idempotency key;
 - source system and source opportunity/project identifiers;
-- Bid Scout tenant/company ID and the authorized Helios destination company;
+- source adapter (`manual` or future `bid_scout`), source tenant/company when
+  applicable, and the authorized Helios destination company;
 - project name, owner, location, bid date, and available source metadata;
-- package revision, addendum/revision identifiers, and predecessor handoff;
+- package revision, addendum/revision identifiers, and predecessor envelope;
 - one manifest entry per object with stable object ID, original filename,
   relative path, media type, byte size, SHA-256 hash, source category, and
   source revision;
@@ -127,69 +137,94 @@ Bid Scout must hand Helios a versioned package envelope containing:
   time, source attribution, media type, byte size, and SHA-256 hash;
 - short-lived, least-privilege object references or a server-to-server transfer
   mechanism;
-- manifest totals and a Bid Scout transfer-completeness declaration;
+- manifest totals and an adapter transfer-completeness declaration;
 - authentication principal, authorization claims, and a signed envelope or
   equivalent tamper-evident proof.
 
-The contract is transport-neutral and must not expose Bid Scout's internal
-database schema. API delivery, durable event delivery, or an explicitly
-requested `Send to Helios` action may all use the same envelope. Receiving the
-same handoff more than once must return the original result without creating
-duplicate documents or analysis jobs.
+The contract is transport-neutral and must not expose an adapter's internal
+database schema. Manual upload creates this envelope inside the authenticated
+Helios request flow. Future API delivery, durable event delivery, or an
+explicit `Send to Helios` action uses the same contract. Replaying the same
+envelope must not create duplicate documents or analysis jobs.
 
-Helios returns a versioned receipt containing the handoff ID, Helios project
+Helios creates a versioned receipt containing the envelope ID, Helios project
 and package-revision IDs, manifest totals, per-entry terminal dispositions,
 durable-copy status, transfer-completeness status, bid-basis profile, and any
-retryable or permanent errors. Bid Scout must not treat a request timeout as a
-failed import; it queries or safely replays the same idempotency key until a
-terminal receipt is available.
+retryable or permanent errors. The manual adapter displays this receipt to the
+user. The future Bid Scout adapter receives the same result electronically.
 
-### 3.3 Trust boundary and security rules
+### 3.3 Planned Bid Scout adapter
+
+Bid Scout integration remains planned and disabled until Bid Scout is ready
+and separately approved. The future adapter will:
+
+1. interact with the authorized bidding source and stage the issued source
+   materials in Bid Scout-controlled storage;
+2. map the Bid Scout company/opportunity to an authorized Helios company and
+   project;
+3. create the canonical package envelope and provide short-lived,
+   least-privilege object references or server-to-server transfer;
+4. authenticate server-to-server and submit or replay the envelope using its
+   stable idempotency key; and
+5. receive the same terminal receipt produced for manual intake.
+
+The adapter may be developed against contract fixtures and a disabled feature
+flag before live Bid Scout integration. It must not create a second document-
+intelligence pipeline or require changes to the estimator, WBS, cockpit, risk,
+procurement, or quantity contracts.
+
+### 3.4 Trust boundary and security rules
 
 - Helios never receives or stores Construction Exchange passwords, browser
   cookies, session tokens, or source-site credentials.
-- Bid Scout identity is authenticated server-to-server; possession of an
-  object URL alone is never authorization to import it.
-- Helios derives the destination company and project authorization from the
-  authenticated handoff, never from an untrusted browser-supplied company ID.
+- Manual intake requires the existing authenticated Helios session, same-
+  origin mutation control, role authorization, and server-derived company and
+  project scope.
+- Future Bid Scout identity is authenticated server-to-server; possession of
+  an object URL alone is never authorization to import it.
+- Helios derives destination company and project authorization from the
+  authenticated session or future adapter identity, never from an untrusted
+  browser-supplied company ID.
 - The package is rejected closed when signature, tenant mapping, predecessor,
   hash, size, object count, or object access does not verify.
-- Object references are short lived, read only, scoped to the declared
-  manifest, and unusable across tenants.
+- Future remote object references are short lived, read only, scoped to the
+  declared manifest, and unusable across tenants.
 - Helios recomputes each object hash before registration and detects exact
   duplicates, content changes under reused filenames, and missing objects.
 - Encrypted, malformed, unsupported, or signature-mismatched objects are
   quarantined with a visible disposition.
 - Original source files remain private, tenant-scoped, immutable, and linked
-  to both the Bid Scout handoff and the Helios package revision.
-- Every handoff records source, Bid Scout opportunity, package revision,
-  initiating principal, receipt time, verification result, and downstream job
-  IDs without logging credentials or document contents.
+  to the intake envelope and Helios package revision.
+- Every intake records adapter, source reference, package revision, initiating
+  principal, receipt time, verification result, and downstream job IDs without
+  logging credentials or document contents.
 
-### 3.4 Bid Scout and Helios bid-basis responsibilities
+### 3.5 Adapter and Helios bid-basis responsibilities
 
-Bid Scout declares what it acquired; Helios independently determines the
-project's available bid basis and enables the capabilities supported by that
-basis. A successful transfer is not proof that every conventional document
-type exists, and the absence of a document that was never issued must not
-prevent the estimator from starting work.
+The active intake adapter declares what was selected or acquired; Helios
+independently determines the project's available bid basis and enables the
+capabilities supported by that basis. A successful transfer is not proof that
+every conventional document type exists, and the absence of a document that
+was never issued must not prevent the estimator from starting work.
 
-- Bid Scout completeness answers: "Did every selected source object reach
-  storage and enter the handoff manifest?"
+- Adapter completeness answers: "Did every selected source object reach
+  storage and enter the canonical manifest?"
 - Helios bid-basis review answers: "What authoritative information was issued,
   what was received, what remains expected, and which estimating capabilities
   can safely operate now?"
-- Bid Scout may label likely document categories, but Helios validates those
-  categories through the existing document-intelligence boundary.
-- A handoff may be technically complete while individual capabilities are
+- Manual user selections or future Bid Scout metadata may label likely
+  document categories, but Helios validates those categories through the
+  existing document-intelligence boundary.
+- An intake may be technically complete while individual capabilities are
   unavailable or provisional. For example, a specifications-only project can
   proceed through scope breakdown and estimating while plan measurement stays
   unavailable.
 - Only unresolved transfer or integrity failures block package registration.
   Missing source categories create scoped limitations, warnings, risks, and
   unknowns; they do not globally block the estimate.
-- Subsequent Bid Scout downloads create new package revisions; they never
-  mutate or replace a prior Helios source record in place.
+- Subsequent manual uploads or future Bid Scout deliveries create new package
+  revisions; they never mutate or replace a prior Helios source record in
+  place.
 
 ## 4. Non-regression boundaries
 
@@ -226,47 +261,53 @@ accepted work.
 
 ## 5. Foundation 4 increments
 
-## 5.1 Foundation 4A - Secure Bid Scout Package Handoff
+## 5.1 Foundation 4A - Canonical Package Intake
 
 ### Outcome
 
-Reliably receive, verify, and register Bid Scout package revisions without
-losing source identity, folder context, tenant isolation, or revision history.
-The existing individual-PDF, folder, and ZIP intake remains a contract-
-compatible fallback and test path.
+Reliably receive, verify, and register manual package revisions now without
+losing source identity, folder context, tenant isolation, or revision history,
+while establishing the stable adapter contract Bid Scout will use later.
 
 ### Functional requirements
 
-- F4A-001: publish and validate a versioned Bid Scout-to-Helios package
-  envelope;
-- F4A-002: authenticate Bid Scout and authorize the destination tenant and
-  project before accessing any source object;
-- F4A-003: retain source opportunity, package revision, original filename,
+- F4A-001: define and validate one versioned canonical package envelope for
+  every intake adapter;
+- F4A-002: support authenticated manual PDFs, multiple folders, ZIP packages,
+  append uploads, revised/addendum packages, and written-scope evidence;
+- F4A-003: authorize the active Helios session, role, company, project, and
+  parent hierarchy before accepting any object;
+- F4A-004: retain source reference, package revision, original filename,
   relative path, immutable object ID, and hash for every manifest entry;
-- F4A-004: make handoff receipt idempotent by handoff ID, package revision,
-  manifest entry, and content hash;
-- F4A-005: verify signed/tamper-evident envelope data, object availability,
-  byte size, media signature, and SHA-256 hash before registration;
-- F4A-006: show per-object and aggregate transfer, validation, registration,
+- F4A-005: safely expand ZIPs with bounded file count, expanded size, nesting
+  depth, media validation, and path-traversal protection;
+- F4A-006: verify object byte size, media signature, and SHA-256 hash before
+  registration;
+- F4A-007: make upload/receipt resumable and idempotent by envelope ID, package
+  revision, manifest entry, and content hash;
+- F4A-008: show per-object and aggregate transfer, validation, registration,
   and analysis-queue progress;
-- F4A-007: distinguish additions, supersessions, exact duplicates, conflicting
+- F4A-009: distinguish additions, supersessions, exact duplicates, conflicting
   reused filenames, and prior revisions;
-- F4A-008: reject closed on tenant mismatch, invalid predecessor, manifest
-  mismatch, expired object access, or missing objects;
-- F4A-009: safely support contract-compatible manual PDFs, folders, and ZIPs,
-  including bounded expansion, nesting limits, and path-traversal protection;
-- F4A-010: never finalize analysis while manifest entries remain unresolved;
-- F4A-011: acknowledge receipt to Bid Scout with terminal dispositions and
-  stable Helios package/revision identifiers;
-- F4A-012: produce one estimator-readable handoff and registration report.
+- F4A-010: never finalize analysis while selected manifest entries remain
+  unresolved;
+- F4A-011: return terminal dispositions and stable Helios package/revision IDs
+  through the canonical receipt;
+- F4A-012: provide contract fixtures and disabled-adapter tests proving a
+  future Bid Scout envelope produces the same registered package as manual
+  intake;
+- F4A-013: require future Bid Scout server authentication, tenant mapping,
+  tamper-evident envelope data, and reject-closed behavior before enabling the
+  adapter;
+- F4A-014: produce one estimator-readable intake and registration report.
 
 ### Exit gate
 
-One hundred percent of manifest entries have a terminal receipt disposition:
-accepted, duplicate, superseded, rejected with reason, missing, or explicitly
-withdrawn through a new auditable package revision. Replaying the handoff
-creates no duplicate documents or analysis jobs, and a cross-company handoff
-is rejected before object access.
+Manual PDF, folder, ZIP, revision, and written-scope scenarios produce the same
+canonical manifest and receipt. One hundred percent of selected entries have a
+terminal disposition; resume/replay creates no duplicates; cross-company input
+is rejected; and the disabled Bid Scout contract fixture yields an equivalent
+registered-package shape without requiring live Bid Scout availability.
 
 ## 5.2 Foundation 4B - Bid-Basis Profiling and Document Control
 
@@ -658,16 +699,19 @@ Foundation 4 uses separate storage responsibilities.
 
 ### 6.1 Immutable object storage
 
-Bid Scout stores the acquired source package in its secure acquisition
-storage. Helios does not query that database or depend on its internal schema.
-During handoff, Helios copies each verified object into Helios-controlled,
-tenant-scoped project storage. A handoff is not durably accepted until those
-copies and hashes verify.
+Current manual uploads enter Helios-controlled intake directly. Helios copies
+each verified object into protected, tenant-scoped project storage and does not
+durably accept the intake until those copies and hashes verify.
+
+The future Bid Scout adapter may stage an acquired source package in Bid Scout-
+controlled storage before transfer. Helios will not query that database or
+depend on its internal schema; it will copy and verify the declared objects
+through the canonical adapter contract.
 
 Helios stores:
 
-- immutable source PDFs and package artifacts transferred or referenced by Bid
-  Scout and retained according to policy;
+- immutable source PDFs, written-scope evidence, and package artifacts received
+  through manual or future adapters and retained according to policy;
 - normalized per-sheet renderings;
 - high-resolution raster tiles for scanned drawings;
 - bounded vector geometry artifacts;
@@ -709,7 +753,7 @@ decision explicitly says otherwise.
 Each stage has an independently retryable job:
 
 ```text
-handoff_received
+intake_received
   -> authorizing
   -> manifest_verifying
   -> object_copying
@@ -726,7 +770,7 @@ handoff_received
 
 Terminal exception states include:
 
-- handoff_unauthorized;
+- intake_unauthorized;
 - tenant_mismatch;
 - manifest_invalid;
 - object_unavailable;
@@ -852,14 +896,15 @@ does not silently alter another tenant's accepted behavior.
 
 | Hazard | Consequence | Required control |
 | --- | --- | --- |
-| Bid Scout handoff omits or cannot transfer plan objects | Missing quantities and false readiness | Signed manifest, per-object hash verification, separate plans/specs confirmation, and terminal dispositions |
+| Manual folder/ZIP intake stops before every selected object registers | Missing quantities and false readiness | Local manifest preview, resumable upload, per-object hash verification, and terminal dispositions |
+| Future Bid Scout adapter omits or cannot transfer declared objects | Missing scope or quantities | Signed envelope, per-object hash verification, and terminal dispositions before the adapter is enabled |
 | Owner issued specifications but no plans | Estimate waits forever or plan quantity is fabricated | `specs_only` profile, immediate estimate access, plan capabilities unavailable, quantities unknown or owner/estimator supplied |
 | Owner issued plans but no specifications | Scope appears falsely compliant | `plans_only` profile, plan takeoff enabled, spec-dependent conclusions unavailable and visible |
 | Owner issued only written scope | Opportunity is rejected despite being bidable | `written_scope_only` profile, conceptual WBS/estimate, explicit assumptions, clarifications, and risk |
 | Not-issued document is treated as missing | False blocker and wasted bid-day effort | Separate `not_issued`, `expected_missing`, and `unknown` states |
 | Bid Scout and Helios tenant mappings disagree | Cross-company disclosure | Reject before object access and require an authorized mapping |
-| Same handoff is retried after a timeout | Duplicate documents or analysis cost | End-to-end idempotency and stable receipt acknowledgment |
-| New addendum arrives after analysis | Obsolete quantities or scope | New immutable package revision and explicit impact review |
+| Same intake envelope is retried after a timeout | Duplicate documents or analysis cost | End-to-end idempotency and stable receipt acknowledgment |
+| New addendum arrives through manual or future adapter after analysis | Obsolete quantities or scope | New immutable package revision and explicit impact review |
 | Page uses wrong scale | Material quantity error | Per-view calibration and measurement block |
 | Scanned drawing OCR error | Missed or false asset | Modality flag, confidence, visual overlay, human review |
 | Revised sheet not recognized | Bid based on obsolete scope | Hash/revision control and supersession impact report |
@@ -885,13 +930,15 @@ does not silently alter another tenant's accepted behavior.
 
 ### 11.2 Verification sequence
 
-1. Create Golden Baseline 1 as a versioned Bid Scout package handoff.
-2. Prove the authenticated company/project mapping before any object access.
+1. Create Golden Baseline 1 through the active manual folder/ZIP intake and
+   canonical package envelope.
+2. Prove the authenticated session, role, company, and project mapping before
+   any object registration.
 3. Prove every manifest object is durably copied, hash verified, and assigned
    a terminal receipt disposition.
-4. Replay the identical handoff and prove no duplicate documents or jobs.
-5. Tamper with one hash and one tenant mapping in controlled tests and prove
-   both handoffs reject closed.
+4. Replay the identical envelope and prove no duplicate documents or jobs.
+5. Tamper with one hash and one company/project mapping in controlled tests and
+   prove both intakes reject closed.
 6. Prove every file and page has a terminal manifest disposition.
 7. Prove separate plans and specifications confirmation.
 8. Prove sheet identification and modality routing.
@@ -903,9 +950,9 @@ does not silently alter another tenant's accepted behavior.
 14. Verify owner/Helios/production/purchasing/risk reconciliation.
 15. Verify WBS, owner-item, cost-code, evidence, cockpit, and decision-history
     integration without altering accepted estimator data.
-16. Introduce a controlled revised sheet through a second Bid Scout handoff and
-    verify supersession, stale-result
-    invalidation, impact reporting, and explicit estimator disposition.
+16. Introduce a controlled revised sheet through a second manual package
+    revision and verify supersession, stale-result invalidation, impact
+    reporting, and explicit estimator disposition.
 17. Re-run from the same baseline and prove deterministic repeatability.
 18. Create controlled plans-only, specifications-only, and written-scope-only
     variants and verify each opens the Estimate Workspace with the correct
@@ -913,6 +960,9 @@ does not silently alter another tenant's accepted behavior.
 19. Add the previously absent source category to each controlled variant and
     verify capability expansion and impact reporting without overwriting
     accepted work.
+20. Submit a disabled Bid Scout contract fixture for Golden Baseline 1 and
+    prove it produces the same canonical manifest, registered source identity,
+    and downstream job inputs as manual intake without calling live Bid Scout.
 
 ### 11.3 Initial quantitative acceptance targets
 
@@ -920,7 +970,7 @@ does not silently alter another tenant's accepted behavior.
 | --- | --- |
 | Unauthorized or cross-company object access | Zero occurrences |
 | Manifest objects durably copied and hash verified | 100 percent |
-| Identical handoff replay duplicates | Zero occurrences |
+| Identical envelope replay duplicates | Zero occurrences |
 | Selected files accounted for | 100 percent |
 | PDF pages accounted for | 100 percent |
 | Sheets identified or explicitly flagged | 100 percent |
@@ -946,12 +996,15 @@ Foundation 4 passes only when a reviewer can verify all of the following:
 
 - The current estimator, WBS, cockpit, and document-intelligence behavior
   remains operational and regression-tested.
-- Bid Scout is the sole owner of Construction Exchange interaction; Helios
-  begins at the authenticated package-handoff boundary.
-- Every accepted handoff object is durably stored and hash verified in Helios
+- Manual PDF/folder/ZIP/written-scope intake is fully operational without Bid
+  Scout and produces the canonical package envelope.
+- Every accepted intake object is durably stored and hash verified in Helios
   before receipt acknowledgment.
-- Replayed handoffs are idempotent, and invalid signatures, tenant mappings,
-  manifests, or hashes reject closed before analysis.
+- Replayed envelopes are idempotent, and invalid session/adapter identity,
+  company mappings, manifests, or hashes reject closed before analysis.
+- A disabled Bid Scout contract fixture produces the same registered package
+  and downstream inputs as manual intake; live Bid Scout is not a Foundation 4
+  dependency.
 - Plans-and-specifications, plans-only, specifications-only,
   written-scope-only, and mixed/other profiles can all begin estimating from
   their verified source basis.
@@ -980,8 +1033,8 @@ Foundation 4 passes only when a reviewer can verify all of the following:
 
 ## 13. Explicitly prohibited patterns
 
-- Treating a Bid Scout download or storage write as a successful Helios
-  handoff before manifest and object verification.
+- Treating a local selection, future Bid Scout download, or storage write as a
+  successful Helios intake before manifest and object verification.
 - Marking documents ready based only on file count.
 - Requiring every project to contain both plans and specifications.
 - Blocking the entire estimate because a capability-specific source was not
@@ -1001,8 +1054,8 @@ Foundation 4 passes only when a reviewer can verify all of the following:
   credentials from Bid Scout.
 - Coupling Helios directly to Bid Scout's internal storage tables or database
   schema.
-- Trusting Bid Scout category labels, filenames, or completeness declarations
-  without Helios verification.
+- Trusting manual labels or future Bid Scout category labels, filenames, or
+  completeness declarations without Helios verification.
 - Storing large PDFs, tiles, or geometry directly in transactional rows.
 - Silent fallbacks, placeholder zeros, fake progress, or disconnected mock
   data.
@@ -1014,23 +1067,25 @@ Foundation 4 passes only when a reviewer can verify all of the following:
 No Foundation 4 application code should begin until this document is reviewed
 and the following decisions are explicitly approved:
 
-1. Secure Bid Scout package handoff and bid-basis profiling are the first
+1. Canonical manual package intake and bid-basis profiling are the first
    implementation increment.
-2. Bid Scout owns Construction Exchange interaction, authorized download, and
-   secure source-object staging.
-3. Helios receives only a versioned, authenticated, tenant-scoped package
-   envelope and immutable source objects; it receives no Construction Exchange
-   credentials or sessions.
-4. The existing manual PDF/folder/ZIP intake remains a contract-compatible
-   fallback and test harness, not the normal Construction Exchange workflow.
-5. Kreese Mills is the golden verification project.
-6. Quantity capability is delivered in four stages: count/linear, area,
+2. Manual PDF, multi-folder, ZIP, revision/addendum, and written-scope intake
+   remain the active operating workflow until Bid Scout is separately ready
+   and approved.
+3. The manual adapter and future Bid Scout adapter use the same versioned,
+   tenant-scoped package envelope and downstream pipeline.
+4. The Bid Scout adapter remains disabled and contract-tested; Foundation 4
+   does not depend on live Bid Scout availability.
+5. Helios never receives Construction Exchange credentials or sessions under
+   either workflow.
+6. Kreese Mills is the golden verification project.
+7. Quantity capability is delivered in four stages: count/linear, area,
    volume, and constructability.
-7. The initial accuracy targets and variance thresholds are accepted or
+8. The initial accuracy targets and variance thresholds are accepted or
    revised.
-8. Foundation 4 integrates through existing quantity/evidence contracts and
+9. Foundation 4 integrates through existing quantity/evidence contracts and
    does not rewrite the estimator, WBS, cockpit, or Foundation 3C intelligence.
-9. All five bid-basis profiles can start an estimate when they contain at
+10. All five bid-basis profiles can start an estimate when they contain at
    least one verified usable scope basis, with capabilities gated individually
    and unsupported conclusions kept explicit.
 
