@@ -6,9 +6,13 @@ import {
   HELIOS_ENGINEERING_RECORD_SCHEMA_VERSION,
   HeliosEngineeringRecordError,
   assertHeliosEngineeringCompatibility,
+  buildHeliosEngineeringParityFingerprint,
   buildHeliosEngineeringSourceFingerprint,
+  compareHeliosEngineeringParity,
   deriveHeliosEngineeringShadowCoverage,
   deriveHeliosEngineeringShadowRecordStatus,
+  type HeliosEngineeringParityArea,
+  type HeliosEngineeringParityAreaInput,
 } from "../src/index.ts";
 
 const hexadecimal =
@@ -132,5 +136,76 @@ test("reports partial shadow coverage without promoting pending geometry", () =>
   assert.equal(
     deriveHeliosEngineeringShadowRecordStatus(coverage),
     "partially_ready",
+  );
+});
+
+const parityAreaNames: HeliosEngineeringParityArea[] = [
+  "sources",
+  "document_intelligence",
+  "evidence",
+  "plan_pages",
+  "plan_views",
+  "plan_calibrations",
+  "plan_references",
+  "civil_geometry",
+];
+
+const parityAreas = (
+  overrides: Partial<
+    Record<HeliosEngineeringParityArea, Partial<HeliosEngineeringParityAreaInput>>
+  > = {},
+): HeliosEngineeringParityAreaInput[] => parityAreaNames.map((area) => ({
+  area,
+  readiness: "ready",
+  authoritative: [{ id: `${area}:1`, fingerprint: `${area}:fingerprint` }],
+  canonical: [{ id: `${area}:1`, fingerprint: `${area}:fingerprint` }],
+  ...(overrides[area] || {}),
+}));
+
+test("Stage 3 parity fingerprints are stable across object key order", () => {
+  assert.equal(
+    buildHeliosEngineeringParityFingerprint({ page: 1, views: ["plan", "profile"] }),
+    buildHeliosEngineeringParityFingerprint({ views: ["plan", "profile"], page: 1 }),
+  );
+});
+
+test("Stage 3 golden parity passes only exact identity and fingerprint matches", () => {
+  const result = compareHeliosEngineeringParity(parityAreas({
+    sources: {
+      authoritative: [{ id: "sources:1", fingerprint: "schema:1|package:1|source:1" }],
+      canonical: [{ id: "sources:1", fingerprint: "schema:1|package:1|source:1" }],
+    },
+  }));
+  assert.equal(result.status, "passed");
+  assert.equal(result.areas.every((area) => area.status === "passed"), true);
+});
+
+test("Stage 3 golden parity detects a missing plan view and altered geometry", () => {
+  const result = compareHeliosEngineeringParity(parityAreas({
+    plan_views: { canonical: [] },
+    civil_geometry: {
+      canonical: [{ id: "civil_geometry:1", fingerprint: "altered" }],
+    },
+  }));
+  assert.equal(result.status, "failed");
+  assert.deepEqual(result.areas.find((area) => area.area === "plan_views")?.missingIds, [
+    "plan_views:1",
+  ]);
+  assert.deepEqual(
+    result.areas.find((area) => area.area === "civil_geometry")?.fingerprintMismatchIds,
+    ["civil_geometry:1"],
+  );
+});
+
+test("Stage 3 distinguishes incomplete workflows from valid not-applicable areas", () => {
+  const result = compareHeliosEngineeringParity(parityAreas({
+    plan_pages: { readiness: "incomplete", authoritative: [], canonical: [] },
+    plan_views: { readiness: "not_applicable", authoritative: [], canonical: [] },
+  }));
+  assert.equal(result.status, "incomplete");
+  assert.equal(result.areas.find((area) => area.area === "plan_pages")?.status, "incomplete");
+  assert.equal(
+    result.areas.find((area) => area.area === "plan_views")?.status,
+    "not_applicable",
   );
 });

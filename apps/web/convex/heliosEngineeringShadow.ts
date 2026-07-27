@@ -1,6 +1,5 @@
 import {
   HELIOS_ENGINEERING_RECORD_SCHEMA_VERSION,
-  buildHeliosEngineeringSourceFingerprint,
   deriveHeliosEngineeringShadowCoverage,
   deriveHeliosEngineeringShadowRecordStatus,
   type HeliosEngineeringArtifactKind,
@@ -12,11 +11,15 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { deriveProjectBidBasis } from "./heliosBidBasis";
+import {
+  fingerprintEngineeringSource,
+  fingerprintEngineeringRecord,
+  fingerprintPlanView,
+  SHADOW_EXTRACTOR_VERSION,
+  SHADOW_PROMPT_VERSION,
+} from "./heliosEngineeringParityPayloads";
 
 const PROCESSING_VERSION = 1;
-const SHADOW_EXTRACTOR_VERSION = "legacy-shadow-v1";
-const SHADOW_PROMPT_VERSION = "legacy-authoritative-output-v1";
-const SOURCE_MODEL_VERSION = "immutable-source-v1";
 
 type ShadowContext = {
   project: Doc<"heliosProjects">;
@@ -40,6 +43,15 @@ const syncDocumentSourceReference = makeFunctionReference<
   },
   null
 >("heliosEngineeringShadow:syncDocumentSourceShadow");
+
+const refreshProjectReference = makeFunctionReference<
+  "mutation",
+  {
+    projectId: Id<"heliosProjects">;
+    packageId: Id<"heliosBidPackages">;
+  },
+  null
+>("heliosEngineeringShadow:refreshProjectShadow");
 
 const syncPlanRunReference = makeFunctionReference<
   "mutation",
@@ -212,14 +224,10 @@ async function ensureRecordAndSources(
           .first();
     const sha256 = document?.sha256 || writtenScope!.sha256;
     const version = document?.version || writtenScope!.version;
-    const fingerprint = buildHeliosEngineeringSourceFingerprint({
+    const fingerprint = fingerprintEngineeringSource({
       sha256,
       packageRevision: bidPackage.revision,
       sourceVersion: version,
-      ingestionSchemaVersion: HELIOS_ENGINEERING_RECORD_SCHEMA_VERSION,
-      extractorVersion: SHADOW_EXTRACTOR_VERSION,
-      promptVersion: SHADOW_PROMPT_VERSION,
-      modelVersion: SOURCE_MODEL_VERSION,
     });
     const values = {
       status: sourceStatus(document || undefined),
@@ -255,6 +263,49 @@ async function ensureRecordAndSources(
     if (source) sources.set(key, source);
   }
   return { project, bidPackage, record, sources };
+}
+
+async function loadExistingShadow(
+  ctx: MutationCtx,
+  projectId: Id<"heliosProjects">,
+  packageId: Id<"heliosBidPackages">,
+): Promise<ShadowContext | null> {
+  const [project, bidPackage] = await Promise.all([
+    ctx.db.get(projectId),
+    ctx.db.get(packageId),
+  ]);
+  if (
+    !project ||
+    !bidPackage ||
+    bidPackage.projectId !== project._id ||
+    bidPackage.companyId !== project.companyId
+  ) {
+    return null;
+  }
+  const records = await ctx.db
+    .query("heliosEngineeringRecords")
+    .withIndex("by_package", (query) => query.eq("packageId", bidPackage._id))
+    .collect();
+  const record =
+    records.find(
+      (candidate) =>
+        candidate.packageRevision === bidPackage.revision && candidate.isCurrent,
+    ) || records.find((candidate) => candidate.packageRevision === bidPackage.revision);
+  if (!record || record.companyId !== project.companyId || record.projectId !== project._id) {
+    return null;
+  }
+  const sourceRows = await ctx.db
+    .query("heliosEngineeringSources")
+    .withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id))
+    .collect();
+  return {
+    project,
+    bidPackage,
+    record,
+    sources: new Map(
+      sourceRows.map((source) => [sourceKey(source.documentId, source.writtenScopeId), source]),
+    ),
+  };
 }
 
 async function refreshRecord(ctx: MutationCtx, shadow: ShadowContext) {
@@ -427,6 +478,7 @@ async function ensureProvenance(
     provenanceKind: "source" | "page" | "text_span" | "visual_region";
     recordType: string;
     recordId: string;
+    recordFingerprint: string;
     sourceLocator: string;
     confidence: number;
   },
@@ -446,6 +498,7 @@ async function ensureProvenance(
       evidenceId: input.evidenceId || existing.evidenceId,
       sourceLocator: input.sourceLocator,
       confidence: input.confidence,
+      recordFingerprint: input.recordFingerprint,
     });
     return existing._id;
   }
@@ -460,6 +513,7 @@ async function ensureProvenance(
     provenanceKind: input.provenanceKind,
     recordType: input.recordType,
     recordId: input.recordId,
+    recordFingerprint: input.recordFingerprint,
     sourceLocator: input.sourceLocator,
     textSpanIds: [],
     confidence: input.confidence,
@@ -516,6 +570,7 @@ async function mirrorDocumentSource(
     provenanceKind: "source",
     recordType: "heliosDocumentIntelligence",
     recordId: String(analysis._id),
+    recordFingerprint: fingerprintEngineeringRecord(analysis),
     sourceLocator: source.relativePath,
     confidence: analysis.confidence,
   });
@@ -527,6 +582,7 @@ async function mirrorDocumentSource(
       provenanceKind: row.pageNumber ? "page" : "source",
       recordType: "heliosEvidence",
       recordId: String(row._id),
+      recordFingerprint: fingerprintEngineeringRecord(row),
       sourceLocator: row.pageNumber
         ? `PDF page ${row.pageNumber} · ${row.locator}`
         : row.locator,
@@ -550,6 +606,10 @@ export const syncProjectShadow = internalMutation({
         }
       }
       await refreshRecord(ctx, shadow);
+      await ctx.scheduler.runAfter(15_000, refreshProjectReference, {
+        projectId: shadow.project._id,
+        packageId: shadow.bidPackage._id,
+      });
     }
     return null;
   },
@@ -572,6 +632,7 @@ export const syncActiveProjectShadow = internalMutation({
         });
       }
     }
+    const downstreamDelay = 15_000;
     const planRun = await ctx.db
       .query("heliosPlanRuns")
       .withIndex("by_package_current", (query) =>
@@ -579,7 +640,7 @@ export const syncActiveProjectShadow = internalMutation({
       )
       .first();
     if (planRun) {
-      await ctx.scheduler.runAfter(0, syncPlanRunReference, { runId: planRun._id });
+      await ctx.scheduler.runAfter(downstreamDelay, syncPlanRunReference, { runId: planRun._id });
       const geometryRun = await ctx.db
         .query("heliosCivilGeometryRuns")
         .withIndex("by_plan_current", (query) =>
@@ -587,10 +648,16 @@ export const syncActiveProjectShadow = internalMutation({
         )
         .first();
       if (geometryRun) {
-        await ctx.scheduler.runAfter(0, syncGeometryRunReference, { runId: geometryRun._id });
+        await ctx.scheduler.runAfter(downstreamDelay + 5_000, syncGeometryRunReference, {
+          runId: geometryRun._id,
+        });
       }
     }
     await refreshRecord(ctx, shadow);
+    await ctx.scheduler.runAfter(downstreamDelay + 10_000, refreshProjectReference, {
+      projectId: shadow.project._id,
+      packageId: shadow.bidPackage._id,
+    });
     return String(shadow.record._id);
   },
 });
@@ -627,10 +694,26 @@ export const syncDocumentSourceShadow = internalMutation({
     documentId: v.id("heliosDocuments"),
   },
   handler: async (ctx, args) => {
-    const shadow = await ensureRecordAndSources(ctx, args.projectId, args.packageId);
+    const shadow =
+      (await loadExistingShadow(ctx, args.projectId, args.packageId)) ||
+      (await ensureRecordAndSources(ctx, args.projectId, args.packageId));
     const source = shadow?.sources.get(sourceKey(args.documentId));
     if (!shadow || !source) return null;
     await mirrorDocumentSource(ctx, shadow, source, args.documentId);
+    return null;
+  },
+});
+
+export const refreshProjectShadow = internalMutation({
+  args: {
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+  },
+  handler: async (ctx, args) => {
+    const shadow =
+      (await loadExistingShadow(ctx, args.projectId, args.packageId)) ||
+      (await ensureRecordAndSources(ctx, args.projectId, args.packageId));
+    if (!shadow) return null;
     await refreshRecord(ctx, shadow);
     return null;
   },
@@ -671,6 +754,10 @@ export const syncPlanRunShadow = internalMutation({
       await ctx.scheduler.runAfter(0, syncPlanDocumentReference, { runId: run._id, documentId });
     }
     await refreshRecord(ctx, shadow);
+    await ctx.scheduler.runAfter(10_000, refreshProjectReference, {
+      projectId: shadow.project._id,
+      packageId: shadow.bidPackage._id,
+    });
     return null;
   },
 });
@@ -680,7 +767,9 @@ export const syncPlanDocumentShadow = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run?.isCurrent) return null;
-    const shadow = await ensureRecordAndSources(ctx, run.projectId, run.packageId);
+    const shadow =
+      (await loadExistingShadow(ctx, run.projectId, run.packageId)) ||
+      (await ensureRecordAndSources(ctx, run.projectId, run.packageId));
     const source = shadow?.sources.get(sourceKey(args.documentId));
     if (!shadow || !source) return null;
     const artifact = await ctx.db
@@ -743,9 +832,27 @@ export const syncPlanDocumentShadow = internalMutation({
         provenanceKind: "page",
         recordType: "heliosPlanPages",
         recordId: String(page._id),
+        recordFingerprint: fingerprintEngineeringRecord(page),
         sourceLocator: `${page.sheetNumber || `PDF page ${page.physicalPageNumber}`} · ${page.title}`,
         confidence: page.confidence,
       });
+      for (const view of page.views) {
+        await ensureProvenance(ctx, shadow, {
+          source,
+          artifact,
+          pageId: canonical._id,
+          provenanceKind: "visual_region",
+          recordType: "heliosPlanPageViews",
+          recordId: `${page._id}:${view.viewKey}`,
+          recordFingerprint: fingerprintPlanView({
+            pageId: String(page._id),
+            physicalPageNumber: page.physicalPageNumber,
+            view,
+          }),
+          sourceLocator: `${page.sheetNumber || `PDF page ${page.physicalPageNumber}`} · ${view.label || view.viewKey}`,
+          confidence: page.confidence,
+        });
+      }
     }
     const [references, calibrations] = await Promise.all([
       ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", run._id)).collect(),
@@ -759,6 +866,7 @@ export const syncPlanDocumentShadow = internalMutation({
         provenanceKind: "page",
         recordType: "heliosPlanReferences",
         recordId: String(reference._id),
+        recordFingerprint: fingerprintEngineeringRecord(reference),
         sourceLocator: reference.locator,
         confidence: reference.confidence,
       });
@@ -771,11 +879,11 @@ export const syncPlanDocumentShadow = internalMutation({
         provenanceKind: "visual_region",
         recordType: "heliosPlanCalibrations",
         recordId: String(calibration._id),
+        recordFingerprint: fingerprintEngineeringRecord(calibration),
         sourceLocator: calibration.sourceRegion || calibration.viewKey,
         confidence: calibration.confidence,
       });
     }
-    await refreshRecord(ctx, shadow);
     return null;
   },
 });
@@ -808,6 +916,10 @@ export const syncGeometryRunShadow = internalMutation({
       await ctx.scheduler.runAfter(0, syncGeometryDocumentReference, { runId: run._id, documentId });
     }
     await refreshRecord(ctx, shadow);
+    await ctx.scheduler.runAfter(10_000, refreshProjectReference, {
+      projectId: shadow.project._id,
+      packageId: shadow.bidPackage._id,
+    });
     return null;
   },
 });
@@ -817,7 +929,9 @@ export const syncGeometryDocumentShadow = internalMutation({
   handler: async (ctx, args) => {
     const run = await ctx.db.get(args.runId);
     if (!run?.isCurrent) return null;
-    const shadow = await ensureRecordAndSources(ctx, run.projectId, run.packageId);
+    const shadow =
+      (await loadExistingShadow(ctx, run.projectId, run.packageId)) ||
+      (await ensureRecordAndSources(ctx, run.projectId, run.packageId));
     const source = shadow?.sources.get(sourceKey(args.documentId));
     if (!shadow || !source) return null;
     const artifact = await ctx.db
@@ -848,11 +962,11 @@ export const syncGeometryDocumentShadow = internalMutation({
         provenanceKind: "visual_region",
         recordType: "heliosCivilGeometryRecords",
         recordId: String(record._id),
+        recordFingerprint: fingerprintEngineeringRecord(record),
         sourceLocator: record.sourceLocator,
         confidence: record.confidence,
       });
     }
-    await refreshRecord(ctx, shadow);
     return null;
   },
 });

@@ -86,3 +86,33 @@ The existing three OpenAI file uploads and cleanup paths remain unchanged in
 Stage 2. Remote-file reuse, canonical readers, and workflow cutover remain
 prohibited until a later stage is separately approved after golden-project
 parity validation.
+
+## Stage 3 golden-project parity
+
+Stage 3 adds a stored, fail-closed comparison boundary between the existing
+authoritative workflows and the canonical engineering shadow. It remains an
+internal validation tool: application routes, screens, the estimator, cockpit,
+takeoff, procurement, and AI workflows still read their existing records.
+
+- Each parity run is company-, project-, package-, revision-, and canonical-
+  record-bound, versioned, immutable, and supersedes only the previous current
+  parity result.
+- Sources, document-intelligence records, evidence, plan pages, plan views,
+  plan calibrations, plan references, and civil-geometry records are compared
+  by exact identity and deterministic content fingerprint—not count alone.
+- Missing, unexpected, or content-altered records fail the affected area and
+  identify the exact record IDs.
+- An unfinished authoritative plan or geometry workflow is `incomplete`, not
+  passed. A valid specifications-only or written-scope basis marks those areas
+  `not_applicable`, not failed.
+- Per-document shadow workers no longer rewrite the shared canonical root or
+  full source registry. One final refresh follows isolated document workers,
+  eliminating large-package write contention without altering authoritative
+  records.
+- The evaluator is an internal Convex mutation/query with no browser route and
+  makes no OpenAI request.
+
+Stage 3 does not remove any existing OpenAI call and does not activate remote-
+file reuse. Consumer cutover and duplicate-call removal remain prohibited until
+a separate stage is approved and a development project with completed plan and
+civil-geometry runs proves exact parity for those areas.

@@ -1,4 +1,23 @@
 export const HELIOS_ENGINEERING_RECORD_SCHEMA_VERSION = 1;
+export const HELIOS_ENGINEERING_PARITY_VERSION = 1;
+
+export const HELIOS_ENGINEERING_PARITY_AREAS = [
+  "sources",
+  "document_intelligence",
+  "evidence",
+  "plan_pages",
+  "plan_views",
+  "plan_calibrations",
+  "plan_references",
+  "civil_geometry",
+] as const;
+
+export const HELIOS_ENGINEERING_PARITY_STATUSES = [
+  "passed",
+  "failed",
+  "incomplete",
+  "not_applicable",
+] as const;
 
 export const HELIOS_ENGINEERING_RECORD_STATUSES = [
   "draft",
@@ -123,6 +142,35 @@ export type HeliosEngineeringRecordCoverage = {
   civilGeometry: HeliosEngineeringCoverageStatus;
 };
 
+export type HeliosEngineeringParityArea =
+  (typeof HELIOS_ENGINEERING_PARITY_AREAS)[number];
+export type HeliosEngineeringParityStatus =
+  (typeof HELIOS_ENGINEERING_PARITY_STATUSES)[number];
+export type HeliosEngineeringParityIdentity = {
+  id: string;
+  fingerprint: string;
+};
+export type HeliosEngineeringParityAreaInput = {
+  area: HeliosEngineeringParityArea;
+  readiness: "ready" | "incomplete" | "not_applicable";
+  authoritative: HeliosEngineeringParityIdentity[];
+  canonical: HeliosEngineeringParityIdentity[];
+};
+export type HeliosEngineeringParityAreaResult = {
+  area: HeliosEngineeringParityArea;
+  status: HeliosEngineeringParityStatus;
+  authoritativeCount: number;
+  canonicalCount: number;
+  missingIds: string[];
+  unexpectedIds: string[];
+  fingerprintMismatchIds: string[];
+};
+export type HeliosEngineeringParityResult = {
+  status: Exclude<HeliosEngineeringParityStatus, "not_applicable">;
+  areas: HeliosEngineeringParityAreaResult[];
+  issues: string[];
+};
+
 export type HeliosEngineeringSourceFingerprintInput = {
   sha256: string;
   packageRevision: number;
@@ -155,6 +203,130 @@ export type HeliosEngineeringShadowCoverageInput = {
 };
 
 export class HeliosEngineeringRecordError extends Error {}
+
+function stableParityValue(value: unknown): string {
+  if (value === null) return "null";
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      throw new HeliosEngineeringRecordError("Parity input contains a non-finite number.");
+    }
+    return Object.is(value, -0) ? "0" : String(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableParityValue(item)).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort();
+    return `{${keys
+      .map((key) => `${JSON.stringify(key)}:${stableParityValue(record[key])}`)
+      .join(",")}}`;
+  }
+  throw new HeliosEngineeringRecordError("Parity input contains an unsupported value.");
+}
+
+function fnv32(value: string, seed: number) {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
+}
+
+export function buildHeliosEngineeringParityFingerprint(value: unknown) {
+  const canonical = stableParityValue(value);
+  const digest = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35]
+    .map((seed) => fnv32(canonical, seed))
+    .join("");
+  return `helios-parity-v${HELIOS_ENGINEERING_PARITY_VERSION}:${digest}`;
+}
+
+function uniqueParityIdentities(
+  identities: HeliosEngineeringParityIdentity[],
+  label: string,
+) {
+  const result = new Map<string, string>();
+  for (const identity of identities) {
+    const id = boundedToken(identity.id, `${label} identity`, 300);
+    const fingerprint = identity.fingerprint.trim();
+    if (!fingerprint || fingerprint.length > 1_000 || /[\r\n]/.test(fingerprint)) {
+      throw new HeliosEngineeringRecordError(`${label} fingerprint is invalid.`);
+    }
+    if (result.has(id)) {
+      throw new HeliosEngineeringRecordError(`${label} contains duplicate identity ${id}.`);
+    }
+    result.set(id, fingerprint);
+  }
+  return result;
+}
+
+export function compareHeliosEngineeringParity(
+  inputs: HeliosEngineeringParityAreaInput[],
+): HeliosEngineeringParityResult {
+  const seenAreas = new Set<HeliosEngineeringParityArea>();
+  const areas = inputs.map((input): HeliosEngineeringParityAreaResult => {
+    if (seenAreas.has(input.area)) {
+      throw new HeliosEngineeringRecordError(`Parity area ${input.area} is duplicated.`);
+    }
+    seenAreas.add(input.area);
+    const authoritative = uniqueParityIdentities(input.authoritative, `${input.area} authoritative`);
+    const canonical = uniqueParityIdentities(input.canonical, `${input.area} canonical`);
+    const missingIds = [...authoritative.keys()].filter((id) => !canonical.has(id)).sort();
+    const unexpectedIds = [...canonical.keys()].filter((id) => !authoritative.has(id)).sort();
+    const fingerprintMismatchIds = [...authoritative.entries()]
+      .filter(([id, fingerprint]) => canonical.has(id) && canonical.get(id) !== fingerprint)
+      .map(([id]) => id)
+      .sort();
+    const mismatch = missingIds.length || unexpectedIds.length || fingerprintMismatchIds.length;
+    const status: HeliosEngineeringParityStatus =
+      input.readiness === "not_applicable"
+        ? authoritative.size || canonical.size
+          ? "failed"
+          : "not_applicable"
+        : mismatch
+          ? "failed"
+          : input.readiness === "incomplete"
+            ? "incomplete"
+            : "passed";
+    return {
+      area: input.area,
+      status,
+      authoritativeCount: authoritative.size,
+      canonicalCount: canonical.size,
+      missingIds,
+      unexpectedIds,
+      fingerprintMismatchIds,
+    };
+  });
+  for (const area of HELIOS_ENGINEERING_PARITY_AREAS) {
+    if (!seenAreas.has(area)) {
+      throw new HeliosEngineeringRecordError(`Parity area ${area} is missing.`);
+    }
+  }
+  const status = areas.some((area) => area.status === "failed")
+    ? "failed"
+    : areas.some((area) => area.status === "incomplete")
+      ? "incomplete"
+      : "passed";
+  const issues = areas.flatMap((area) => {
+    const details = [
+      area.missingIds.length ? `${area.missingIds.length} missing` : "",
+      area.unexpectedIds.length ? `${area.unexpectedIds.length} unexpected` : "",
+      area.fingerprintMismatchIds.length
+        ? `${area.fingerprintMismatchIds.length} fingerprint mismatch`
+        : "",
+    ].filter(Boolean);
+    if (details.length) return [`${area.area}: ${details.join(", ")}.`];
+    if (area.status === "incomplete") return [`${area.area}: authoritative workflow is incomplete.`];
+    return [];
+  });
+  return { status, areas, issues };
+}
 
 function boundedToken(value: string, label: string, maximum = 160) {
   const normalized = value.trim();

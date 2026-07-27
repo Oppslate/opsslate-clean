@@ -512,6 +512,7 @@ export default defineSchema({
     ),
     recordType: v.string(),
     recordId: v.string(),
+    recordFingerprint: v.optional(v.string()),
     sourceLocator: v.string(),
     boundary: v.optional(v.object({
       x: v.number(), y: v.number(), width: v.number(), height: v.number(),
@@ -549,6 +550,52 @@ export default defineSchema({
     .index("by_source_status", ["engineeringSourceId", "status"])
     .index("by_provider_file", ["provider", "remoteFileId"])
     .index("by_status_expiration", ["status", "expiresAt"]),
+
+  heliosEngineeringParityRuns: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    packageRevision: v.number(),
+    comparisonVersion: v.number(),
+    inputFingerprint: v.string(),
+    status: v.union(
+      v.literal("passed"),
+      v.literal("failed"),
+      v.literal("incomplete"),
+    ),
+    isCurrent: v.boolean(),
+    areas: v.array(v.object({
+      area: v.union(
+        v.literal("sources"),
+        v.literal("document_intelligence"),
+        v.literal("evidence"),
+        v.literal("plan_pages"),
+        v.literal("plan_views"),
+        v.literal("plan_calibrations"),
+        v.literal("plan_references"),
+        v.literal("civil_geometry"),
+      ),
+      status: v.union(
+        v.literal("passed"),
+        v.literal("failed"),
+        v.literal("incomplete"),
+        v.literal("not_applicable"),
+      ),
+      authoritativeCount: v.number(),
+      canonicalCount: v.number(),
+      missingIds: v.array(v.string()),
+      unexpectedIds: v.array(v.string()),
+      fingerprintMismatchIds: v.array(v.string()),
+    })),
+    issues: v.array(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    completedAt: v.number(),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_record_created", ["engineeringRecordId", "createdAt"])
+    .index("by_package_created", ["packageId", "createdAt"]),
 
   heliosUploadIntents: defineTable({
     companyId: v.id("companies"),
