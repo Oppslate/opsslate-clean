@@ -617,3 +617,51 @@ points.
 - Vercel deployment, production promotion, domain changes, canonical writers,
   workflow cutover, and remote-file reuse: Not performed
 - Approval gate: stop before Stage 2 shadow ingestion
+
+### Canonical engineering record — Stage 2 shadow ingestion
+
+- Application checkpoint: `b1ec64b`
+- Scope: additive, idempotent shadow writers only; all existing Document
+  Intelligence, Plan Reconstruction, Civil Geometry, Project Intelligence,
+  WBS, Estimate Builder, Cockpit 2.0, quantity, pricing, procurement, evidence,
+  risk, and estimator-review records remain authoritative
+- Source registration: finalized package entries create immutable canonical
+  links to protected PDFs and written scopes without copying or changing the
+  source of truth
+- Revision reuse: previously analyzed duplicate PDFs are mirrored into the
+  current package root by immutable document identity, without re-uploading or
+  re-reading the PDF
+- Document shadow: authoritative job, intelligence, and evidence records are
+  mirrored into versioned artifacts and provenance
+- Plan shadow: terminal run summaries fan out by source document to mirror
+  physical page identities, page metadata, references, and calibrations
+- Geometry shadow: terminal run summaries fan out by source document to mirror
+  civil-geometry provenance
+- Scaling: fan-out scheduling bounds each plan and geometry transaction to one
+  source document instead of one entire bid package
+- Isolation: shadow scheduling is best-effort and occurs after authoritative
+  writes; existing successful operations cannot be rolled back by a shadow
+  scheduling failure
+- Cutover: no canonical readers, UI routes, OpenAI remote-file reuse, prompt
+  changes, PDF upload changes, or duplicate API-call removal were introduced
+- Live parity, specification-only project: 1 authoritative source = 1 canonical
+  source; 1 active document artifact; 21 provenance links; document ready,
+  plan/geometry not applicable; canonical record ready
+- Live parity, 34-source mixed project: 34 authoritative sources = 34 canonical
+  sources; 34 active document artifacts; 557 provenance links; document ready,
+  plan/geometry pending; canonical record partially ready
+- Idempotence: two consecutive live backfills returned the same engineering
+  record and identical 34/34 source, 34 artifact, and 557 provenance counts
+- Live plan/geometry parity: not fabricated; the development deployment has no
+  plan-run rows yet, so these paths are type-, contract-, and boundary-tested
+  and remain behind the next golden-project approval gate
+- Automated domain tests: 56 passed
+- Automated Helios security and UI boundary tests: 76 passed
+- Domain build, Helios lint, targeted modified Convex lint, shared web
+  TypeScript, Helios production build, shared OpsSlate web production build,
+  and Convex schema/function generation: Passed
+- Full shared OpsSlate lint: existing repository baseline remains red outside
+  this stage; every Stage 2 modified Convex file passed targeted lint
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Approval gate: stop before Stage 3 golden-project plan/geometry parity and any
+  consumer cutover
