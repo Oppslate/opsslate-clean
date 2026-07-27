@@ -513,3 +513,45 @@ points.
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Next approved milestone: Foundation 4D governed quantity intelligence and
   calibrated plan takeoff
+
+### Foundation 4D civil geometry and governed plan takeoff
+
+- Application checkpoint: `cb76142`
+- Geometry authority: horizontal control coordinates, tangent/curve tables,
+  and station equations lead; profiles establish vertical alignment; cross
+  sections establish widths, slopes, and earthwork surfaces; inverts and
+  material layers establish drainage and subgrade geometry; calibrated scale
+  is fallback only
+- Curve safety: horizontal length uses explicit control-sheet tangent and curve
+  lengths before coordinate chords, and station equations remain retained
+- AI boundary: OpenAI proposes source-located geometry only and is explicitly
+  prohibited from inventing missing values or calculating bid quantities
+- Human gate: every geometry record remains proposed until one-click estimator
+  acceptance; unresolved issues and confidence stay visible
+- Deterministic quantities: supported calculations include alignment and
+  profile length, invert-network length, unique structure count, material area
+  and volume, and average-end-area earthwork volume
+- Quantity governance: owner, measured, production, purchasing, and risk
+  quantities remain distinct; comparison variance never overwrites the owner
+  quantity
+- Estimate boundary: accepted measurements rebuild a proposal in one click;
+  sending it to the estimate creates a proposed plan quantity without pricing
+  or silent acceptance
+- Security and audit: same-origin session, signed principal, tenant, project,
+  package revision, plan run, page/view, calibration, cost code, and geometry
+  ownership are server-authorized; review events are append-only
+- Variable bid basis: plans-absent projects remain nonblocking and continue
+  from specifications or written scope
+- Automated domain tests: 48 passed
+- Automated Helios security and UI boundary tests: 68 passed
+- React quality review, Helios lint, targeted Convex lint, domain build, Convex
+  schema/function generation, Helios production build, and shared OpsSlate web
+  production build: Passed
+- Authenticated browser verification: plans-enabled and specifications-only
+  projects passed with no console errors; 1024px tablet and 390px mobile had no
+  page-level horizontal overflow
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Model geometry reconstruction, Vercel deployment, production promotion, and
+  domain changes: Not performed
+- Next recommended milestone: Foundation 4E golden-project validation and
+  automated quantity execution
