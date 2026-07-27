@@ -6,9 +6,10 @@ only; implementation not yet authorized
 Product: Helios, a standalone responsive web application in the OpsSlate
 product family
 
-Primary mission: turn a complete heavy-highway bid package into a traceable,
-estimator-controlled understanding of what must be built, where it is located,
-how it is measured, and how it connects to the existing Helios estimate
+Primary mission: turn the available heavy-highway bid basis into a traceable,
+estimator-controlled understanding of what must be built, where it is known to
+be located, how it can be measured, what remains unknown, and how it connects
+to the existing Helios estimate
 
 Golden project: Kreese Mills Road Culvert
 
@@ -50,10 +51,11 @@ Construction Exchange or other authorized bid source
   -> Helios receipt and integrity verification
   -> immutable package manifest
   -> document and sheet classification
-  -> plans/specifications completeness gate
-  -> mixed vector/scanned plan intelligence
+  -> bid-basis profile and capability determination
+  -> available-source intelligence
+  -> mixed vector/scanned plan intelligence when plans exist
   -> cross-document construction graph
-  -> deterministic quantity proposals
+  -> deterministic quantity proposals where measurable evidence exists
   -> owner/Helios/production/purchasing quantity reconciliation
   -> estimator acceptance
   -> existing Helios WBS, estimate, cockpit, risk, and procurement workflows
@@ -68,8 +70,8 @@ contractor estimate.
 
 Bid Scout owns all interaction with Construction Exchange and other approved
 construction bidding sources. Bid Scout discovers opportunities, performs the
-authorized download, stages the original plans and specifications in secure
-storage, and hands a complete bid-package revision to Helios.
+authorized download, stages the issued source materials in secure storage, and
+hands a declared bid-package revision to Helios.
 
 Helios does not log in to, browse, scrape, or download from Construction
 Exchange. Helios begins at the authenticated package-handoff boundary. This
@@ -120,9 +122,12 @@ Bid Scout must hand Helios a versioned package envelope containing:
 - one manifest entry per object with stable object ID, original filename,
   relative path, media type, byte size, SHA-256 hash, source category, and
   source revision;
+- for a written scope captured as source-site text rather than a file, an
+  immutable narrative object with exact source text, source location, capture
+  time, source attribution, media type, byte size, and SHA-256 hash;
 - short-lived, least-privilege object references or a server-to-server transfer
   mechanism;
-- manifest totals and a Bid Scout completeness declaration;
+- manifest totals and a Bid Scout transfer-completeness declaration;
 - authentication principal, authorization claims, and a signed envelope or
   equivalent tamper-evident proof.
 
@@ -134,10 +139,10 @@ duplicate documents or analysis jobs.
 
 Helios returns a versioned receipt containing the handoff ID, Helios project
 and package-revision IDs, manifest totals, per-entry terminal dispositions,
-durable-copy status, completeness status, and any retryable or permanent
-errors. Bid Scout must not treat a request timeout as a failed import; it
-queries or safely replays the same idempotency key until a terminal receipt is
-available.
+durable-copy status, transfer-completeness status, bid-basis profile, and any
+retryable or permanent errors. Bid Scout must not treat a request timeout as a
+failed import; it queries or safely replays the same idempotency key until a
+terminal receipt is available.
 
 ### 3.3 Trust boundary and security rules
 
@@ -161,22 +166,28 @@ available.
   initiating principal, receipt time, verification result, and downstream job
   IDs without logging credentials or document contents.
 
-### 3.4 Bid Scout and Helios completeness responsibilities
+### 3.4 Bid Scout and Helios bid-basis responsibilities
 
-Bid Scout declares what it acquired; Helios independently decides whether the
-received package is sufficient for estimating. A successful transfer is not a
-successful completeness review.
+Bid Scout declares what it acquired; Helios independently determines the
+project's available bid basis and enables the capabilities supported by that
+basis. A successful transfer is not proof that every conventional document
+type exists, and the absence of a document that was never issued must not
+prevent the estimator from starting work.
 
 - Bid Scout completeness answers: "Did every selected source object reach
   storage and enter the handoff manifest?"
-- Helios completeness answers: "Does this revision contain the plans,
-  specifications, bid schedule, addenda, and supporting information required
-  for the intended analysis?"
+- Helios bid-basis review answers: "What authoritative information was issued,
+  what was received, what remains expected, and which estimating capabilities
+  can safely operate now?"
 - Bid Scout may label likely document categories, but Helios validates those
   categories through the existing document-intelligence boundary.
-- A handoff may be technically complete yet operationally blocked because
-  plan sheets, specifications, addenda, scales, or referenced documents are
-  absent.
+- A handoff may be technically complete while individual capabilities are
+  unavailable or provisional. For example, a specifications-only project can
+  proceed through scope breakdown and estimating while plan measurement stays
+  unavailable.
+- Only unresolved transfer or integrity failures block package registration.
+  Missing source categories create scoped limitations, warnings, risks, and
+  unknowns; they do not globally block the estimate.
 - Subsequent Bid Scout downloads create new package revisions; they never
   mutate or replace a prior Helios source record in place.
 
@@ -257,49 +268,110 @@ withdrawn through a new auditable package revision. Replaying the handoff
 creates no duplicate documents or analysis jobs, and a cross-company handoff
 is rejected before object access.
 
-## 5.2 Foundation 4B - Package Completeness and Document Control
+## 5.2 Foundation 4B - Bid-Basis Profiling and Document Control
 
 ### Outcome
 
-Helios proves whether the package contains the information required to bid the
-job instead of treating any collection of PDFs as complete.
+Helios determines which source basis the owner issued, distinguishes not-issued
+documents from expected-but-missing documents, and starts the estimate with
+the supported capabilities without pretending the package is more complete
+than it is.
 
-### Required package categories
+### Supported bid-basis profiles
 
-| Category | Baseline requirement | Effect when absent |
+Every package receives one estimator-confirmable profile:
+
+| Bid-basis profile | Supported work | Required limitation |
 | --- | --- | --- |
-| Plans | Required | Quantity and constructability analysis blocked |
-| Specifications | Required | Scope/compliance readiness blocked |
-| Owner bid schedule | Required when issued | Owner reconciliation blocked |
-| Proposal/bid forms | Required when issued | Bid-submission readiness blocked |
-| Addenda register | Required determination | Package remains revision-uncertain |
-| Geotechnical information | Conditional | Subsurface risk warning |
-| Utility information | Conditional | Utility-conflict warning |
-| Environmental/permit documents | Conditional | Compliance warning |
-| Standard sheets/details | Conditional | Referenced-source warning |
+| `plans_and_specs` | Full cross-document intelligence and measurable plan takeoff | Missing referenced documents remain scoped exceptions |
+| `plans_only` | Plan interpretation, asset graph, geometric takeoff, WBS and estimate development | Specification, material, execution, payment, and compliance requirements are unknown unless shown on plans |
+| `specs_only` | Scope and requirement extraction, owner-item/WBS mapping, estimate development, and owner-quantity reconciliation when quantities are supplied | Plan geometry, location validation, and measured takeoff are unavailable |
+| `written_scope_only` | Scope decomposition, proposed WBS/items, conceptual estimate, assumptions, clarifications, and risk register | Quantities, details, specifications, and constructability remain estimator-supplied or explicitly unknown |
+| `mixed_or_other` | Estimator-selected capabilities supported by the actual evidence | Unsupported conclusions remain unavailable and visible |
+
+### Category availability states
+
+Each category is tracked independently as:
+
+- `received` - an issued source was received and verified;
+- `not_issued` - the owner/source did not issue this category;
+- `expected_missing` - evidence indicates it should exist but it was not
+  received;
+- `unknown` - Helios cannot yet determine whether it was issued;
+- `not_applicable` - the category does not apply to this procurement; or
+- `superseded` - a newer controlled revision governs.
+
+The tracked categories include plans, specifications, written scope, owner bid
+schedule, proposal/bid forms, addenda, geotechnical information, utilities,
+environmental/permit documents, and referenced standards/details.
+
+### Capability behavior
+
+- Overall workspace state is one of `estimate_ready`,
+  `estimate_ready_with_limitations`, or `no_usable_scope_basis`. Only transfer
+  or integrity failure and `no_usable_scope_basis` prevent the estimate from
+  opening.
+- Estimate Workspace readiness is independent from plan-takeoff readiness,
+  specification-compliance readiness, owner-reconciliation readiness, and
+  bid-submission readiness.
+- A usable written scope, plan set, specification set, or combination can open
+  the Estimate Workspace immediately after secure registration.
+- Missing plans disable only plan-dependent measurements, spatial validation,
+  and plan-derived constructability conclusions.
+- Missing specifications disable only spec-dependent scope, material,
+  execution, payment, submittal, and compliance conclusions.
+- Missing owner bid schedules disable owner-item reconciliation but do not
+  prevent contractor WBS items or conceptual estimate development.
+- `not_issued` and `not_applicable` are not blockers and require no waiver.
+- `expected_missing` and `unknown` remain visible warnings and may create a
+  clarification or risk, but they do not freeze the estimate.
+- Quantities unsupported by available evidence remain `unknown` or
+  `takeoff_required`; they are never defaulted to zero.
+- When a later revision supplies a missing category, Helios adds the newly
+  supported capabilities and produces an impact report without overwriting
+  accepted estimate work.
+- A written scope may be an owner-issued file or an immutable narrative
+  captured by Bid Scout. Helios preserves the exact original and its source
+  metadata before creating any normalized analysis text.
 
 ### Functional requirements
 
 - F4B-001: classify documents using filename, folder path, title blocks,
   document content, and estimator confirmation;
-- F4B-002: separately confirm `plans_received` and `specifications_received`;
+- F4B-002: infer and allow one-action confirmation or correction of the
+  bid-basis profile;
 - F4B-003: show file count, page/sheet count, revision, processing status, and
   exceptions for each category;
-- F4B-004: require a reasoned estimator waiver when a normally required
-  category was not issued;
+- F4B-004: independently record every category's availability state and the
+  evidence or estimator decision supporting it;
 - F4B-005: make misclassification correctable in one focused action;
 - F4B-006: distinguish `uploaded`, `validated`, `classified`, `indexed`, and
   `ready`;
-- F4B-007: prevent `Bid Package Complete` while blocking exceptions remain;
-- F4B-008: support plans-only, specifications-only, and addendum uploads as
-  additions to a controlled package revision without pretending they are a
-  complete new package.
+- F4B-007: compute capability-specific readiness rather than one universal
+  `Bid Package Complete` state;
+- F4B-008: support plans-only, specifications-only, written-scope-only, mixed,
+  and addendum revisions without forcing absent categories;
+- F4B-009: open the existing Estimate Workspace when at least one verified,
+  usable scope basis exists;
+- F4B-010: explain every unavailable capability in plain estimator language
+  and provide the fastest relevant action without a dead-end wait state;
+- F4B-011: preserve assumptions, unknowns, limitations, and category changes
+  in the decision history;
+- F4B-012: re-evaluate capabilities and downstream impacts when new source
+  categories or revisions arrive;
+- F4B-013: accept a written-scope evidence object without requiring a plan or
+  specification PDF and retain its exact source text, provenance, and hash;
+- F4B-014: present one-click `Proceed with available basis` when confirmation
+  is needed, remember the decision for that revision, and avoid repeated
+  blocking prompts.
 
 ### Exit gate
 
-The estimator sees and accepts one package-readiness statement covering plans,
-specifications, bid schedule, proposal forms, addenda status, conditional
-documents, and unresolved exceptions.
+The estimator can begin an estimate from each supported bid-basis profile. The
+workspace shows what Helios can do now, what it cannot support from the issued
+evidence, what remains expected or unknown, and what changes when a later
+revision arrives. No valid profile is held in a waiting state solely because
+plans or specifications were not issued.
 
 ## 5.3 Foundation 4C - Mixed-Mode Plan-Sheet Intelligence
 
@@ -307,6 +379,11 @@ documents, and unresolved exceptions.
 
 Turn vector, scanned, and hybrid plan sets into individually addressable,
 revision-controlled sheets and views without altering the original PDF.
+
+This increment runs only when the active bid-basis profile includes plans. A
+project without plans bypasses plan processing with an explicit
+`not_applicable_to_current_basis` state; it is not a processing failure and
+does not block the Estimate Workspace.
 
 ### Modality routing
 
@@ -410,8 +487,15 @@ and affected risk or procurement record.
 
 ### Outcome
 
-Create auditable plan-takeoff proposals in increasing levels of geometric and
+Create auditable quantity proposals in increasing levels of geometric and
 construction complexity.
+
+On plans-only and plans-and-specifications projects, this engine may calculate
+from calibrated geometry. On specifications-only and written-scope-only
+projects, it consumes only explicit owner quantities or estimator-entered
+measurements; it does not fabricate plan geometry. The estimate remains usable
+with quantity states of `unknown`, `owner_provided`, `allowance`, or
+`estimator_entered` as permitted by the existing estimator contract.
 
 ### Quantity authorities
 
@@ -598,7 +682,8 @@ Store tenant-scoped records for:
 
 - package manifests and revisions;
 - document and sheet identity;
-- classification and completeness state;
+- classification, category availability, bid-basis, and capability-readiness
+  state;
 - regions, calibrations, assets, relationships, measurements, quantities,
   revision impacts, review decisions, and processing jobs;
 - pointers, hashes, sizes, versions, and retention state for object artifacts.
@@ -658,7 +743,7 @@ Terminal exception states include:
 - superseded.
 
 One failed sheet must not erase successful sheet intelligence. Project-level
-readiness reports exact partial completion and blocking effects.
+readiness reports exact partial completion and capability-specific effects.
 
 ### 7.2 Idempotency
 
@@ -710,11 +795,15 @@ both independently and then verify their integration.
 ### 8.4 Fail-safe behavior
 
 - Unknown is never zero.
+- A document that was not issued is never treated as a failed upload.
+- Missing plans or specifications never globally lock the Estimate Workspace.
+- A capability that lacks required evidence is unavailable or provisional,
+  never silently simulated.
 - Missing scale is never assumed.
 - Conflicting dimensions are never averaged silently.
 - A scanned sheet is never treated as vector because OCR found text.
 - A revised sheet never silently changes accepted quantity or cost.
-- Partial processing never presents the project as complete.
+- Partial processing never presents an affected capability as complete.
 - Low confidence never hides the underlying source or calculation.
 
 ### 8.5 Human factors
@@ -764,6 +853,10 @@ does not silently alter another tenant's accepted behavior.
 | Hazard | Consequence | Required control |
 | --- | --- | --- |
 | Bid Scout handoff omits or cannot transfer plan objects | Missing quantities and false readiness | Signed manifest, per-object hash verification, separate plans/specs confirmation, and terminal dispositions |
+| Owner issued specifications but no plans | Estimate waits forever or plan quantity is fabricated | `specs_only` profile, immediate estimate access, plan capabilities unavailable, quantities unknown or owner/estimator supplied |
+| Owner issued plans but no specifications | Scope appears falsely compliant | `plans_only` profile, plan takeoff enabled, spec-dependent conclusions unavailable and visible |
+| Owner issued only written scope | Opportunity is rejected despite being bidable | `written_scope_only` profile, conceptual WBS/estimate, explicit assumptions, clarifications, and risk |
+| Not-issued document is treated as missing | False blocker and wasted bid-day effort | Separate `not_issued`, `expected_missing`, and `unknown` states |
 | Bid Scout and Helios tenant mappings disagree | Cross-company disclosure | Reject before object access and require an authorized mapping |
 | Same handoff is retried after a timeout | Duplicate documents or analysis cost | End-to-end idempotency and stable receipt acknowledgment |
 | New addendum arrives after analysis | Obsolete quantities or scope | New immutable package revision and explicit impact review |
@@ -774,7 +867,7 @@ does not silently alter another tenant's accepted behavior.
 | Unknown treated as zero | Underbid | First-class unknown/takeoff-required state |
 | AI invents geometry or quantity | Untraceable cost | Deterministic measurement and source/formula requirement |
 | Duplicate files counted twice | Duplicate scope | Hash and sheet-identity reconciliation |
-| One failed sheet marks project complete | Hidden scope gap | Partial readiness and blocking dependency report |
+| One failed sheet marks plan intelligence complete | Hidden scope gap | Partial readiness and capability dependency report |
 | Cross-tenant source relationship | Confidentiality breach | Tenant/project authorization on every record and artifact |
 | Addendum silently overwrites accepted work | Loss of estimator control | Immutable versions and explicit revision-impact review |
 
@@ -814,6 +907,12 @@ does not silently alter another tenant's accepted behavior.
     verify supersession, stale-result
     invalidation, impact reporting, and explicit estimator disposition.
 17. Re-run from the same baseline and prove deterministic repeatability.
+18. Create controlled plans-only, specifications-only, and written-scope-only
+    variants and verify each opens the Estimate Workspace with the correct
+    supported capabilities, limitations, risks, and unknown quantity states.
+19. Add the previously absent source category to each controlled variant and
+    verify capability expansion and impact reporting without overwriting
+    accepted work.
 
 ### 11.3 Initial quantitative acceptance targets
 
@@ -834,6 +933,9 @@ does not silently alter another tenant's accepted behavior.
 | Accepted record silently overwritten | Zero occurrences |
 | Cross-company data exposure | Zero occurrences |
 | Same-input deterministic rerun difference | Zero unexplained difference |
+| Supported bid-basis profiles with a usable scope basis that can open an estimate | 5 of 5 |
+| Not-issued plans/specifications causing a global estimate block | Zero occurrences |
+| Unsupported capability presented as verified | Zero occurrences |
 
 The tolerances are validation thresholds, not permission to hide variance.
 Helios always displays the actual difference and its source.
@@ -850,8 +952,13 @@ Foundation 4 passes only when a reviewer can verify all of the following:
   before receipt acknowledgment.
 - Replayed handoffs are idempotent, and invalid signatures, tenant mappings,
   manifests, or hashes reject closed before analysis.
-- The package cannot be labeled complete without plans and specifications or
-  an audited waiver.
+- Plans-and-specifications, plans-only, specifications-only,
+  written-scope-only, and mixed/other profiles can all begin estimating from
+  their verified source basis.
+- Estimate readiness is independent from plan, specification, owner-item, and
+  submission readiness.
+- A not-issued category never creates a global blocker or unnecessary waiver;
+  expected-but-missing and unknown categories remain visible limitations.
 - The original source remains private, immutable, and reviewable.
 - Vector, scanned, hybrid, and unusable pages follow explicit processing
   paths.
@@ -876,6 +983,13 @@ Foundation 4 passes only when a reviewer can verify all of the following:
 - Treating a Bid Scout download or storage write as a successful Helios
   handoff before manifest and object verification.
 - Marking documents ready based only on file count.
+- Requiring every project to contain both plans and specifications.
+- Blocking the entire estimate because a capability-specific source was not
+  issued.
+- Treating `not_issued`, `expected_missing`, `unknown`, and `not_applicable` as
+  the same state.
+- Inventing plan quantities for specifications-only or written-scope-only
+  projects.
 - Using one scale for every view on a sheet without validation.
 - Asking an LLM to produce final quantities without deterministic geometry.
 - Reconstructing a plan and presenting it as the legal source.
@@ -900,8 +1014,8 @@ Foundation 4 passes only when a reviewer can verify all of the following:
 No Foundation 4 application code should begin until this document is reviewed
 and the following decisions are explicitly approved:
 
-1. Secure Bid Scout package handoff and independent Helios completeness are
-   the first implementation increment.
+1. Secure Bid Scout package handoff and bid-basis profiling are the first
+   implementation increment.
 2. Bid Scout owns Construction Exchange interaction, authorized download, and
    secure source-object staging.
 3. Helios receives only a versioned, authenticated, tenant-scoped package
@@ -916,6 +1030,9 @@ and the following decisions are explicitly approved:
    revised.
 8. Foundation 4 integrates through existing quantity/evidence contracts and
    does not rewrite the estimator, WBS, cockpit, or Foundation 3C intelligence.
+9. All five bid-basis profiles can start an estimate when they contain at
+   least one verified usable scope basis, with capabilities gated individually
+   and unsupported conclusions kept explicit.
 
 After approval, implementation should begin with Foundation 4A and 4B only.
 Foundation 4C through 4F remain gated by the verified exit criteria of the
