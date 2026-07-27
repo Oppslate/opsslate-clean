@@ -1,8 +1,15 @@
 import {
   HELIOS_MAX_PDF_BYTES,
   HELIOS_UPLOAD_INTENT_LIFETIME_MS,
+  HELIOS_BID_BASIS_AVAILABILITY_STATES,
+  HELIOS_BID_BASIS_CATEGORIES,
+  HELIOS_BID_BASIS_PROFILES,
   canonicalPdfFileName,
+  deriveHeliosBidBasis,
   normalizeProjectInput,
+  type HeliosBidBasisAvailabilityState,
+  type HeliosBidBasisCategory,
+  type HeliosBidBasisProfileType,
   type HeliosFindingReviewStatus,
 } from "@opsslate/helios-domain";
 import { makeFunctionReference } from "convex/server";
@@ -396,6 +403,116 @@ export const getProject = internalQuery({
     const documentsById = new Map(
       documents.map((document) => [document._id, document]),
     );
+    const activePackage = project.activePackageId
+      ? packages.find((bidPackage) => bidPackage._id === project.activePackageId)
+      : undefined;
+    const activePackageSummary = activePackage
+      ? packageRows.find((row) => row.id === String(activePackage._id))
+      : undefined;
+    const [storedBidBasis, documentClassifications] = activePackage
+      ? await Promise.all([
+          ctx.db
+            .query("heliosBidBasisProfiles")
+            .withIndex("by_package", (query) =>
+              query.eq("packageId", activePackage._id),
+            )
+            .first(),
+          ctx.db
+            .query("heliosDocumentClassifications")
+            .withIndex("by_project", (query) =>
+              query.eq("projectId", project._id),
+            )
+            .collect(),
+        ])
+      : [null, []];
+    const activeDocumentIds = new Set(
+      (activePackageSummary?.entries || [])
+        .map((entry) => entry.documentId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const validCategory = (value: string): value is HeliosBidBasisCategory =>
+      HELIOS_BID_BASIS_CATEGORIES.includes(value as HeliosBidBasisCategory);
+    const validState = (value: string): value is HeliosBidBasisAvailabilityState =>
+      HELIOS_BID_BASIS_AVAILABILITY_STATES.includes(
+        value as HeliosBidBasisAvailabilityState,
+      );
+    const validProfile = (value?: string): value is HeliosBidBasisProfileType =>
+      Boolean(value) && HELIOS_BID_BASIS_PROFILES.includes(
+        value as HeliosBidBasisProfileType,
+      );
+    const bidBasis = activePackage && activePackageSummary
+      ? {
+          ...deriveHeliosBidBasis({
+            projectId: String(project._id),
+            packageId: String(activePackage._id),
+            packageRevision: activePackage.revision,
+            packageStatus: activePackage.status,
+            documents: documents
+              .map((document, index) => ({ document, analysis: documentAnalyses[index] }))
+              .filter(({ document }) => activeDocumentIds.has(String(document._id)))
+              .map(({ document, analysis }) => ({
+                id: String(document._id),
+                fileName: document.fileName,
+                relativePath: document.relativePath,
+                status: document.status,
+                documentType: analysis?.documentType,
+                findingCategories: analysis?.findings.map((finding) => finding.category),
+                findingText: analysis?.findings
+                  .map((finding) => `${finding.title} ${finding.detail}`)
+                  .join(" "),
+                indexedPageNumbers: evidence
+                  .filter((row) => row.documentId === document._id)
+                  .map((row) => row.pageNumber)
+                  .filter((page): page is number => page !== undefined),
+              })),
+            entries: activePackageSummary.entries.map((entry) => ({
+              documentId: entry.documentId,
+              sourceCategory: entry.sourceCategory,
+              relativePath: entry.relativePath,
+              status: entry.status,
+            })),
+            writtenScopeCount: writtenScopes.filter(
+              (scope) => scope.packageId === activePackage._id,
+            ).length,
+            projectFindingText:
+              intelligence &&
+              intelligence.isCurrent !== false &&
+              intelligence.packageId === activePackage._id
+                ? intelligence.findings
+                    .map((finding) => `${finding.title} ${finding.detail}`)
+                    .join(" ")
+                : undefined,
+            categoryOverrides: (storedBidBasis?.categoryOverrides || [])
+              .filter((override) => validCategory(override.category) && validState(override.state))
+              .map((override) => ({
+                category: override.category as HeliosBidBasisCategory,
+                state: override.state as HeliosBidBasisAvailabilityState,
+              })),
+            documentOverrides: documentClassifications
+              .filter(
+                (classification) =>
+                  classification.packageId === activePackage._id &&
+                  activeDocumentIds.has(String(classification.documentId)) &&
+                  validCategory(classification.category),
+              )
+              .map((classification) => ({
+                documentId: String(classification.documentId),
+                category: classification.category as HeliosBidBasisCategory,
+              })),
+            profileOverride: validProfile(storedBidBasis?.profileOverride)
+              ? storedBidBasis.profileOverride
+              : undefined,
+            classificationStatus: storedBidBasis?.classificationStatus,
+            proceededAt: storedBidBasis?.proceededAt,
+            confirmedAt: storedBidBasis?.confirmedAt,
+            confirmedBy: storedBidBasis?.confirmedBy
+              ? String(storedBidBasis.confirmedBy)
+              : undefined,
+            now: storedBidBasis?.updatedAt || Date.now(),
+          }),
+          id: storedBidBasis ? String(storedBidBasis._id) : undefined,
+        }
+      : undefined;
     return {
       project: projectSummary(project, documents.length),
       documents: documentSummaries,
@@ -422,6 +539,7 @@ export const getProject = internalQuery({
         ? String(project.activePackageId)
         : undefined,
       latestIntelligenceError: project.latestIntelligenceError,
+      bidBasis,
       intelligence: intelligence
         ? {
             id: intelligence._id,

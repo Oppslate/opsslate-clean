@@ -15,6 +15,7 @@ import { EstimateCockpit2 } from "./estimate-cockpit-2";
 import { ProjectDocumentControl } from "./project-document-control";
 import { ProjectIntelligenceCockpit } from "./project-intelligence-cockpit";
 import { ProjectIntelligencePanel } from "./project-intelligence-panel";
+import { BidBasisPanel } from "./bid-basis-panel";
 
 export function ProjectIntake({
   detail,
@@ -57,6 +58,13 @@ export function ProjectIntake({
       }
     >
       <div className="space-y-4">
+        {detail.bidBasis && (
+          <BidBasisPanel
+            projectId={project.id}
+            bidBasis={detail.bidBasis}
+            documents={detail.documents}
+          />
+        )}
         {detail.intelligence && workspace ? (
           <EstimateCockpit2
             project={project}

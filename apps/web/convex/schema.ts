@@ -403,6 +403,86 @@ export default defineSchema({
     generatedAt: v.number(),
   }).index("by_document", ["documentId"]),
 
+  heliosDocumentClassifications: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    documentId: v.id("heliosDocuments"),
+    category: v.union(
+      v.literal("plans"),
+      v.literal("specifications"),
+      v.literal("written_scope"),
+      v.literal("owner_bid_schedule"),
+      v.literal("proposal_bid_forms"),
+      v.literal("addenda"),
+      v.literal("geotechnical"),
+      v.literal("utilities"),
+      v.literal("environmental_permits"),
+      v.literal("referenced_standards_details"),
+    ),
+    reason: v.string(),
+    classifiedBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_package_document", ["packageId", "documentId"])
+    .index("by_project", ["projectId", "createdAt"]),
+
+  heliosBidBasisProfiles: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    profile: v.union(
+      v.literal("plans_and_specs"),
+      v.literal("plans_only"),
+      v.literal("specs_only"),
+      v.literal("written_scope_only"),
+      v.literal("mixed_or_other"),
+    ),
+    profileOverride: v.optional(v.string()),
+    classificationStatus: v.union(
+      v.literal("inferred"),
+      v.literal("confirmed"),
+      v.literal("corrected"),
+    ),
+    categoryOverrides: v.array(
+      v.object({ category: v.string(), state: v.string() }),
+    ),
+    sourceFingerprint: v.string(),
+    proceededAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+    confirmedBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_package", ["packageId"])
+    .index("by_project_revision", ["projectId", "packageRevision"]),
+
+  heliosBidBasisEvents: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    profileId: v.id("heliosBidBasisProfiles"),
+    action: v.union(
+      v.literal("proceed"),
+      v.literal("confirm_profile"),
+      v.literal("correct_profile"),
+      v.literal("set_category_state"),
+      v.literal("classify_document"),
+    ),
+    category: v.optional(v.string()),
+    documentId: v.optional(v.id("heliosDocuments")),
+    previousValue: v.optional(v.string()),
+    decisionValue: v.string(),
+    reason: v.optional(v.string()),
+    reviewerUserId: v.id("users"),
+    reviewerName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_profile_created", ["profileId", "createdAt"])
+    .index("by_project_created", ["projectId", "createdAt"]),
+
   heliosProjectIntelligence: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

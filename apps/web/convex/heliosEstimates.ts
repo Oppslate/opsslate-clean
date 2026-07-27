@@ -25,6 +25,7 @@ import {
   heliosPrincipalValidator,
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
+import { ensureBidBasisProfile, deriveProjectBidBasis } from "./heliosBidBasis";
 
 const ESTIMATE_SCHEMA_VERSION = 4;
 
@@ -106,6 +107,21 @@ export const requestProposal = internalMutation({
   handler: async (ctx, args) => {
     const { user, companyId } = await requireHeliosPrincipal(ctx, args.principal);
     const project = await ownedProject(ctx, companyId, args.projectId);
+    if (!project.activePackageId) {
+      throw new Error("Finalize a bid package before creating an estimate proposal.");
+    }
+    const activePackage = await ctx.db.get(project.activePackageId);
+    if (!activePackage || activePackage.projectId !== project._id) {
+      throw new Error("Active bid package not found.");
+    }
+    const bidBasisRow = await ensureBidBasisProfile(ctx, project, activePackage);
+    const bidBasis = await deriveProjectBidBasis(ctx, project, activePackage);
+    if (bidBasis.workspaceState === "no_usable_scope_basis") {
+      throw new Error("A usable scope basis is required before an estimate proposal can be created.");
+    }
+    if (!bidBasisRow.proceededAt) {
+      throw new Error("Confirm and proceed with the available bid basis before creating an estimate proposal.");
+    }
     const intelligence = await currentProjectIntelligence(ctx, project._id);
     if (!intelligence) {
       throw new Error("Project intelligence must be ready before an estimate proposal can be created.");

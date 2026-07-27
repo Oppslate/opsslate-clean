@@ -16,6 +16,7 @@ import {
   heliosPrincipalValidator,
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
+import { ensureBidBasisProfile } from "./heliosBidBasis";
 
 const startDocumentReference = makeFunctionReference<
   "action",
@@ -321,6 +322,10 @@ export const finalizePackage = internalMutation({
         latestIntelligenceError: undefined,
         updatedAt: now,
       });
+      const finalizedPackage = await ctx.db.get(bidPackage._id);
+      if (finalizedPackage) {
+        await ensureBidBasisProfile(ctx, project, finalizedPackage);
+      }
       return {
         packageId: String(bidPackage._id),
         status: "ready_for_review" as const,
@@ -347,6 +352,10 @@ export const finalizePackage = internalMutation({
       latestIntelligenceError: undefined,
       updatedAt: now,
     });
+    const finalizedPackage = await ctx.db.get(bidPackage._id);
+    if (finalizedPackage) {
+      await ensureBidBasisProfile(ctx, project, finalizedPackage);
+    }
     return {
       packageId: String(bidPackage._id),
       status: "processing" as const,
@@ -899,6 +908,15 @@ export const completeProjectJob = internalMutation({
       intelligenceUpdatedAt: now,
       updatedAt: now,
     });
+    if (job.packageId) {
+      const [project, bidPackage] = await Promise.all([
+        ctx.db.get(job.projectId),
+        ctx.db.get(job.packageId),
+      ]);
+      if (project && bidPackage && bidPackage.projectId === project._id) {
+        await ensureBidBasisProfile(ctx, project, bidPackage);
+      }
+    }
     return null;
   },
 });

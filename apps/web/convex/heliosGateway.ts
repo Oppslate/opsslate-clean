@@ -1,11 +1,14 @@
 import {
   HeliosValidationError,
   normalizeFindingReviewInput,
+  normalizeBidBasisReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
   normalizeEstimateReviewInput,
   normalizeProjectInput,
   type HeliosBidPackage,
+  type HeliosBidBasisProfile,
+  type HeliosBidBasisReviewInput,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
   type HeliosFindingReviewEvent,
@@ -166,6 +169,15 @@ const reviewFindingReference = makeFunctionReference<
   },
   HeliosFindingReviewEvent
 >("heliosReviews:reviewFinding");
+const reviewBidBasisReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    input: HeliosBidBasisReviewInput;
+  },
+  HeliosBidBasisProfile
+>("heliosBidBasis:reviewBidBasis");
 const getEstimateWorkspaceReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal; projectId: string },
@@ -502,7 +514,10 @@ export const getHeliosProject = httpAction(async (ctx, request) => {
       },
     );
     return json({ data }, 200);
-  } catch {
+  } catch (error) {
+    console.error("[helios:project-get] failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return json({ error: "Project was not found." }, 404);
   }
 });
@@ -814,6 +829,33 @@ export const reviewHeliosFinding = httpAction(async (ctx, request) => {
           error instanceof HeliosValidationError
             ? error.message
             : "Finding review could not be saved.",
+      },
+      400,
+    );
+  }
+});
+
+export const reviewHeliosBidBasis = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid bid-basis review request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(reviewBidBasisReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeBidBasisReviewInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Bid-basis decision could not be saved.",
       },
       400,
     );

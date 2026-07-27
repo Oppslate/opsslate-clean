@@ -5,6 +5,7 @@ import {
   calculateEstimateReviewSummary,
   type HeliosEstimateBuildInput,
   type HeliosEstimateWorkspace,
+  type HeliosBidBasisProfile,
   type HeliosProjectSummary,
 } from "@opsslate/helios-domain";
 import { Badge } from "@opsslate/suite-ui/badge";
@@ -59,9 +60,11 @@ function EvidenceList({ ids, workspace }: { ids: string[]; workspace: HeliosEsti
 export function EstimateBuilder({
   project,
   workspace,
+  bidBasis,
 }: {
   project: HeliosProjectSummary;
   workspace: HeliosEstimateWorkspace | null;
+  bidBasis?: HeliosBidBasisProfile;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -118,6 +121,10 @@ export function EstimateBuilder({
   const supportWorkspace = workspace ? { ...workspace, ...supportCollections } : null;
 
   async function generateProposal() {
+    if (bidBasis && !bidBasis.proceededAt) {
+      toast("Review and proceed with the available bid basis before generating an estimate.", "error");
+      return;
+    }
     setRequesting(true);
     try {
       const response = await fetch(`/api/projects/${project.id}/estimate/propose`, {
@@ -174,7 +181,7 @@ export function EstimateBuilder({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline"><Link href={`/projects/${project.id}`}><ArrowLeft aria-hidden="true" />Project intelligence</Link></Button>
-          <Button onClick={generateProposal} disabled={requesting || isProcessing}>
+          <Button onClick={generateProposal} disabled={requesting || isProcessing || Boolean(bidBasis && !bidBasis.proceededAt)}>
             <RefreshCw className={requesting || isProcessing ? "animate-spin" : ""} aria-hidden="true" />
             {workspace ? "Create new proposal version" : "Generate estimate breakdown"}
           </Button>
@@ -191,7 +198,12 @@ export function EstimateBuilder({
               NYSDOT-aligned cost codes, resources, takeoff requirements, and a separate risk register.
               Prices are never invented.
             </p>
-            <Button className="mt-5" onClick={generateProposal} disabled={requesting}>
+            {bidBasis && !bidBasis.proceededAt && (
+              <div className="mt-4 rounded-md border border-amber-500/35 bg-amber-500/5 px-4 py-2 text-sm text-amber-100">
+                Confirm the available bid basis on project document control before generating the breakdown.
+              </div>
+            )}
+            <Button className="mt-5" onClick={generateProposal} disabled={requesting || Boolean(bidBasis && !bidBasis.proceededAt)}>
               <Bot aria-hidden="true" />Generate evidence-backed proposal
             </Button>
           </CardContent>

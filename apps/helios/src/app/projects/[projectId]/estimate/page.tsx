@@ -35,7 +35,11 @@ export default async function ProjectEstimatePage({
   }
   return (
     <HeliosShell principal={principal}>
-      <EstimateBuilder project={detail.project} workspace={workspace} />
+      <EstimateBuilder
+        project={detail.project}
+        workspace={workspace}
+        bidBasis={detail.bidBasis}
+      />
     </HeliosShell>
   );
 }
