@@ -1,7 +1,8 @@
 # Helios Foundation 4: Plan Intelligence, Quantity Takeoff, and Bid Digital Twin
 
-Status: approved architecture direction; requirements and verification baseline
-only; implementation not yet authorized
+Status: approved architecture direction and verification baseline; Foundation
+4A canonical manual package intake implemented; Foundation 4B through 4F remain
+gated
 
 Product: Helios, a standalone responsive web application in the OpsSlate
 product family

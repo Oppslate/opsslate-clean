@@ -121,7 +121,20 @@ export default defineSchema({
       v.literal("files"),
       v.literal("folder"),
       v.literal("zip"),
+      v.literal("written_scope"),
     ),
+    adapter: v.optional(v.union(v.literal("manual"), v.literal("bid_scout"))),
+    manifestVersion: v.optional(v.number()),
+    revisionKind: v.optional(
+      v.union(
+        v.literal("initial"),
+        v.literal("addendum"),
+        v.literal("revision"),
+        v.literal("supplemental"),
+      ),
+    ),
+    revisionLabel: v.optional(v.string()),
+    predecessorPackageId: v.optional(v.id("heliosBidPackages")),
     revision: v.number(),
     status: v.union(
       v.literal("uploading"),
@@ -138,6 +151,7 @@ export default defineSchema({
     uploadedCount: v.number(),
     duplicateCount: v.number(),
     failedCount: v.number(),
+    writtenScopeCount: v.optional(v.number()),
     totalBytes: v.number(),
     lastError: v.optional(v.string()),
     finalizedAt: v.optional(v.number()),
@@ -149,13 +163,61 @@ export default defineSchema({
     .index("by_project_status", ["projectId", "status"])
     .index("by_company_updated", ["companyId", "updatedAt"]),
 
+  heliosPackageEnvelopes: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    createdBy: v.id("users"),
+    envelopeId: v.string(),
+    adapter: v.union(v.literal("manual"), v.literal("bid_scout")),
+    sourceType: v.union(
+      v.literal("files"),
+      v.literal("folder"),
+      v.literal("zip"),
+      v.literal("written_scope"),
+    ),
+    manifestVersion: v.number(),
+    revisionKind: v.union(
+      v.literal("initial"),
+      v.literal("addendum"),
+      v.literal("revision"),
+      v.literal("supplemental"),
+    ),
+    revisionLabel: v.optional(v.string()),
+    manifestFingerprint: v.string(),
+    status: v.union(v.literal("building"), v.literal("terminal")),
+    entryCount: v.number(),
+    acceptedCount: v.number(),
+    rejectedCount: v.number(),
+    totalBytes: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project_envelope", ["projectId", "envelopeId"])
+    .index("by_package", ["packageId", "createdAt"]),
+
   heliosPackageEntries: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),
     packageId: v.id("heliosBidPackages"),
+    envelopeRecordId: v.optional(v.id("heliosPackageEnvelopes")),
+    kind: v.optional(v.union(v.literal("pdf"), v.literal("written_scope"))),
+    sourceCategory: v.optional(
+      v.union(
+        v.literal("plans"),
+        v.literal("specifications"),
+        v.literal("bid_schedule"),
+        v.literal("bid_forms"),
+        v.literal("addendum"),
+        v.literal("written_scope"),
+        v.literal("supporting"),
+        v.literal("unknown"),
+      ),
+    ),
     relativePath: v.string(),
     canonicalPath: v.string(),
     size: v.number(),
+    sha256: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("uploaded"),
@@ -165,12 +227,35 @@ export default defineSchema({
     ),
     reason: v.optional(v.string()),
     documentId: v.optional(v.id("heliosDocuments")),
+    writtenScopeId: v.optional(v.id("heliosWrittenScopes")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_package", ["packageId", "createdAt"])
     .index("by_package_path", ["packageId", "canonicalPath"])
     .index("by_project", ["projectId", "createdAt"]),
+
+  heliosWrittenScopes: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageEntryId: v.id("heliosPackageEntries"),
+    createdBy: v.id("users"),
+    title: v.string(),
+    canonicalTitle: v.string(),
+    relativePath: v.string(),
+    content: v.string(),
+    sourceLocation: v.optional(v.string()),
+    size: v.number(),
+    sha256: v.string(),
+    version: v.number(),
+    supersedesWrittenScopeId: v.optional(v.id("heliosWrittenScopes")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId", "createdAt"])
+    .index("by_project_hash", ["projectId", "sha256"])
+    .index("by_package", ["packageId", "createdAt"]),
 
   heliosDocuments: defineTable({
     companyId: v.id("companies"),

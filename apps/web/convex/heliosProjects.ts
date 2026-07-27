@@ -3,6 +3,7 @@ import {
   HELIOS_UPLOAD_INTENT_LIFETIME_MS,
   canonicalPdfFileName,
   normalizeProjectInput,
+  type HeliosFindingReviewStatus,
 } from "@opsslate/helios-domain";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
@@ -209,17 +210,33 @@ export const getProject = internalQuery({
       .collect();
     const packageRows = await Promise.all(
       packages.map(async (bidPackage) => {
-        const entries = await ctx.db
-          .query("heliosPackageEntries")
-          .withIndex("by_package", (query) =>
-            query.eq("packageId", bidPackage._id),
-          )
-          .collect();
+        const [entries, envelopes] = await Promise.all([
+          ctx.db
+            .query("heliosPackageEntries")
+            .withIndex("by_package", (query) =>
+              query.eq("packageId", bidPackage._id),
+            )
+            .collect(),
+          ctx.db
+            .query("heliosPackageEnvelopes")
+            .withIndex("by_package", (query) =>
+              query.eq("packageId", bidPackage._id),
+            )
+            .collect(),
+        ]);
         return {
           id: String(bidPackage._id),
           projectId: String(project._id),
           name: bidPackage.name,
           sourceType: bidPackage.sourceType,
+          adapter: bidPackage.adapter || ("manual" as const),
+          manifestVersion: bidPackage.manifestVersion || 1,
+          revisionKind:
+            bidPackage.revisionKind ||
+            (bidPackage.revision === 1
+              ? ("initial" as const)
+              : ("supplemental" as const)),
+          revisionLabel: bidPackage.revisionLabel,
           revision: bidPackage.revision,
           status: bidPackage.status,
           entryCount: bidPackage.entryCount,
@@ -228,6 +245,7 @@ export const getProject = internalQuery({
           uploadedCount: bidPackage.uploadedCount,
           duplicateCount: bidPackage.duplicateCount,
           failedCount: bidPackage.failedCount,
+          writtenScopeCount: bidPackage.writtenScopeCount || 0,
           totalBytes: bidPackage.totalBytes,
           lastError: bidPackage.lastError,
           finalizedAt: bidPackage.finalizedAt,
@@ -237,17 +255,51 @@ export const getProject = internalQuery({
           entries: entries.map((entry) => ({
             id: String(entry._id),
             packageId: String(entry.packageId),
+            envelopeId: entry.envelopeRecordId
+              ? envelopes.find(
+                  (envelope) => envelope._id === entry.envelopeRecordId,
+                )?.envelopeId
+              : undefined,
+            kind: entry.kind || ("pdf" as const),
+            sourceCategory: entry.sourceCategory || ("unknown" as const),
             relativePath: entry.relativePath,
             size: entry.size,
+            sha256: entry.sha256,
             status: entry.status,
             reason: entry.reason,
             documentId: entry.documentId
               ? String(entry.documentId)
               : undefined,
+            writtenScopeId: entry.writtenScopeId
+              ? String(entry.writtenScopeId)
+              : undefined,
+          })),
+          envelopes: envelopes.map((envelope) => ({
+            id: String(envelope._id),
+            envelopeId: envelope.envelopeId,
+            adapter: envelope.adapter,
+            sourceType: envelope.sourceType,
+            manifestVersion: envelope.manifestVersion,
+            revisionKind: envelope.revisionKind,
+            revisionLabel: envelope.revisionLabel,
+            status: envelope.status,
+            entryCount: envelope.entryCount,
+            acceptedCount: envelope.acceptedCount,
+            rejectedCount: envelope.rejectedCount,
+            totalBytes: envelope.totalBytes,
+            createdAt: envelope.createdAt,
+            updatedAt: envelope.updatedAt,
           })),
         };
       }),
     );
+    const writtenScopes = await ctx.db
+      .query("heliosWrittenScopes")
+      .withIndex("by_project", (query) =>
+        query.eq("projectId", project._id),
+      )
+      .order("desc")
+      .collect();
     const intelligence = await ctx.db
       .query("heliosProjectIntelligence")
       .withIndex("by_project", (query) =>
@@ -298,7 +350,8 @@ export const getProject = internalQuery({
           ...finding,
           evidenceIds: finding.evidenceIds.map(String),
           review: {
-            status: latest?.status || ("needs_review" as const),
+            status: (latest?.status ||
+              "needs_review") as HeliosFindingReviewStatus,
             correctedTitle,
             correctedDetail,
             trade,
@@ -346,6 +399,24 @@ export const getProject = internalQuery({
     return {
       project: projectSummary(project, documents.length),
       documents: documentSummaries,
+      writtenScopes: writtenScopes.map((scope) => ({
+        id: String(scope._id),
+        projectId: String(scope.projectId),
+        packageId: String(scope.packageId),
+        packageEntryId: String(scope.packageEntryId),
+        title: scope.title,
+        relativePath: scope.relativePath,
+        content: scope.content,
+        sourceLocation: scope.sourceLocation,
+        size: scope.size,
+        sha256: scope.sha256,
+        version: scope.version,
+        supersedesWrittenScopeId: scope.supersedesWrittenScopeId
+          ? String(scope.supersedesWrittenScopeId)
+          : undefined,
+        createdAt: scope.createdAt,
+        updatedAt: scope.updatedAt,
+      })),
       packages: packageRows,
       activePackageId: project.activePackageId
         ? String(project.activePackageId)
@@ -468,6 +539,7 @@ export const createUploadIntent = internalMutation({
         entry.companyId !== companyId ||
         entry.projectId !== project._id ||
         entry.packageId !== bidPackage._id ||
+        (entry.kind && entry.kind !== "pdf") ||
         !["pending", "failed"].includes(entry.status) ||
         bidPackage.status !== "uploading"
       ) {
@@ -554,6 +626,24 @@ async function refreshPackageCounts(
     failedCount: entries.filter((entry) => entry.status === "failed").length,
     updatedAt: now,
   });
+  const envelopes = await ctx.db
+    .query("heliosPackageEnvelopes")
+    .withIndex("by_package", (query) => query.eq("packageId", packageId))
+    .collect();
+  for (const envelope of envelopes) {
+    if (envelope.status === "terminal") continue;
+    const envelopeEntries = entries.filter(
+      (entry) => entry.envelopeRecordId === envelope._id,
+    );
+    if (
+      envelopeEntries.length > 0 &&
+      envelopeEntries.every((entry) =>
+        ["uploaded", "duplicate", "rejected"].includes(entry.status),
+      )
+    ) {
+      await ctx.db.patch(envelope._id, { status: "terminal", updatedAt: now });
+    }
+  }
 }
 
 export const registerDocument = internalMutation({
@@ -617,12 +707,16 @@ export const registerDocument = internalMutation({
     const invalidReason =
       !metadata
         ? "Uploaded file was not found."
+        : packageEntry?.kind === "written_scope"
+          ? "Written scope evidence does not use the PDF upload path."
         : metadata.contentType !== "application/pdf"
           ? "Uploaded file is not a PDF."
           : metadata.size <= 0 || metadata.size > HELIOS_MAX_PDF_BYTES
             ? "Uploaded PDF exceeds the allowed size."
             : packageEntry && metadata.size !== packageEntry.size
               ? "Uploaded PDF size does not match the package manifest."
+            : packageEntry?.sha256 && metadata.sha256 !== packageEntry.sha256
+              ? "Uploaded PDF hash does not match the package manifest."
             : !args.magicValid
               ? "Uploaded file does not contain a valid PDF signature."
               : !canonicalFileName.endsWith(".pdf")
@@ -667,6 +761,7 @@ export const registerDocument = internalMutation({
         await ctx.db.patch(packageEntry._id, {
           status: "duplicate",
           documentId: duplicate._id,
+          sha256: metadata.sha256,
           reason: "Exact file already exists in this project.",
           updatedAt: now,
         });
@@ -675,7 +770,8 @@ export const registerDocument = internalMutation({
       return { kind: "duplicate" as const, document: documentSummary(duplicate) };
     }
 
-    const existingPathDocuments = relativePath
+    const canonicalRelativePath = relativePath?.toLowerCase();
+    const existingPathDocuments = canonicalRelativePath
       ? await ctx.db
           .query("heliosDocuments")
           .withIndex("by_project", (query) =>
@@ -687,7 +783,7 @@ export const registerDocument = internalMutation({
       .filter(
         (document) =>
           document.status !== "superseded" &&
-          document.relativePath?.toLowerCase() === relativePath.toLowerCase(),
+          document.relativePath?.toLowerCase() === canonicalRelativePath,
       )
       .sort((left, right) => right.version - left.version)[0];
     if (priorVersion) {
@@ -722,6 +818,7 @@ export const registerDocument = internalMutation({
       await ctx.db.patch(packageEntry._id, {
         status: "uploaded",
         documentId,
+        sha256: metadata.sha256,
         reason: undefined,
         updatedAt: now,
       });

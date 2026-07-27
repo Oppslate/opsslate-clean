@@ -2,8 +2,10 @@
 
 import {
   formatFileSize,
+  HELIOS_MANIFEST_VERSION,
   hasPdfMagicBytes,
   type HeliosBidPackage,
+  type HeliosPackageRevisionKind,
 } from "@opsslate/helios-domain";
 import { Badge } from "@opsslate/suite-ui/badge";
 import { Button } from "@opsslate/suite-ui/button";
@@ -15,6 +17,15 @@ import {
   CardTitle,
 } from "@opsslate/suite-ui/card";
 import { useToast } from "@opsslate/suite-ui/toast";
+import { Input } from "@opsslate/suite-ui/input";
+import { Label } from "@opsslate/suite-ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@opsslate/suite-ui/select";
 import {
   AlertCircle,
   Archive,
@@ -35,6 +46,7 @@ import {
   type PreparedBidPackage,
   type PreparedPackageFile,
 } from "@/lib/package-files";
+import { WrittenScopeDialog } from "./written-scope-dialog";
 
 const UPLOAD_CONCURRENCY = 3;
 
@@ -93,8 +105,16 @@ function uploadToStorage(
 function sourceLabel(source: HeliosBidPackage["sourceType"]) {
   if (source === "folder") return "Folder";
   if (source === "zip") return "ZIP package";
+  if (source === "written_scope") return "Written scope";
   return "Selected files";
 }
+
+const revisionLabels: Record<HeliosPackageRevisionKind, string> = {
+  initial: "Initial bid package",
+  addendum: "Addendum",
+  revision: "Revised documents",
+  supplemental: "Supplemental information",
+};
 
 export function BidPackageIntake({
   projectId,
@@ -113,6 +133,11 @@ export function BidPackageIntake({
   const [uploads, setUploads] = useState<LocalUpload[]>([]);
   const [creating, setCreating] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [revisionKind, setRevisionKind] =
+    useState<HeliosPackageRevisionKind>(
+      packages.length ? "supplemental" : "initial",
+    );
+  const [revisionLabel, setRevisionLabel] = useState("");
 
   const activePackage = useMemo(
     () =>
@@ -123,6 +148,10 @@ export function BidPackageIntake({
       ) || packages[0],
     [packages],
   );
+  const activeUpload =
+    activePackage?.status === "uploading" ? activePackage : undefined;
+  const effectiveRevisionKind = activeUpload?.revisionKind || revisionKind;
+  const effectiveRevisionLabel = activeUpload?.revisionLabel || revisionLabel;
 
   useEffect(() => {
     folderInputRef.current?.setAttribute("webkitdirectory", "");
@@ -236,12 +265,34 @@ export function BidPackageIntake({
     setCreating(true);
     try {
       const packageInput = {
+        envelopeId: prepared.envelopeId,
+        adapter: "manual" as const,
+        manifestVersion: HELIOS_MANIFEST_VERSION,
         name: prepared.name,
         sourceType: prepared.sourceType,
+        revisionKind: effectiveRevisionKind,
+        revisionLabel: effectiveRevisionLabel.trim() || undefined,
         entries: [
           ...prepared.files.map((candidate) => ({
+            kind: "pdf" as const,
+            sourceCategory:
+              effectiveRevisionKind === "addendum"
+                ? ("addendum" as const)
+                : ("unknown" as const),
             relativePath: candidate.relativePath,
             size: candidate.file.size,
+            sha256: candidate.sha256,
+            accepted: true,
+          })),
+          ...prepared.writtenScopes.map((scope) => ({
+            kind: "written_scope" as const,
+            sourceCategory: "written_scope" as const,
+            relativePath: scope.relativePath,
+            size: scope.size,
+            sha256: scope.sha256,
+            title: scope.title,
+            content: scope.content,
+            sourceLocation: scope.sourceLocation,
             accepted: true,
           })),
           ...prepared.rejected.map((entry) => ({
@@ -302,7 +353,9 @@ export function BidPackageIntake({
       });
       if (!uploadRows.length) {
         toast(
-          "These PDFs are already registered in the current package.",
+          prepared.writtenScopes.length
+            ? "Written scope registered. Review the package receipt before analysis."
+            : "These PDFs are already registered in the current package.",
           "success",
         );
         router.refresh();
@@ -353,7 +406,12 @@ export function BidPackageIntake({
       if (!response.ok) {
         throw new Error(payload.error || "Package could not be finalized.");
       }
-      toast("Package finalized. Helios is reading the bid set.", "success");
+      toast(
+        payload.data.status === "ready_for_review"
+          ? "Package registered. Its written scope is ready for bid-basis review."
+          : "Package finalized. Helios is reading the bid set.",
+        "success",
+      );
       router.refresh();
     } catch (error) {
       toast(
@@ -372,14 +430,18 @@ export function BidPackageIntake({
   const accepted =
     (activePackage?.uploadedCount || 0) +
     (activePackage?.duplicateCount || 0);
+  const registeredSourceCount =
+    (activePackage?.pdfCount || 0) +
+    (activePackage?.writtenScopeCount || 0);
+  const latestEnvelope = activePackage?.envelopes.at(-1);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Bid package intake</CardTitle>
         <CardDescription>
-          Add the complete bid set, verify the manifest, then release it for
-          coordinated project intelligence.
+          Register the bid basis you actually received, verify its canonical
+          manifest, then release it for coordinated project intelligence.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -422,8 +484,8 @@ export function BidPackageIntake({
           />
           <h2 className="font-semibold">Add the bid package</h2>
           <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
-            Select individual PDFs, a folder with subfolders, or a ZIP package.
-            Folder paths are retained in the project document register.
+            Add PDFs, one or more folders, a ZIP package, or an exact written
+            scope. Folder paths and every manual intake receipt are retained.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <Button
@@ -450,6 +512,13 @@ export function BidPackageIntake({
               <Archive className="size-4" aria-hidden="true" />
               Select ZIP
             </Button>
+            <WrittenScopeDialog
+              disabled={preparing || creating}
+              onPrepared={(next) => {
+                setPrepared(next);
+                setUploads([]);
+              }}
+            />
           </div>
           {preparing && (
             <div className="mt-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -468,12 +537,21 @@ export function BidPackageIntake({
               <div>
                 <div className="font-medium">{prepared.name}</div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  {prepared.files.length} PDFs ·{" "}
+                  {prepared.files.length} PDF
+                  {prepared.files.length === 1 ? "" : "s"}
+                  {prepared.writtenScopes.length
+                    ? ` · ${prepared.writtenScopes.length} written scope${prepared.writtenScopes.length === 1 ? "" : "s"}`
+                    : ""}
+                  {" · "}
                   {formatFileSize(
                     prepared.files.reduce(
                       (sum, candidate) => sum + candidate.file.size,
                       0,
-                    ),
+                    ) +
+                      prepared.writtenScopes.reduce(
+                        (sum, scope) => sum + scope.size,
+                        0,
+                      ),
                   )}
                   {prepared.rejected.length
                     ? ` · ${prepared.rejected.length} excluded`
@@ -482,6 +560,46 @@ export function BidPackageIntake({
               </div>
               <Badge variant="outline">{sourceLabel(prepared.sourceType)}</Badge>
             </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="revision-purpose">Package purpose</Label>
+                <Select
+                  value={effectiveRevisionKind}
+                  disabled={Boolean(activeUpload)}
+                  onValueChange={(value) =>
+                    setRevisionKind(value as HeliosPackageRevisionKind)
+                  }
+                >
+                  <SelectTrigger id="revision-purpose">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(revisionLabels).map(([value, label]) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="revision-label">Revision label (optional)</Label>
+                <Input
+                  id="revision-label"
+                  value={effectiveRevisionLabel || ""}
+                  disabled={Boolean(activeUpload)}
+                  maxLength={120}
+                  placeholder="Example: Addendum 2"
+                  onChange={(event) => setRevisionLabel(event.target.value)}
+                />
+              </div>
+            </div>
+            {activeUpload && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Additional selections join Revision {activeUpload.revision} as{" "}
+                {revisionLabels[effectiveRevisionKind].toLowerCase()}.
+              </p>
+            )}
             <details className="group mt-3">
               <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
                 <ChevronDown
@@ -496,12 +614,35 @@ export function BidPackageIntake({
                     key={candidate.id}
                     className="flex justify-between gap-3 rounded px-2 py-1.5"
                   >
-                    <span className="min-w-0 truncate">
-                      {candidate.relativePath}
+                    <span className="min-w-0">
+                      <span className="block truncate">
+                        {candidate.relativePath}
+                      </span>
+                      <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                        SHA-256 {candidate.sha256}
+                      </span>
                     </span>
                     <span className="shrink-0 text-muted-foreground">
                       {formatFileSize(candidate.file.size)}
                     </span>
+                  </div>
+                ))}
+                {prepared.writtenScopes.map((scope) => (
+                  <div
+                    key={scope.relativePath}
+                    className="rounded border border-orange-500/20 bg-orange-500/5 px-2 py-2"
+                  >
+                    <div className="flex justify-between gap-3">
+                      <span className="min-w-0 truncate font-medium">
+                        {scope.title}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {formatFileSize(scope.size)}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                      SHA-256 {scope.sha256}
+                    </div>
                   </div>
                 ))}
                 {prepared.rejected.map((entry) => (
@@ -528,8 +669,10 @@ export function BidPackageIntake({
                 <UploadCloud className="size-4" aria-hidden="true" />
               )}
               {activePackage?.status === "uploading"
-                ? "Add to current package and upload"
-                : "Create package and upload"}
+                ? "Add receipt to current package"
+                : prepared.writtenScopes.length
+                  ? "Register written scope"
+                  : "Create package and upload"}
             </Button>
           </div>
         )}
@@ -603,9 +746,21 @@ export function BidPackageIntake({
                   Revision {activePackage.revision} · {activePackage.name}
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  {accepted}/{activePackage.pdfCount} PDFs registered
+                  {accepted}/{registeredSourceCount} sources registered
+                  {activePackage.writtenScopeCount
+                    ? ` · ${activePackage.writtenScopeCount} written scope${activePackage.writtenScopeCount === 1 ? "" : "s"}`
+                    : ""}
                   {activePackage.rejectedCount
                     ? ` · ${activePackage.rejectedCount} excluded`
+                    : ""}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {revisionLabels[activePackage.revisionKind]}
+                  {activePackage.revisionLabel
+                    ? ` · ${activePackage.revisionLabel}`
+                    : ""}
+                  {latestEnvelope
+                    ? ` · ${activePackage.envelopes.length} intake receipt${activePackage.envelopes.length === 1 ? "" : "s"}`
                     : ""}
                 </div>
               </div>
@@ -620,7 +775,11 @@ export function BidPackageIntake({
             {activePackage.status === "uploading" && (
               <Button
                 className="mt-4"
-                disabled={finalizing || unresolved > 0 || accepted === 0}
+                disabled={
+                  finalizing ||
+                  unresolved > 0 ||
+                  registeredSourceCount === 0
+                }
                 onClick={() => void finalizePackage()}
               >
                 {finalizing && (

@@ -1,4 +1,5 @@
 import { callHeliosGateway } from "@/lib/helios-gateway";
+import { secureManualPackageInput } from "@/lib/manual-package";
 import { readHeliosPrincipal } from "@/lib/helios-session";
 import { apiJson, isSameOrigin } from "@/lib/request-security";
 
@@ -14,16 +15,17 @@ export async function POST(
   const principal = await readHeliosPrincipal();
   if (!principal) return apiJson({ error: "Authentication required." }, 401);
   const body = (await request.json().catch(() => null)) as {
+    envelopeId?: unknown;
+    adapter?: unknown;
+    manifestVersion?: unknown;
     name?: unknown;
     sourceType?: unknown;
+    revisionKind?: unknown;
+    revisionLabel?: unknown;
     entries?: unknown;
   } | null;
-  if (
-    !body ||
-    typeof body.name !== "string" ||
-    typeof body.sourceType !== "string" ||
-    !Array.isArray(body.entries)
-  ) {
+  const input = secureManualPackageInput(body);
+  if (!input) {
     return apiJson({ error: "Invalid bid package addition." }, 400);
   }
   try {
@@ -34,11 +36,7 @@ export async function POST(
       {
         projectId,
         packageId,
-        input: {
-          name: body.name,
-          sourceType: body.sourceType,
-          entries: body.entries,
-        },
+        input,
       },
     );
     return apiJson({ data }, 201);

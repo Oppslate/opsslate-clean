@@ -198,7 +198,9 @@ async function maybeStartProjectSynthesis(
 ) {
   const project = await ctx.db.get(projectId);
   if (!project) return null;
-  const bidPackage = packageId ? await ctx.db.get(packageId) : undefined;
+  const bidPackage = packageId
+    ? (await ctx.db.get(packageId)) || undefined
+    : undefined;
   if (packageId && (!bidPackage || !bidPackage.finalizedAt)) return null;
 
   const documents = await ctx.db
@@ -291,16 +293,10 @@ export const finalizePackage = internalMutation({
       ["uploaded", "duplicate"].includes(entry.status),
     );
     if (!accepted.length) {
-      throw new Error("The bid package contains no registered PDFs.");
+      throw new Error("The bid package contains no registered source evidence.");
     }
 
     const now = Date.now();
-    await ctx.db.patch(bidPackage._id, {
-      status: "ready_for_analysis",
-      finalizedAt: now,
-      lastError: undefined,
-      updatedAt: now,
-    });
     const documents = await ctx.db
       .query("heliosDocuments")
       .withIndex("by_project", (query) =>
@@ -312,6 +308,30 @@ export const finalizePackage = internalMutation({
         document.packageId === bidPackage._id &&
         document.status === "ready_for_intelligence",
     );
+    if (!packageDocuments.length) {
+      await ctx.db.patch(bidPackage._id, {
+        status: "ready_for_review",
+        finalizedAt: now,
+        lastError: undefined,
+        updatedAt: now,
+      });
+      await ctx.db.patch(project._id, {
+        status: "documents_ready",
+        intelligenceStatus: "ready_for_intelligence",
+        latestIntelligenceError: undefined,
+        updatedAt: now,
+      });
+      return {
+        packageId: String(bidPackage._id),
+        status: "ready_for_review" as const,
+      };
+    }
+    await ctx.db.patch(bidPackage._id, {
+      status: "ready_for_analysis",
+      finalizedAt: now,
+      lastError: undefined,
+      updatedAt: now,
+    });
     for (const document of packageDocuments) {
       await enqueueDocument(ctx, document);
     }
@@ -327,9 +347,6 @@ export const finalizePackage = internalMutation({
       latestIntelligenceError: undefined,
       updatedAt: now,
     });
-    if (!packageDocuments.length) {
-      await maybeStartProjectSynthesis(ctx, project._id, bidPackage._id);
-    }
     return {
       packageId: String(bidPackage._id),
       status: "processing" as const,
@@ -376,7 +393,7 @@ export const retryProject = internalMutation({
       .first();
     if (!completed) throw new Error("No completed document intelligence exists.");
     const bidPackage = project.activePackageId
-      ? await ctx.db.get(project.activePackageId)
+      ? (await ctx.db.get(project.activePackageId)) || undefined
       : undefined;
     if (bidPackage && !bidPackage.finalizedAt) {
       throw new Error("Finalize the active bid package before retrying.");
@@ -406,7 +423,7 @@ export const queueReviewedReanalysis = internalMutation({
       return null;
     }
     const bidPackage = project.activePackageId
-      ? await ctx.db.get(project.activePackageId)
+      ? (await ctx.db.get(project.activePackageId)) || undefined
       : undefined;
     if (bidPackage && !bidPackage.finalizedAt) return null;
     return enqueueProjectSynthesis(ctx, project, bidPackage);

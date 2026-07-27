@@ -6,6 +6,7 @@ import {
   HELIOS_MAX_ARCHIVE_EXPANSION_RATIO,
   HELIOS_MAX_PACKAGE_ENTRIES,
   HELIOS_MAX_UPLOAD_BATCH,
+  HELIOS_MAX_WRITTEN_SCOPE_BYTES,
   HeliosValidationError,
   normalizePackagePath,
   validatePdfCandidate,
@@ -17,6 +18,7 @@ export type PreparedPackageFile = {
   id: string;
   file: File;
   relativePath: string;
+  sha256: string;
 };
 
 export type RejectedPackageEntry = {
@@ -25,10 +27,22 @@ export type RejectedPackageEntry = {
   reason: string;
 };
 
+export type PreparedWrittenScope = {
+  id: string;
+  title: string;
+  content: string;
+  sourceLocation?: string;
+  relativePath: string;
+  size: number;
+  sha256: string;
+};
+
 export type PreparedBidPackage = {
+  envelopeId: string;
   name: string;
   sourceType: HeliosPackageSourceType;
   files: PreparedPackageFile[];
+  writtenScopes: PreparedWrittenScope[];
   rejected: RejectedPackageEntry[];
 };
 
@@ -52,7 +66,21 @@ function rejectedManifestPath(rawPath: string, index: number) {
 function defaultPackageName(sourceType: HeliosPackageSourceType, root?: string) {
   if (root) return root.replace(/\.zip$/i, "").slice(0, 160);
   const timestamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+  if (sourceType === "written_scope") return `Written scope ${timestamp}`;
   return `${sourceType === "folder" ? "Bid folder" : "Bid package"} ${timestamp}`;
+}
+
+function envelopeId() {
+  return `manual:${crypto.randomUUID()}`;
+}
+
+async function sha256File(file: File) {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", await file.arrayBuffer()),
+  );
+  return Array.from(digest, (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 export async function prepareSelectedFiles(
@@ -68,7 +96,7 @@ export async function prepareSelectedFiles(
     );
   }
 
-  const files: PreparedPackageFile[] = [];
+  const files: Array<Omit<PreparedPackageFile, "sha256">> = [];
   const rejected: RejectedPackageEntry[] = [];
   const seen = new Set<string>();
   selected.forEach((file, index) => {
@@ -126,10 +154,16 @@ export async function prepareSelectedFiles(
     sourceType === "folder"
       ? files[0]?.relativePath.split("/")[0]
       : undefined;
+  const verifiedFiles: PreparedPackageFile[] = [];
+  for (const file of files) {
+    verifiedFiles.push({ ...file, sha256: await sha256File(file.file) });
+  }
   return {
+    envelopeId: envelopeId(),
     name: defaultPackageName(sourceType, folderRoot),
     sourceType,
-    files,
+    files: verifiedFiles,
+    writtenScopes: [],
     rejected,
   };
 }
@@ -256,7 +290,7 @@ export async function prepareZipPackage(
   );
   if (fatalError) throw fatalError;
 
-  const files = Array.from(accepted.entries()).map(
+  const extractedFiles = Array.from(accepted.entries()).map(
     ([archivePath, metadata]) => {
       const bytes = unzipped[archivePath];
       if (!bytes || bytes.byteLength !== metadata.size) {
@@ -276,13 +310,65 @@ export async function prepareZipPackage(
       };
     },
   );
-  if (!files.length) {
+  if (!extractedFiles.length) {
     throw new HeliosValidationError("The ZIP package contains no valid PDFs.");
   }
+  const files: PreparedPackageFile[] = [];
+  for (const file of extractedFiles) {
+    files.push({ ...file, sha256: await sha256File(file.file) });
+  }
   return {
+    envelopeId: envelopeId(),
     name: defaultPackageName("zip", archive.name),
     sourceType: "zip",
     files,
+    writtenScopes: [],
     rejected,
+  };
+}
+
+export async function prepareWrittenScope(input: {
+  title: string;
+  content: string;
+  sourceLocation?: string;
+}): Promise<PreparedBidPackage> {
+  const title = input.title.trim();
+  const content = input.content;
+  if (!title || title.length > 160) {
+    throw new HeliosValidationError(
+      "Enter a written scope title up to 160 characters.",
+    );
+  }
+  if (!content.trim()) {
+    throw new HeliosValidationError("Enter the written scope.");
+  }
+  const bytes = new TextEncoder().encode(content);
+  if (bytes.byteLength > HELIOS_MAX_WRITTEN_SCOPE_BYTES) {
+    throw new HeliosValidationError("Written scope must be 128 KB or smaller.");
+  }
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const sha256 = Array.from(digest, (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
+  const safeTitle = title
+    .normalize("NFKC")
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, "_")
+    .slice(0, 120);
+  const writtenScope: PreparedWrittenScope = {
+    id: `scope:${sha256}`,
+    title,
+    content,
+    sourceLocation: input.sourceLocation?.trim() || undefined,
+    relativePath: normalizePackagePath(`Written scope/${safeTitle}.txt`),
+    size: bytes.byteLength,
+    sha256,
+  };
+  return {
+    envelopeId: envelopeId(),
+    name: defaultPackageName("written_scope", title),
+    sourceType: "written_scope",
+    files: [],
+    writtenScopes: [writtenScope],
+    rejected: [],
   };
 }

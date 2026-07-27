@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   HELIOS_ESTIMATE_WBS,
+  HELIOS_MANIFEST_VERSION,
+  HELIOS_MAX_WRITTEN_SCOPE_BYTES,
   HELIOS_MAX_PDF_BYTES,
   calculateAllocationBalance,
   calculateCostCodeDirectCost,
@@ -17,6 +19,7 @@ import {
   canonicalPdfFileName,
   hasPdfMagicBytes,
   normalizeProjectInput,
+  normalizePackageInput,
   normalizeEstimateReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
@@ -145,6 +148,101 @@ test("normalizes the project intake contract", () => {
       notes: undefined,
     },
   );
+});
+
+test("normalizes a canonical manual written-scope intake envelope", () => {
+  const content = "Replace the existing culvert and restore the roadway.";
+  const input = normalizePackageInput({
+    envelopeId: "manual:09be7b57-ef58-43fd-8404-20c6b540fd84",
+    adapter: "manual",
+    manifestVersion: HELIOS_MANIFEST_VERSION,
+    name: "Emergency culvert scope",
+    sourceType: "written_scope",
+    revisionKind: "initial",
+    entries: [
+      {
+        kind: "written_scope",
+        sourceCategory: "written_scope",
+        relativePath: "written-scope/emergency-culvert-scope.txt",
+        size: new TextEncoder().encode(content).byteLength,
+        sha256: "a".repeat(64),
+        title: "Emergency culvert scope",
+        content,
+        sourceLocation: "Owner email dated July 27, 2026",
+        accepted: true,
+      },
+    ],
+  });
+
+  assert.equal(input.adapter, "manual");
+  assert.equal(input.revisionKind, "initial");
+  assert.equal(input.entries[0]?.content, content);
+});
+
+test("rejects altered or oversized written-scope manifests", () => {
+  const base = {
+    envelopeId: "manual:7042153b-0fa2-4934-9830-d62aafc77729",
+    adapter: "manual",
+    manifestVersion: HELIOS_MANIFEST_VERSION,
+    name: "Written scope",
+    sourceType: "written_scope",
+    revisionKind: "initial",
+  } as const;
+  assert.throws(
+    () =>
+      normalizePackageInput({
+        ...base,
+        entries: [
+          {
+            kind: "written_scope",
+            relativePath: "written-scope/scope.txt",
+            size: 1,
+            sha256: "b".repeat(64),
+            title: "Scope",
+            content: "longer than one byte",
+            accepted: true,
+          },
+        ],
+      }),
+    /size does not match/i,
+  );
+  assert.equal(HELIOS_MAX_WRITTEN_SCOPE_BYTES, 128 * 1024);
+});
+
+test("keeps the disabled Bid Scout fixture manifest-compatible with manual intake", () => {
+  const entries = [
+    {
+      kind: "pdf" as const,
+      sourceCategory: "plans" as const,
+      relativePath: "Plans/C-101.pdf",
+      size: 4_096,
+      sha256: "c".repeat(64),
+      accepted: true,
+    },
+  ];
+  const manual = normalizePackageInput({
+    envelopeId: "manual:dc096550-30b4-47c6-9d1b-90c8a09494ee",
+    adapter: "manual",
+    manifestVersion: HELIOS_MANIFEST_VERSION,
+    name: "Culvert bid package",
+    sourceType: "folder",
+    revisionKind: "initial",
+    entries,
+  });
+  const bidScout = normalizePackageInput({
+    envelopeId: "bid-scout:opportunity-42:revision-1",
+    adapter: "bid_scout",
+    manifestVersion: HELIOS_MANIFEST_VERSION,
+    name: "Culvert bid package",
+    sourceType: "folder",
+    revisionKind: "initial",
+    entries,
+  });
+
+  assert.deepEqual(bidScout.entries, manual.entries);
+  assert.equal(bidScout.manifestVersion, manual.manifestVersion);
+  assert.equal(bidScout.revisionKind, manual.revisionKind);
+  assert.notEqual(bidScout.adapter, manual.adapter);
 });
 
 test("normalizes all seven 3E.2 resource classes and traceable price sources", () => {

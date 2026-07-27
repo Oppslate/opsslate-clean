@@ -84,9 +84,10 @@ export function ProjectDocumentControl({
                   className="mb-3 size-9 text-muted-foreground"
                   aria-hidden="true"
                 />
-                <p className="font-medium">No documents registered</p>
+                <p className="font-medium">No PDFs registered</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Use the intake area above to add the bid set.
+                  Add PDFs above, or use written scope when no files were
+                  issued.
                 </p>
               </div>
             ) : (
@@ -161,6 +162,52 @@ export function ProjectDocumentControl({
             )}
           </CardContent>
         </Card>
+
+        {detail.writtenScopes.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Written scope evidence</CardTitle>
+              <CardDescription>
+                Exact text registered as part of the project bid basis. Each
+                version is immutable and independently auditable.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {detail.writtenScopes.map((scope) => (
+                <details
+                  key={scope.id}
+                  className="group rounded-lg border border-border p-3"
+                >
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{scope.title}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Version {scope.version} · {formatFileSize(scope.size)} ·{" "}
+                        {formatTimestamp(scope.createdAt)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs font-medium text-orange-300">
+                      View exact scope
+                    </span>
+                  </summary>
+                  <div className="mt-3 border-t border-border pt-3">
+                    {scope.sourceLocation && (
+                      <div className="mb-2 text-xs text-muted-foreground">
+                        Source: {scope.sourceLocation}
+                      </div>
+                    )}
+                    <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted/30 p-3 font-sans text-sm leading-6">
+                      {scope.content}
+                    </pre>
+                    <div className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                      SHA-256 {scope.sha256}
+                    </div>
+                  </div>
+                </details>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card className="h-fit">
@@ -175,7 +222,10 @@ export function ProjectDocumentControl({
               ["Engineer", project.engineer || "Not set"],
               ["Location", project.location || "Not set"],
               ["Bid date", formatDate(project.bidDate)],
-              ["Documents", String(project.documentCount)],
+              [
+                "Sources",
+                String(project.documentCount + detail.writtenScopes.length),
+              ],
             ].map(([label, value]) => (
               <div
                 key={label}

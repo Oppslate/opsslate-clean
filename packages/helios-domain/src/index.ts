@@ -15,6 +15,8 @@ export const HELIOS_MAX_ARCHIVE_EXPANDED_BYTES = 1024 * 1024 * 1024;
 export const HELIOS_MAX_ARCHIVE_EXPANSION_RATIO = 100;
 export const HELIOS_MAX_PACKAGE_PATH_LENGTH = 512;
 export const HELIOS_MAX_PACKAGE_DEPTH = 12;
+export const HELIOS_MANIFEST_VERSION = 1;
+export const HELIOS_MAX_WRITTEN_SCOPE_BYTES = 128 * 1024;
 
 export const HELIOS_PROJECT_STATUSES = [
   "draft",
@@ -67,6 +69,29 @@ export const HELIOS_PACKAGE_SOURCE_TYPES = [
   "files",
   "folder",
   "zip",
+  "written_scope",
+] as const;
+
+export const HELIOS_PACKAGE_ADAPTERS = ["manual", "bid_scout"] as const;
+
+export const HELIOS_PACKAGE_REVISION_KINDS = [
+  "initial",
+  "addendum",
+  "revision",
+  "supplemental",
+] as const;
+
+export const HELIOS_PACKAGE_ENTRY_KINDS = ["pdf", "written_scope"] as const;
+
+export const HELIOS_PACKAGE_SOURCE_CATEGORIES = [
+  "plans",
+  "specifications",
+  "bid_schedule",
+  "bid_forms",
+  "addendum",
+  "written_scope",
+  "supporting",
+  "unknown",
 ] as const;
 
 export const HELIOS_PACKAGE_STATUSES = [
@@ -386,6 +411,13 @@ export type HeliosFindingReviewStatus =
   (typeof HELIOS_FINDING_REVIEW_STATUSES)[number];
 export type HeliosPackageSourceType =
   (typeof HELIOS_PACKAGE_SOURCE_TYPES)[number];
+export type HeliosPackageAdapter = (typeof HELIOS_PACKAGE_ADAPTERS)[number];
+export type HeliosPackageRevisionKind =
+  (typeof HELIOS_PACKAGE_REVISION_KINDS)[number];
+export type HeliosPackageEntryKind =
+  (typeof HELIOS_PACKAGE_ENTRY_KINDS)[number];
+export type HeliosPackageSourceCategory =
+  (typeof HELIOS_PACKAGE_SOURCE_CATEGORIES)[number];
 export type HeliosPackageStatus = (typeof HELIOS_PACKAGE_STATUSES)[number];
 export type HeliosPackageEntryStatus =
   (typeof HELIOS_PACKAGE_ENTRY_STATUSES)[number];
@@ -476,11 +508,33 @@ export type HeliosDocumentSummary = {
 export type HeliosPackageEntry = {
   id: string;
   packageId: string;
+  envelopeId?: string;
+  kind: HeliosPackageEntryKind;
+  sourceCategory: HeliosPackageSourceCategory;
   relativePath: string;
   size: number;
+  sha256?: string;
   status: HeliosPackageEntryStatus;
   reason?: string;
   documentId?: string;
+  writtenScopeId?: string;
+};
+
+export type HeliosPackageEnvelope = {
+  id: string;
+  envelopeId: string;
+  adapter: HeliosPackageAdapter;
+  sourceType: HeliosPackageSourceType;
+  manifestVersion: number;
+  revisionKind: HeliosPackageRevisionKind;
+  revisionLabel?: string;
+  status: "building" | "terminal";
+  entryCount: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  totalBytes: number;
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type HeliosBidPackage = {
@@ -488,6 +542,10 @@ export type HeliosBidPackage = {
   projectId: string;
   name: string;
   sourceType: HeliosPackageSourceType;
+  adapter: HeliosPackageAdapter;
+  manifestVersion: number;
+  revisionKind: HeliosPackageRevisionKind;
+  revisionLabel?: string;
   revision: number;
   status: HeliosPackageStatus;
   entryCount: number;
@@ -496,6 +554,7 @@ export type HeliosBidPackage = {
   uploadedCount: number;
   duplicateCount: number;
   failedCount: number;
+  writtenScopeCount: number;
   totalBytes: number;
   lastError?: string;
   finalizedAt?: number;
@@ -503,19 +562,48 @@ export type HeliosBidPackage = {
   createdAt: number;
   updatedAt: number;
   entries: HeliosPackageEntry[];
+  envelopes: HeliosPackageEnvelope[];
 };
 
 export type HeliosPackageManifestEntryInput = {
+  kind?: HeliosPackageEntryKind;
+  sourceCategory?: HeliosPackageSourceCategory;
   relativePath: string;
   size: number;
+  sha256?: string;
+  title?: string;
+  content?: string;
+  sourceLocation?: string;
   accepted: boolean;
   reason?: string;
 };
 
 export type HeliosPackageInput = {
+  envelopeId: string;
+  adapter: HeliosPackageAdapter;
+  manifestVersion: number;
   name: string;
   sourceType: HeliosPackageSourceType;
+  revisionKind: HeliosPackageRevisionKind;
+  revisionLabel?: string;
   entries: HeliosPackageManifestEntryInput[];
+};
+
+export type HeliosWrittenScopeSummary = {
+  id: string;
+  projectId: string;
+  packageId: string;
+  packageEntryId: string;
+  title: string;
+  relativePath: string;
+  content: string;
+  sourceLocation?: string;
+  size: number;
+  sha256: string;
+  version: number;
+  supersedesWrittenScopeId?: string;
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type HeliosEvidence = {
@@ -618,6 +706,7 @@ export type HeliosCockpitData = {
 export type HeliosProjectDetail = {
   project: HeliosProjectSummary;
   documents: HeliosDocumentSummary[];
+  writtenScopes: HeliosWrittenScopeSummary[];
   packages: HeliosBidPackage[];
   activePackageId?: string;
   latestIntelligenceError?: string;
@@ -1118,6 +1207,25 @@ function optionalText(
   return normalized;
 }
 
+function optionalLabeledText(
+  value: unknown,
+  label: string,
+  maxLength: number,
+) {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") {
+    throw new HeliosValidationError(`${label} must be valid text.`);
+  }
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (!normalized) return undefined;
+  if (normalized.length > maxLength) {
+    throw new HeliosValidationError(
+      `${label} must be under ${maxLength} characters.`,
+    );
+  }
+  return normalized;
+}
+
 export function normalizeProjectInput(value: unknown): HeliosProjectInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new HeliosValidationError("Enter valid project information.");
@@ -1205,6 +1313,19 @@ export function normalizePackagePath(value: unknown) {
 
 export function normalizePackageInput(value: unknown): HeliosPackageInput {
   const input = record(value, "Bid package");
+  const envelopeId = textValue(input.envelopeId, "Envelope ID", 120);
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{7,119}$/.test(envelopeId)) {
+    throw new HeliosValidationError("Package envelope ID is invalid.");
+  }
+  if (
+    typeof input.adapter !== "string" ||
+    !HELIOS_PACKAGE_ADAPTERS.includes(input.adapter as HeliosPackageAdapter)
+  ) {
+    throw new HeliosValidationError("Package adapter is invalid.");
+  }
+  if (input.manifestVersion !== HELIOS_MANIFEST_VERSION) {
+    throw new HeliosValidationError("Package manifest version is unsupported.");
+  }
   const name = textValue(input.name, "Package name", 160);
   if (
     typeof input.sourceType !== "string" ||
@@ -1215,6 +1336,15 @@ export function normalizePackageInput(value: unknown): HeliosPackageInput {
     throw new HeliosValidationError("Package source is invalid.");
   }
   if (
+    typeof input.revisionKind !== "string" ||
+    !HELIOS_PACKAGE_REVISION_KINDS.includes(
+      input.revisionKind as HeliosPackageRevisionKind,
+    )
+  ) {
+    throw new HeliosValidationError("Package revision purpose is invalid.");
+  }
+  const revisionKind = input.revisionKind as HeliosPackageRevisionKind;
+  if (
     !Array.isArray(input.entries) ||
     input.entries.length === 0 ||
     input.entries.length > HELIOS_MAX_PACKAGE_ENTRIES
@@ -1224,10 +1354,17 @@ export function normalizePackageInput(value: unknown): HeliosPackageInput {
     );
   }
   let acceptedCount = 0;
+  let acceptedPdfCount = 0;
+  let writtenScopeCount = 0;
   let acceptedBytes = 0;
   const paths = new Set<string>();
   const entries = input.entries.map((value, index) => {
     const row = record(value, `Package entry ${index + 1}`);
+    const kind =
+      typeof row.kind === "string" &&
+      HELIOS_PACKAGE_ENTRY_KINDS.includes(row.kind as HeliosPackageEntryKind)
+        ? (row.kind as HeliosPackageEntryKind)
+        : "pdf";
     const relativePath = normalizePackagePath(row.relativePath);
     const canonicalPath = relativePath.toLowerCase();
     if (paths.has(canonicalPath)) {
@@ -1246,18 +1383,79 @@ export function normalizePackageInput(value: unknown): HeliosPackageInput {
     if (typeof row.accepted !== "boolean") {
       throw new HeliosValidationError("Package entry status is invalid.");
     }
+    const defaultCategory: HeliosPackageSourceCategory =
+      kind === "written_scope"
+        ? "written_scope"
+        : revisionKind === "addendum"
+          ? "addendum"
+          : "unknown";
+    const sourceCategory =
+      typeof row.sourceCategory === "string" &&
+      HELIOS_PACKAGE_SOURCE_CATEGORIES.includes(
+        row.sourceCategory as HeliosPackageSourceCategory,
+      )
+        ? (row.sourceCategory as HeliosPackageSourceCategory)
+        : defaultCategory;
+    const sha256 =
+      row.sha256 === undefined
+        ? undefined
+        : typeof row.sha256 === "string" && /^[a-f0-9]{64}$/.test(row.sha256)
+          ? row.sha256
+          : (() => {
+              throw new HeliosValidationError("Package entry hash is invalid.");
+            })();
+    let title: string | undefined;
+    let content: string | undefined;
+    let sourceLocation: string | undefined;
     if (row.accepted) {
-      validatePdfCandidate({
-        name: relativePath,
-        type: "application/pdf",
-        size: row.size,
-      });
+      if (kind === "written_scope") {
+        title = textValue(row.title, "Written scope title", 160);
+        if (typeof row.content !== "string" || !row.content.trim()) {
+          throw new HeliosValidationError("Written scope content is required.");
+        }
+        const scopeBytes = new TextEncoder().encode(row.content).byteLength;
+        if (
+          scopeBytes <= 0 ||
+          scopeBytes > HELIOS_MAX_WRITTEN_SCOPE_BYTES ||
+          row.size !== scopeBytes
+        ) {
+          throw new HeliosValidationError(
+            "Written scope size does not match the manifest or exceeds 128 KB.",
+          );
+        }
+        if (!sha256) {
+          throw new HeliosValidationError("Written scope hash is required.");
+        }
+        content = row.content;
+        sourceLocation = optionalLabeledText(
+          row.sourceLocation,
+          "Written scope source",
+          500,
+        );
+        writtenScopeCount += 1;
+      } else {
+        validatePdfCandidate({
+          name: relativePath,
+          type: "application/pdf",
+          size: row.size,
+        });
+        if (!sha256) {
+          throw new HeliosValidationError("PDF manifest hash is required.");
+        }
+        acceptedPdfCount += 1;
+      }
       acceptedCount += 1;
       acceptedBytes += row.size;
     }
     return {
+      kind,
+      sourceCategory,
       relativePath,
       size: row.size,
+      sha256,
+      title,
+      content,
+      sourceLocation,
       accepted: row.accepted,
       reason: row.accepted
         ? undefined
@@ -1268,17 +1466,34 @@ export function normalizePackageInput(value: unknown): HeliosPackageInput {
           ),
     };
   });
-  if (!acceptedCount || acceptedCount > HELIOS_MAX_UPLOAD_BATCH) {
+  if (!acceptedCount || acceptedPdfCount > HELIOS_MAX_UPLOAD_BATCH) {
     throw new HeliosValidationError(
-      `A package must contain 1-${HELIOS_MAX_UPLOAD_BATCH} valid PDFs.`,
+      `A package must contain a written scope or up to ${HELIOS_MAX_UPLOAD_BATCH} valid PDFs.`,
+    );
+  }
+  if (
+    input.sourceType === "written_scope" &&
+    writtenScopeCount !== acceptedCount
+  ) {
+    throw new HeliosValidationError(
+      "A written-scope package can contain only written-scope evidence.",
     );
   }
   if (acceptedBytes > HELIOS_MAX_PACKAGE_BYTES) {
-    throw new HeliosValidationError("The PDF package is too large.");
+    throw new HeliosValidationError("The package is too large.");
   }
   return {
+    envelopeId,
+    adapter: input.adapter as HeliosPackageAdapter,
+    manifestVersion: HELIOS_MANIFEST_VERSION,
     name,
     sourceType: input.sourceType as HeliosPackageSourceType,
+    revisionKind,
+    revisionLabel: optionalLabeledText(
+      input.revisionLabel,
+      "Revision label",
+      120,
+    ),
     entries,
   };
 }
