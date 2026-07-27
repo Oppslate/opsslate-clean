@@ -19,6 +19,7 @@ import {
   acceptRemainingHeliosEstimateRecords,
   reviewHeliosFinding,
   reviewHeliosBidBasis,
+  reviewHeliosPlanIntelligence,
   resolveIdentity,
   retryHeliosDocument,
   retryHeliosProject,
@@ -97,6 +98,11 @@ http.route({
   path: "/helios/v1/bid-basis/review",
   method: "POST",
   handler: reviewHeliosBidBasis,
+});
+http.route({
+  path: "/helios/v1/plan-intelligence/review",
+  method: "POST",
+  handler: reviewHeliosPlanIntelligence,
 });
 http.route({
   path: "/helios/v1/estimates/get",

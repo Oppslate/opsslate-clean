@@ -16,6 +16,7 @@ import { ProjectDocumentControl } from "./project-document-control";
 import { ProjectIntelligenceCockpit } from "./project-intelligence-cockpit";
 import { ProjectIntelligencePanel } from "./project-intelligence-panel";
 import { BidBasisPanel } from "./bid-basis-panel";
+import { PlanIntelligencePanel } from "./plan-intelligence-panel";
 
 export function ProjectIntake({
   detail,
@@ -40,7 +41,7 @@ export function ProjectIntake({
         "uploading_to_openai",
         "analyzing",
       ].includes(document.status),
-    );
+    ) || Boolean(detail.planSet && ["queued", "processing"].includes(detail.planSet.status));
 
   useEffect(() => {
     if (!processing) return;
@@ -59,11 +60,18 @@ export function ProjectIntake({
     >
       <div className="space-y-4">
         {detail.bidBasis && (
-          <BidBasisPanel
-            projectId={project.id}
-            bidBasis={detail.bidBasis}
-            documents={detail.documents}
-          />
+          <>
+            <BidBasisPanel
+              projectId={project.id}
+              bidBasis={detail.bidBasis}
+              documents={detail.documents}
+            />
+            <PlanIntelligencePanel
+              projectId={project.id}
+              bidBasis={detail.bidBasis}
+              planSet={detail.planSet}
+            />
+          </>
         )}
         {detail.intelligence && workspace ? (
           <EstimateCockpit2

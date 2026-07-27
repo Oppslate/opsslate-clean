@@ -1,0 +1,356 @@
+import {
+  normalizePlanReviewInput,
+  parsePlanDocumentIntelligence,
+  type HeliosPlanReviewInput,
+} from "@opsslate/helios-domain";
+import { makeFunctionReference } from "convex/server";
+import { v } from "convex/values";
+
+import type { Id } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "./_generated/server";
+import {
+  heliosPrincipalValidator,
+  requireHeliosPrincipal,
+  type HeliosPrincipalArgs,
+} from "./heliosAuthorization";
+import { deriveProjectBidBasis } from "./heliosBidBasis";
+
+const PROCESSING_VERSION = 1;
+
+const startPlanDocumentReference = makeFunctionReference<
+  "action",
+  { jobId: Id<"heliosPlanJobs"> },
+  null
+>("heliosPlanActions:startPlanDocument");
+
+async function ownedProject(
+  ctx: MutationCtx,
+  principal: HeliosPrincipalArgs,
+  projectIdValue: string,
+) {
+  const { user, companyId } = await requireHeliosPrincipal(ctx, principal);
+  const projectId = ctx.db.normalizeId("heliosProjects", projectIdValue);
+  if (!projectId) throw new Error("Project not found.");
+  const project = await ctx.db.get(projectId);
+  if (!project || project.companyId !== companyId) throw new Error("Project not found.");
+  return { user, companyId, project };
+}
+
+async function createPlanRun(
+  ctx: MutationCtx,
+  principal: HeliosPrincipalArgs,
+  projectIdValue: string,
+) {
+  const { user, companyId, project } = await ownedProject(ctx, principal, projectIdValue);
+  if (!project.activePackageId) throw new Error("Finalize a bid package before reconstructing plans.");
+  const bidPackage = await ctx.db.get(project.activePackageId);
+  if (!bidPackage || bidPackage.projectId !== project._id || bidPackage.companyId !== companyId) {
+    throw new Error("Active bid package not found.");
+  }
+  const basis = await deriveProjectBidBasis(ctx, project, bidPackage);
+  const planCategory = basis.categories.find((category) => category.category === "plans");
+  const current = await ctx.db
+    .query("heliosPlanRuns")
+    .withIndex("by_package_current", (query) => query.eq("packageId", bidPackage._id).eq("isCurrent", true))
+    .first();
+  if (
+    current &&
+    current.sourceFingerprint === basis.sourceFingerprint &&
+    ["queued", "processing", "ready_for_review", "partially_ready", "not_applicable_to_current_basis"].includes(current.status)
+  ) {
+    return { runId: String(current._id), status: current.status, reused: true };
+  }
+  if (current) await ctx.db.patch(current._id, { isCurrent: false, updatedAt: Date.now() });
+
+  const now = Date.now();
+  const planDocumentIds = (planCategory?.documentIds || [])
+    .map((value) => ctx.db.normalizeId("heliosDocuments", value))
+    .filter((value): value is Id<"heliosDocuments"> => Boolean(value));
+  const applicable = planCategory?.state === "received" && planDocumentIds.length > 0;
+  const runId = await ctx.db.insert("heliosPlanRuns", {
+    companyId,
+    projectId: project._id,
+    packageId: bidPackage._id,
+    packageRevision: bidPackage.revision,
+    isCurrent: true,
+    status: applicable ? "queued" : "not_applicable_to_current_basis",
+    processingVersion: PROCESSING_VERSION,
+    sourceFingerprint: basis.sourceFingerprint,
+    sourceDocumentCount: applicable ? planDocumentIds.length : 0,
+    sourcePageCount: 0,
+    registeredPageCount: 0,
+    sheetCount: 0,
+    nonSheetPageCount: 0,
+    exceptionPageCount: 0,
+    measurableViewCount: 0,
+    approvedCalibrationCount: 0,
+    blockedMeasurementCount: 0,
+    unresolvedReferenceCount: 0,
+    issues: applicable ? [] : ["Plans are not part of the current bid basis. Plan processing was bypassed without blocking the estimate."],
+    createdBy: user._id,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: applicable ? undefined : now,
+  });
+  await ctx.db.insert("heliosPlanReviewEvents", {
+    companyId,
+    projectId: project._id,
+    packageId: bidPackage._id,
+    runId,
+    action: "request_reconstruction",
+    reviewerUserId: user._id,
+    reviewerName: user.name,
+    decisionValue: applicable ? "queued" : "not_applicable_to_current_basis",
+    createdAt: now,
+  });
+  if (!applicable) return { runId: String(runId), status: "not_applicable_to_current_basis" as const, reused: false };
+
+  for (const documentId of planDocumentIds) {
+    const document = await ctx.db.get(documentId);
+    if (!document || document.projectId !== project._id || document.companyId !== companyId) continue;
+    const jobId = await ctx.db.insert("heliosPlanJobs", {
+      companyId,
+      projectId: project._id,
+      packageId: bidPackage._id,
+      runId,
+      documentId,
+      status: "queued",
+      attempt: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, startPlanDocumentReference, { jobId });
+  }
+  return { runId: String(runId), status: "queued" as const, reused: false };
+}
+
+async function finalizeRun(ctx: MutationCtx, runId: Id<"heliosPlanRuns">) {
+  const run = await ctx.db.get(runId);
+  if (!run) return;
+  const jobs = await ctx.db.query("heliosPlanJobs").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
+  if (jobs.some((job) => !["completed", "failed"].includes(job.status))) return;
+  const pages = await ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", runId)).collect();
+  const references = await ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
+  const calibrations = await ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
+  const pagesBySheet = new Map<string, typeof pages>();
+  for (const page of pages.filter((candidate) => candidate.sheetNumber)) {
+    const key = page.sheetNumber.trim().toUpperCase();
+    pagesBySheet.set(key, [...(pagesBySheet.get(key) || []), page]);
+  }
+  for (const reference of references) {
+    const targets = reference.targetSheetNumber
+      ? pagesBySheet.get(reference.targetSheetNumber.trim().toUpperCase()) || []
+      : [];
+    await ctx.db.patch(reference._id, {
+      status: targets.length === 1 ? "resolved" : "unresolved",
+      targetPageId: targets.length === 1 ? targets[0]._id : undefined,
+    });
+  }
+  const viewKeys = new Set<string>();
+  let measurableViewCount = 0;
+  for (const page of pages) {
+    for (const view of page.views.filter((candidate) => candidate.measurable)) {
+      measurableViewCount += 1;
+      viewKeys.add(`${page._id}:${view.viewKey}`);
+    }
+  }
+  const approvedViewKeys = new Set(
+    calibrations.filter((calibration) => calibration.status === "approved").map((calibration) => `${calibration.pageId}:${calibration.viewKey}`),
+  );
+  const duplicateSheets = [...pagesBySheet.entries()].filter(([, rows]) => rows.length > 1).map(([sheet]) => sheet);
+  const failedJobs = jobs.filter((job) => job.status === "failed");
+  const unresolvedReferenceCount = references.filter((reference) => {
+    if (!reference.targetSheetNumber) return false;
+    return (pagesBySheet.get(reference.targetSheetNumber.trim().toUpperCase()) || []).length !== 1;
+  }).length;
+  const issues = [
+    ...duplicateSheets.map((sheet) => `Duplicate sheet identifier requires review: ${sheet}.`),
+    ...failedJobs.map((job) => `Plan document failed: ${job.error || "analysis unavailable"}`),
+  ];
+  const now = Date.now();
+  await ctx.db.patch(runId, {
+    status: jobs.every((job) => job.status === "failed") ? "failed" : failedJobs.length ? "partially_ready" : "ready_for_review",
+    model: jobs.find((job) => job.model)?.model,
+    sourcePageCount: pages.length,
+    registeredPageCount: pages.length,
+    sheetCount: pages.filter((page) => page.pageKind === "sheet").length,
+    nonSheetPageCount: pages.filter((page) => page.pageKind === "non_sheet").length,
+    exceptionPageCount: pages.filter((page) => page.pageKind === "exception").length,
+    measurableViewCount,
+    approvedCalibrationCount: approvedViewKeys.size,
+    blockedMeasurementCount: [...viewKeys].filter((key) => !approvedViewKeys.has(key)).length,
+    unresolvedReferenceCount,
+    issues,
+    updatedAt: now,
+    completedAt: now,
+  });
+}
+
+export const reviewPlanIntelligence = internalMutation({
+  args: { principal: heliosPrincipalValidator, projectId: v.string(), input: v.any() },
+  handler: async (ctx, args) => {
+    const input = normalizePlanReviewInput(args.input) as HeliosPlanReviewInput;
+    if (input.action === "request_reconstruction") return createPlanRun(ctx, args.principal, args.projectId);
+    const { user, companyId, project } = await ownedProject(ctx, args.principal, args.projectId);
+    const calibrationId = ctx.db.normalizeId("heliosPlanCalibrations", input.calibrationId!);
+    if (!calibrationId) throw new Error("Calibration not found.");
+    const calibration = await ctx.db.get(calibrationId);
+    if (!calibration || calibration.companyId !== companyId || calibration.projectId !== project._id) {
+      throw new Error("Calibration not found.");
+    }
+    const run = await ctx.db.get(calibration.runId);
+    if (!run || !run.isCurrent || run.packageId !== project.activePackageId) throw new Error("Calibration is not current.");
+    const now = Date.now();
+    const nextStatus = input.action === "approve_calibration" ? "approved" : "blocked";
+    if (nextStatus === "approved") {
+      const peers = await ctx.db.query("heliosPlanCalibrations").withIndex("by_page_view", (query) => query.eq("pageId", calibration.pageId).eq("viewKey", calibration.viewKey)).collect();
+      for (const peer of peers) {
+        if (peer._id !== calibration._id && peer.status !== "superseded") {
+          await ctx.db.patch(peer._id, { status: "superseded", updatedAt: now });
+        }
+      }
+    }
+    await ctx.db.patch(calibration._id, {
+      status: nextStatus,
+      approvedBy: nextStatus === "approved" ? user._id : undefined,
+      approvedAt: nextStatus === "approved" ? now : undefined,
+      updatedAt: now,
+    });
+    await ctx.db.insert("heliosPlanReviewEvents", {
+      companyId,
+      projectId: project._id,
+      packageId: calibration.packageId,
+      runId: calibration.runId,
+      calibrationId: calibration._id,
+      action: input.action,
+      reviewerUserId: user._id,
+      reviewerName: user.name,
+      previousValue: calibration.status,
+      decisionValue: nextStatus,
+      createdAt: now,
+    });
+    await finalizeRun(ctx, calibration.runId);
+    return { runId: String(calibration.runId), calibrationId: String(calibration._id), status: nextStatus };
+  },
+});
+
+export const loadPlanJob = internalQuery({
+  args: { jobId: v.id("heliosPlanJobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return null;
+    const [run, project, document] = await Promise.all([
+      ctx.db.get(job.runId), ctx.db.get(job.projectId), ctx.db.get(job.documentId),
+    ]);
+    if (!run || !run.isCurrent || !project || !document) return null;
+    return { job, run, project, document };
+  },
+});
+
+export const markPlanUploading = internalMutation({
+  args: { jobId: v.id("heliosPlanJobs") },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.status !== "queued") return false;
+    const now = Date.now();
+    await ctx.db.patch(job._id, { status: "uploading", startedAt: now, updatedAt: now });
+    await ctx.db.patch(job.runId, { status: "processing", updatedAt: now });
+    return true;
+  },
+});
+
+export const markPlanAnalyzing = internalMutation({
+  args: { jobId: v.id("heliosPlanJobs"), openaiFileId: v.string(), openaiResponseId: v.string(), model: v.string() },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.status !== "uploading") return false;
+    await ctx.db.patch(job._id, { status: "analyzing", openaiFileId: args.openaiFileId, openaiResponseId: args.openaiResponseId, model: args.model, updatedAt: Date.now() });
+    return true;
+  },
+});
+
+export const completePlanJob = internalMutation({
+  args: { jobId: v.id("heliosPlanJobs"), model: v.string(), result: v.any() },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.status !== "analyzing") return null;
+    const document = await ctx.db.get(job.documentId);
+    if (!document) throw new Error("Plan document not found.");
+    const parsed = parsePlanDocumentIntelligence(args.result);
+    const now = Date.now();
+    const pageIds = new Map<number, Id<"heliosPlanPages">>();
+    for (const page of parsed.pages) {
+      const pageId = await ctx.db.insert("heliosPlanPages", {
+        companyId: job.companyId, projectId: job.projectId, packageId: job.packageId, runId: job.runId,
+        documentId: job.documentId, documentName: document.fileName,
+        physicalPageNumber: page.physicalPageNumber, pageKind: page.pageKind,
+        printedPageNumber: page.printedPageNumber, sheetNumber: page.sheetNumber, title: page.title,
+        discipline: page.discipline, subdiscipline: page.subdiscipline, issueDate: page.issueDate,
+        revisionMarker: page.revisionMarker, addendumAssociation: page.addendumAssociation,
+        modality: page.modality, processingVersion: PROCESSING_VERSION,
+        titleBlockBoundary: page.titleBlockBoundary || undefined, titleBlockText: page.titleBlockText,
+        confidence: page.confidence, unresolvedIssues: page.unresolvedIssues,
+        views: page.views.map((view) => ({
+          viewKey: view.viewKey,
+          viewType: view.viewType,
+          label: view.label,
+          boundary: view.boundary,
+          northOrientation: view.northOrientation,
+          measurable: view.measurable,
+          unresolvedIssues: view.unresolvedIssues,
+        })),
+        createdAt: now,
+      });
+      pageIds.set(page.physicalPageNumber, pageId);
+      for (const view of page.views.filter((candidate) => candidate.measurable)) {
+        const uniqueScales = new Set(view.scaleCandidates.map((candidate) => `${candidate.scale}|${candidate.units}`));
+        if (!view.scaleCandidates.length) {
+          await ctx.db.insert("heliosPlanCalibrations", {
+            companyId: job.companyId, projectId: job.projectId, packageId: job.packageId, runId: job.runId,
+            pageId, viewKey: view.viewKey, source: "stated_numeric", scale: "", units: "", sourceRegion: "",
+            confidence: 0, status: "blocked", createdAt: now, updatedAt: now,
+          });
+        } else {
+          for (const candidate of view.scaleCandidates) {
+            await ctx.db.insert("heliosPlanCalibrations", {
+              companyId: job.companyId, projectId: job.projectId, packageId: job.packageId, runId: job.runId,
+              pageId, viewKey: view.viewKey, source: candidate.source, scale: candidate.scale, units: candidate.units,
+              sourceRegion: candidate.sourceRegion, confidence: candidate.confidence,
+              status: uniqueScales.size > 1 ? "conflicted" : "proposed", createdAt: now, updatedAt: now,
+            });
+          }
+        }
+      }
+    }
+    for (const reference of parsed.references) {
+      const sourcePageId = pageIds.get(reference.sourcePageNumber);
+      if (!sourcePageId) continue;
+      await ctx.db.insert("heliosPlanReferences", {
+        companyId: job.companyId, projectId: job.projectId, packageId: job.packageId, runId: job.runId,
+        sourcePageId, sourceSheetNumber: reference.sourceSheetNumber, sourceViewKey: reference.sourceViewKey,
+        referenceType: reference.referenceType, label: reference.label, targetSheetNumber: reference.targetSheetNumber,
+        targetDetail: reference.targetDetail, targetSpecification: reference.targetSpecification, locator: reference.locator,
+        status: "unresolved", confidence: reference.confidence, createdAt: now,
+      });
+    }
+    await ctx.db.patch(job._id, { status: "completed", model: args.model, completedAt: now, updatedAt: now });
+    await finalizeRun(ctx, job.runId);
+    return null;
+  },
+});
+
+export const failPlanJob = internalMutation({
+  args: { jobId: v.id("heliosPlanJobs"), error: v.string() },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job || ["completed", "failed"].includes(job.status)) return null;
+    const now = Date.now();
+    await ctx.db.patch(job._id, { status: "failed", error: args.error.slice(0, 600), completedAt: now, updatedAt: now });
+    await finalizeRun(ctx, job.runId);
+    return null;
+  },
+});

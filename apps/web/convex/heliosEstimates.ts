@@ -614,7 +614,9 @@ export const reclassifyEstimateWbs = internalMutation({
       ctx.db.query("heliosEstimateCostCodes").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
       ctx.db.query("heliosEstimateEvidenceLinks").withIndex("by_estimate_created", (q) => q.eq("estimateId", estimate._id)).collect(),
     ]);
-    const configuredById = new Map(HELIOS_ESTIMATE_WBS.map((section) => [section.id, section]));
+    const configuredById = new Map<string, (typeof HELIOS_ESTIMATE_WBS)[number]>(
+      HELIOS_ESTIMATE_WBS.map((section) => [section.id, section]),
+    );
     const alreadyCurrent = estimate.schemaVersion >= ESTIMATE_SCHEMA_VERSION &&
       sectionRows.length === HELIOS_ESTIMATE_WBS.length &&
       sectionRows.every((section) => {

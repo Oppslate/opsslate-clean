@@ -11,7 +11,7 @@ import {
 } from "@opsslate/helios-domain";
 import { v } from "convex/values";
 
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import {
   internalMutation,
   type MutationCtx,
@@ -260,7 +260,7 @@ export const reviewBidBasis = internalMutation({
     const before = await deriveProjectBidBasis(ctx, project, bidPackage);
     const now = Date.now();
     let previousValue: string | undefined;
-    let decisionValue = input.action;
+    let decisionValue: string = input.action;
 
     if (input.action === "proceed") {
       if (before.workspaceState === "no_usable_scope_basis") {

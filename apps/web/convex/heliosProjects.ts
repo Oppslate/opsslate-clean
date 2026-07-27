@@ -513,6 +513,105 @@ export const getProject = internalQuery({
           id: storedBidBasis ? String(storedBidBasis._id) : undefined,
         }
       : undefined;
+    const planRun = activePackage
+      ? await ctx.db
+          .query("heliosPlanRuns")
+          .withIndex("by_package_current", (query) =>
+            query.eq("packageId", activePackage._id).eq("isCurrent", true),
+          )
+          .first()
+      : null;
+    const [planPages, planReferences, planCalibrations] = planRun
+      ? await Promise.all([
+          ctx.db
+            .query("heliosPlanPages")
+            .withIndex("by_run_page", (query) => query.eq("runId", planRun._id))
+            .take(250),
+          ctx.db
+            .query("heliosPlanReferences")
+            .withIndex("by_run", (query) => query.eq("runId", planRun._id))
+            .take(250),
+          ctx.db
+            .query("heliosPlanCalibrations")
+            .withIndex("by_run", (query) => query.eq("runId", planRun._id))
+            .take(500),
+        ])
+      : [[], [], []];
+    const planSet = planRun
+      ? {
+          id: String(planRun._id),
+          projectId: String(planRun.projectId),
+          packageId: String(planRun.packageId),
+          packageRevision: planRun.packageRevision,
+          status: planRun.status,
+          processingVersion: planRun.processingVersion,
+          model: planRun.model,
+          sourceDocumentCount: planRun.sourceDocumentCount,
+          sourcePageCount: planRun.sourcePageCount,
+          registeredPageCount: planRun.registeredPageCount,
+          sheetCount: planRun.sheetCount,
+          nonSheetPageCount: planRun.nonSheetPageCount,
+          exceptionPageCount: planRun.exceptionPageCount,
+          measurableViewCount: planRun.measurableViewCount,
+          approvedCalibrationCount: planRun.approvedCalibrationCount,
+          blockedMeasurementCount: planRun.blockedMeasurementCount,
+          unresolvedReferenceCount: planRun.unresolvedReferenceCount,
+          issues: planRun.issues,
+          pages: planPages.map((page) => ({
+            id: String(page._id),
+            documentId: String(page.documentId),
+            documentName: page.documentName,
+            physicalPageNumber: page.physicalPageNumber,
+            pageKind: page.pageKind,
+            printedPageNumber: page.printedPageNumber,
+            sheetNumber: page.sheetNumber,
+            title: page.title,
+            discipline: page.discipline,
+            subdiscipline: page.subdiscipline,
+            issueDate: page.issueDate,
+            revisionMarker: page.revisionMarker,
+            addendumAssociation: page.addendumAssociation,
+            modality: page.modality,
+            titleBlockBoundary: page.titleBlockBoundary,
+            titleBlockText: page.titleBlockText,
+            confidence: page.confidence,
+            unresolvedIssues: page.unresolvedIssues,
+            views: page.views.map((view) => ({ ...view, scaleCandidates: [] })),
+          })),
+          references: planReferences.map((reference) => ({
+            id: String(reference._id),
+            sourcePageId: String(reference.sourcePageId),
+            sourceSheetNumber: reference.sourceSheetNumber,
+            sourceViewKey: reference.sourceViewKey,
+            referenceType: reference.referenceType as import("@opsslate/helios-domain").HeliosPlanReferenceType,
+            label: reference.label,
+            targetSheetNumber: reference.targetSheetNumber,
+            targetDetail: reference.targetDetail,
+            targetSpecification: reference.targetSpecification,
+            locator: reference.locator,
+            status: reference.status,
+            targetPageId: reference.targetPageId ? String(reference.targetPageId) : undefined,
+            confidence: reference.confidence,
+          })),
+          calibrations: planCalibrations.map((calibration) => ({
+            id: String(calibration._id),
+            pageId: String(calibration.pageId),
+            viewKey: calibration.viewKey,
+            source: calibration.source,
+            scale: calibration.scale,
+            units: calibration.units,
+            sourceRegion: calibration.sourceRegion,
+            confidence: calibration.confidence,
+            status: calibration.status,
+            approvedBy: calibration.approvedBy ? String(calibration.approvedBy) : undefined,
+            approvedAt: calibration.approvedAt,
+            updatedAt: calibration.updatedAt,
+          })),
+          createdAt: planRun.createdAt,
+          updatedAt: planRun.updatedAt,
+          completedAt: planRun.completedAt,
+        }
+      : undefined;
     return {
       project: projectSummary(project, documents.length),
       documents: documentSummaries,
@@ -540,6 +639,7 @@ export const getProject = internalQuery({
         : undefined,
       latestIntelligenceError: project.latestIntelligenceError,
       bidBasis,
+      planSet,
       intelligence: intelligence
         ? {
             id: intelligence._id,

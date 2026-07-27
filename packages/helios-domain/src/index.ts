@@ -1,5 +1,6 @@
 export * from "./wbs.ts";
 export * from "./bid-basis.ts";
+export * from "./plan-intelligence.ts";
 
 import {
   classifyEstimateWbsSection,
@@ -713,6 +714,7 @@ export type HeliosProjectDetail = {
   latestIntelligenceError?: string;
   intelligence?: HeliosProjectIntelligence;
   bidBasis?: import("./bid-basis.ts").HeliosBidBasisProfile;
+  planSet?: import("./plan-intelligence.ts").HeliosPlanSetIntelligence;
 };
 
 export type HeliosEstimateResource = {
