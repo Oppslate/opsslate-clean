@@ -33,7 +33,7 @@ import {
 } from "@opsslate/suite-ui/select";
 import { Textarea } from "@opsslate/suite-ui/textarea";
 import { useToast } from "@opsslate/suite-ui/toast";
-import { Check, History, LockKeyhole, PencilLine } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, History, Layers3, LockKeyhole, PencilLine } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -57,6 +57,16 @@ function statusVariant(status: string) {
   return "outline" as const;
 }
 
+const currency = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
+function money(value: number | undefined) {
+  return value === undefined ? "Unpriced" : currency.format(value / 100);
+}
+
 export function EstimateImportReview({
   project,
   workspace,
@@ -69,6 +79,9 @@ export function EstimateImportReview({
   const [selected, setSelected] = useState<ReviewRecord | null>(null);
   const [action, setAction] = useState<HeliosEstimateReviewAction>("correct");
   const [saving, setSaving] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState(
+    () => new Set(workspace.sections.map((section) => section.id)),
+  );
   const sections = workspace.sections;
   const items = useMemo(() => sections.flatMap((section) => section.payItems), [sections]);
   const changeCounts = useMemo(
@@ -141,6 +154,40 @@ export function EstimateImportReview({
     }
   }
 
+  async function applyContractorWbs() {
+    setSaving("wbs");
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/estimate/${workspace.id}/reclassify-wbs`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const payload = (await response.json()) as {
+        data?: { changed?: boolean; sections?: number; items?: number };
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error || "Contractor WBS could not be applied.");
+      toast(
+        payload.data?.changed
+          ? `${payload.data.items || 0} owner items organized into ${payload.data.sections || 0} contractor work phases.`
+          : "This estimate already uses the current Helios contractor WBS.",
+      );
+      router.refresh();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Contractor WBS could not be applied.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  function toggleSection(sectionId: string) {
+    setExpandedSections((current) => {
+      const next = new Set(current);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }
+
   function openReview(record: ReviewRecord, nextAction: HeliosEstimateReviewAction) {
     setAction(nextAction);
     setSelected(record);
@@ -156,6 +203,21 @@ export function EstimateImportReview({
   const summary = workspace.reviewSummary;
   return (
     <div className="space-y-4">
+      {(workspace.schemaVersion < 4 || workspace.sections.length < 12) && !readOnly && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex flex-col items-start justify-between gap-3 py-4 sm:flex-row sm:items-center">
+            <div>
+              <div className="font-semibold">Contractor work breakdown update available</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Reorganize owner items into Mobilization, Site Preparation, Earthwork, Fill &amp; Embankment, and the remaining Helios work phases. Owner records and decisions are preserved.
+              </p>
+            </div>
+            <Button onClick={applyContractorWbs} disabled={saving !== null} className="shrink-0">
+              <Layers3 aria-hidden="true" />Apply contractor WBS
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       <Card className="border-orange-500/25 bg-orange-500/5">
         <CardHeader>
           <div>
@@ -219,13 +281,31 @@ export function EstimateImportReview({
         </CardContent>
       </Card>
 
-      {sections.map((section) => (
+      {sections.map((section) => {
+        const expanded = expandedSections.has(section.id);
+        const accepted = section.payItems.filter((item) => item.reviewStatus === "accepted" || item.reviewStatus === "corrected").length;
+        const proposed = section.payItems.filter((item) => item.reviewStatus === "proposed" || item.reviewStatus === "deferred").length;
+        const fixedSubtotal = section.payItems.reduce((sum, item) => sum + (item.fixedAmountCents || 0), 0);
+        const pricedItems = section.payItems.filter((item) => item.directCostCents !== undefined);
+        const estimatedCost = pricedItems.length === section.payItems.length
+          ? pricedItems.reduce((sum, item) => sum + (item.directCostCents || 0), 0)
+          : undefined;
+        return (
         <Card key={section.id} className="gap-0 overflow-hidden py-0">
           <CardHeader className="border-b py-4">
-            <div>
-              <CardTitle>{section.name}</CardTitle>
-              <CardDescription>{section.payItems.length} proposed owner item{section.payItems.length === 1 ? "" : "s"}</CardDescription>
-            </div>
+            <button type="button" onClick={() => toggleSection(section.id)} aria-expanded={expanded} className="flex min-w-0 items-start gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {expanded ? <ChevronDown className="mt-0.5 size-4 shrink-0 text-orange-400" aria-hidden="true" /> : <ChevronRight className="mt-0.5 size-4 shrink-0 text-orange-400" aria-hidden="true" />}
+              <span className="min-w-0">
+                <CardTitle>{section.key} · {section.name}</CardTitle>
+                <CardDescription className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  <span>{section.payItems.length} item{section.payItems.length === 1 ? "" : "s"}</span>
+                  <span>{accepted} accepted owner items</span>
+                  <span>{proposed} proposed Helios items</span>
+                  <span>Owner fixed {money(fixedSubtotal)}</span>
+                  <span>Estimated {money(estimatedCost)}</span>
+                </CardDescription>
+              </span>
+            </button>
             <RecordActions
               label={section.name}
               reviewButtonId={`review-section-${section.id}`}
@@ -236,9 +316,9 @@ export function EstimateImportReview({
               onReview={() => openReview({ recordType: "section", record: section }, "correct")}
             />
           </CardHeader>
-          <CardContent className="divide-y px-0">
-            {section.payItems
-              .toSorted((left, right) => left.officialSequence - right.officialSequence)
+          {expanded && <CardContent className="divide-y px-0">
+            {[...section.payItems]
+              .sort((left, right) => left.officialSequence - right.officialSequence)
               .map((item) => (
                 <div key={item.id} className="grid gap-3 px-5 py-4 lg:grid-cols-[7rem_minmax(0,1fr)_9rem_10rem_auto] lg:items-center">
                   <div>
@@ -261,7 +341,7 @@ export function EstimateImportReview({
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">Official fixed amount</div>
-                    <div className="font-medium">{item.fixedAmountCents === undefined ? "Not applicable" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(item.fixedAmountCents / 100)}</div>
+                    <div className="font-medium">{item.fixedAmountCents === undefined ? "Not applicable" : money(item.fixedAmountCents)}</div>
                   </div>
                   <RecordActions
                     label={item.officialItemNumber}
@@ -274,9 +354,9 @@ export function EstimateImportReview({
                   />
                 </div>
               ))}
-          </CardContent>
+          </CardContent>}
         </Card>
-      ))}
+      );})}
 
       <Card>
         <CardHeader>

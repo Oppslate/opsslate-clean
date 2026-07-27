@@ -13,6 +13,7 @@ import {
   mutateHeliosEstimateSupport,
   registerHeliosDocument,
   requestHeliosEstimateProposal,
+  reclassifyHeliosEstimateWbs,
   reviewHeliosEstimateRecord,
   acceptHeliosEstimateImport,
   acceptRemainingHeliosEstimateRecords,
@@ -100,6 +101,11 @@ http.route({
   path: "/helios/v1/estimates/propose",
   method: "POST",
   handler: requestHeliosEstimateProposal,
+});
+http.route({
+  path: "/helios/v1/estimates/reclassify-wbs",
+  method: "POST",
+  handler: reclassifyHeliosEstimateWbs,
 });
 http.route({
   path: "/helios/v1/estimates/review",

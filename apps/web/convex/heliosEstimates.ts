@@ -5,6 +5,8 @@ import {
   calculatePricingStatus,
   calculateResourceCost,
   calculateRiskExpectedExposure,
+  classifyEstimateWbsSection,
+  HELIOS_ESTIMATE_WBS,
   parseEstimateProposal,
   reconcileAllocations,
   type HeliosEstimateWorkspace,
@@ -24,7 +26,7 @@ import {
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
 
-const ESTIMATE_SCHEMA_VERSION = 3;
+const ESTIMATE_SCHEMA_VERSION = 4;
 
 const startEstimateReference = makeFunctionReference<
   "action",
@@ -77,6 +79,7 @@ async function insertEvidenceLinks(
     recordId: string;
     relationship: "scope" | "quantity" | "risk";
     evidenceIds: Id<"heliosEvidence">[];
+    origin?: "ai" | "human" | "import" | "system";
     now: number;
   },
 ) {
@@ -88,7 +91,7 @@ async function insertEvidenceLinks(
     recordType: values.recordType,
     recordId: values.recordId,
     relationship: values.relationship,
-    origin: "ai",
+    origin: values.origin || "ai",
     verificationStatus: "proposed",
     createdAt: values.now,
     updatedAt: values.now,
@@ -240,7 +243,21 @@ export const completeEstimateProposal = internalMutation({
       : [];
     const previousByNumber = new Map(previousItems.map((item) => [item.officialItemNumber, item]));
     const proposedItemNumbers = new Set<string>();
-    for (const section of proposal.sections) {
+    const proposedSectionsByKey = new Map(
+      proposal.sections.map((section) => [section.key, section]),
+    );
+    const sectionIdsByKey = new Map<
+      string,
+      { id: Id<"heliosEstimateSections">; evidenceIds: Id<"heliosEvidence">[] }
+    >();
+    for (const configuredSection of HELIOS_ESTIMATE_WBS) {
+      const section = proposedSectionsByKey.get(configuredSection.id) || {
+        key: configuredSection.id,
+        name: configuredSection.displayName,
+        sequence: configuredSection.sortOrder,
+        evidenceIds: [],
+        payItems: [],
+      };
       const sectionEvidenceIds = section.evidenceIds.map((id) => evidenceId(ctx, id));
       const sectionId = await ctx.db.insert("heliosEstimateSections", {
         companyId: job.companyId,
@@ -249,11 +266,12 @@ export const completeEstimateProposal = internalMutation({
         key: section.key,
         name: section.name,
         sequence: section.sequence,
-        reviewStatus: "proposed",
+        reviewStatus: section.payItems.length ? "proposed" : "accepted",
         evidenceIds: sectionEvidenceIds,
         createdAt: now,
         updatedAt: now,
       });
+      sectionIdsByKey.set(section.key, { id: sectionId, evidenceIds: sectionEvidenceIds });
       await insertEvidenceLinks(ctx, {
         companyId: job.companyId,
         projectId: job.projectId,
@@ -398,24 +416,45 @@ export const completeEstimateProposal = internalMutation({
       (item) => item.reviewStatus !== "rejected" && !proposedItemNumbers.has(item.officialItemNumber),
     );
     if (missingItems.length) {
-      const missingSectionId = await ctx.db.insert("heliosEstimateSections", {
-        companyId: job.companyId,
-        projectId: job.projectId,
-        estimateId: job.estimateId,
-        key: "prior-owner-items-missing",
-        name: "Prior owner items missing from current proposal",
-        sequence: 999_999,
-        reviewStatus: "proposed",
-        evidenceIds: [...new Set(missingItems.flatMap((item) => item.evidenceIds))],
-        createdAt: now,
-        updatedAt: now,
-      });
       for (const item of missingItems) {
+        const wbsSection = classifyEstimateWbsSection({
+          officialItemNumber: item.officialItemNumber,
+          description: item.description,
+          estimatorDescription: item.estimatorDescription,
+        });
+        let targetSection = sectionIdsByKey.get(wbsSection.id);
+        if (!targetSection) {
+          const sectionEvidenceIds = [...new Set(item.evidenceIds)];
+          const sectionId = await ctx.db.insert("heliosEstimateSections", {
+            companyId: job.companyId,
+            projectId: job.projectId,
+            estimateId: job.estimateId,
+            key: wbsSection.id,
+            name: wbsSection.displayName,
+            sequence: wbsSection.sortOrder,
+            reviewStatus: "proposed",
+            evidenceIds: sectionEvidenceIds,
+            createdAt: now,
+            updatedAt: now,
+          });
+          await insertEvidenceLinks(ctx, {
+            companyId: job.companyId,
+            projectId: job.projectId,
+            estimateId: job.estimateId,
+            recordType: "section",
+            recordId: String(sectionId),
+            relationship: "scope",
+            evidenceIds: sectionEvidenceIds,
+            now,
+          });
+          targetSection = { id: sectionId, evidenceIds: sectionEvidenceIds };
+          sectionIdsByKey.set(wbsSection.id, targetSection);
+        }
         await ctx.db.insert("heliosOwnerPayItems", {
           companyId: job.companyId,
           projectId: job.projectId,
           estimateId: job.estimateId,
-          sectionId: missingSectionId,
+          sectionId: targetSection.id,
           officialSequence: item.officialSequence ?? item.sequence,
           officialItemNumber: item.officialItemNumber,
           description: item.description,
@@ -524,6 +563,151 @@ export const failEstimateProposal = internalMutation({
       updatedAt: now,
     });
     return null;
+  },
+});
+
+export const reclassifyEstimateWbs = internalMutation({
+  args: {
+    principal: heliosPrincipalValidator,
+    projectId: v.string(),
+    estimateId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { user, companyId } = await requireHeliosPrincipal(ctx, args.principal);
+    const project = await ownedProject(ctx, companyId, args.projectId);
+    const estimateId = ctx.db.normalizeId("heliosEstimates", args.estimateId);
+    if (!estimateId) throw new Error("Estimate not found.");
+    const estimate = await ctx.db.get(estimateId);
+    if (
+      !estimate ||
+      estimate.companyId !== companyId ||
+      estimate.projectId !== project._id
+    ) {
+      throw new Error("Estimate not found.");
+    }
+    if (estimate.status === "accepted" || estimate.status === "superseded") {
+      throw new Error("Accepted and superseded estimates are immutable. Create a new estimate version to apply a different WBS.");
+    }
+    if (estimate.status === "proposal_processing") {
+      throw new Error("Wait for the estimate proposal to finish before applying the contractor WBS.");
+    }
+
+    const [sectionRows, payItemRows, costCodeRows, evidenceLinkRows] = await Promise.all([
+      ctx.db.query("heliosEstimateSections").withIndex("by_estimate_sequence", (q) => q.eq("estimateId", estimate._id)).collect(),
+      ctx.db.query("heliosOwnerPayItems").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
+      ctx.db.query("heliosEstimateCostCodes").withIndex("by_estimate", (q) => q.eq("estimateId", estimate._id)).collect(),
+      ctx.db.query("heliosEstimateEvidenceLinks").withIndex("by_estimate_created", (q) => q.eq("estimateId", estimate._id)).collect(),
+    ]);
+    const configuredById = new Map(HELIOS_ESTIMATE_WBS.map((section) => [section.id, section]));
+    const alreadyCurrent = estimate.schemaVersion >= ESTIMATE_SCHEMA_VERSION &&
+      sectionRows.length === HELIOS_ESTIMATE_WBS.length &&
+      sectionRows.every((section) => {
+      const configured = configuredById.get(section.key);
+      return configured?.displayName === section.name && configured.sortOrder === section.sequence;
+    });
+    if (alreadyCurrent) {
+      return { changed: false, sections: sectionRows.length, items: payItemRows.length };
+    }
+
+    const costCodesByPayItem = new Map<string, typeof costCodeRows>();
+    for (const code of costCodeRows) {
+      const key = String(code.payItemId);
+      costCodesByPayItem.set(key, [...(costCodesByPayItem.get(key) || []), code]);
+    }
+    const buckets = new Map<string, typeof payItemRows>();
+    for (const item of payItemRows) {
+      const wbsSection = classifyEstimateWbsSection({
+        officialItemNumber: item.officialItemNumber,
+        description: item.description,
+        estimatorDescription: item.estimatorDescription,
+        supportingText: (costCodesByPayItem.get(String(item._id)) || []).map(
+          (code) => `${code.code} ${code.description}`,
+        ),
+      });
+      buckets.set(wbsSection.id, [...(buckets.get(wbsSection.id) || []), item]);
+    }
+
+    const now = Date.now();
+    const replacementSections: Array<{ key: string; name: string; itemCount: number }> = [];
+    for (const wbsSection of HELIOS_ESTIMATE_WBS) {
+      const bucket = [...(buckets.get(wbsSection.id) || [])].sort(
+        (left, right) =>
+          (left.officialSequence ?? left.sequence) -
+            (right.officialSequence ?? right.sequence) ||
+          left._creationTime - right._creationTime,
+      );
+      const evidenceIds = [...new Set(bucket.flatMap((item) => item.evidenceIds))];
+      const retainedItems = bucket.filter((item) => item.reviewStatus !== "rejected");
+      const reviewStatus = retainedItems.length === 0 || retainedItems.every((item) =>
+        item.reviewStatus === "accepted" || item.reviewStatus === "corrected"
+      ) ? "accepted" as const : "proposed" as const;
+      const sectionId = await ctx.db.insert("heliosEstimateSections", {
+        companyId,
+        projectId: project._id,
+        estimateId: estimate._id,
+        key: wbsSection.id,
+        name: wbsSection.displayName,
+        sequence: wbsSection.sortOrder,
+        reviewStatus,
+        evidenceIds,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await Promise.all(bucket.map((item, sequence) => ctx.db.patch(item._id, {
+        sectionId,
+        sequence,
+        updatedAt: now,
+      })));
+      await insertEvidenceLinks(ctx, {
+        companyId,
+        projectId: project._id,
+        estimateId: estimate._id,
+        recordType: "section",
+        recordId: String(sectionId),
+        relationship: "scope",
+        evidenceIds,
+        origin: "system",
+        now,
+      });
+      replacementSections.push({
+        key: wbsSection.id,
+        name: wbsSection.displayName,
+        itemCount: bucket.length,
+      });
+    }
+
+    const oldSectionIds = new Set(sectionRows.map((section) => String(section._id)));
+    await Promise.all(evidenceLinkRows
+      .filter((link) => link.recordType === "section" && oldSectionIds.has(link.recordId))
+      .map((link) => ctx.db.delete(link._id)));
+    await Promise.all(sectionRows.map((section) => ctx.db.delete(section._id)));
+    await ctx.db.patch(estimate._id, {
+      schemaVersion: ESTIMATE_SCHEMA_VERSION,
+      updatedAt: now,
+    });
+    await ctx.db.insert("heliosEstimateDecisionEvents", {
+      companyId,
+      projectId: project._id,
+      estimateId: estimate._id,
+      recordType: "estimate",
+      recordId: String(estimate._id),
+      action: "update",
+      comment: "Reorganized owner pay items into the Helios contractor WBS v4.",
+      previousValue: sectionRows.map((section) => ({
+        key: section.key,
+        name: section.name,
+        itemCount: payItemRows.filter((item) => item.sectionId === section._id).length,
+      })),
+      decisionValue: replacementSections,
+      reviewerUserId: user._id,
+      reviewerName: user.name,
+      createdAt: now,
+    });
+    return {
+      changed: true,
+      sections: replacementSections.length,
+      items: payItemRows.length,
+    };
   },
 });
 
@@ -681,11 +865,18 @@ export const getWorkspace = internalQuery({
     }
     const sections = sectionRows.map((section) => ({
       id: String(section._id),
+      key: section.key,
       name: section.name,
       sequence: section.sequence,
       reviewStatus: section.reviewStatus,
       evidenceIds: section.evidenceIds.map(String),
-      payItems: payItemRows.filter((item) => item.sectionId === section._id).map((item) => {
+      payItems: payItemRows
+        .filter((item) => item.sectionId === section._id)
+        .sort((left, right) =>
+          (left.officialSequence ?? legacyOfficialSequence.get(left._id) ?? left.sequence) -
+          (right.officialSequence ?? legacyOfficialSequence.get(right._id) ?? right.sequence)
+        )
+        .map((item) => {
         const costCodes = costCodeRows
           .filter((code) => code.payItemId === item._id && code.reviewStatus !== "rejected")
           .map((code) => costCodeModels.get(String(code._id))!)

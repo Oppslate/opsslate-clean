@@ -176,6 +176,11 @@ const requestEstimateProposalReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string },
   { estimateId: string; jobId: string; status: "queued" }
 >("heliosEstimates:requestProposal");
+const reclassifyEstimateWbsReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; estimateId: string },
+  { changed: boolean; sections: number; items: number }
+>("heliosEstimates:reclassifyEstimateWbs");
 const reviewEstimateRecordReference = makeFunctionReference<
   "mutation",
   {
@@ -857,6 +862,27 @@ export const requestHeliosEstimateProposal = httpAction(async (ctx, request) => 
       },
       400,
     );
+  }
+});
+
+export const reclassifyHeliosEstimateWbs = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !boundedString(payload.estimateId)) {
+    return json({ error: "Invalid contractor WBS request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(reclassifyEstimateWbsReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      estimateId: payload.estimateId,
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({
+      error: error instanceof Error ? error.message : "Contractor WBS could not be applied.",
+    }, 400);
   }
 });
 

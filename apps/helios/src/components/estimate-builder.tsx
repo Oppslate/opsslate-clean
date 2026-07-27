@@ -251,13 +251,20 @@ export function EstimateBuilder({
             <TabsContent value="build" className="space-y-4">
               {activeSections.map((section) => (
                 <Card key={section.id} className="gap-0 overflow-hidden py-0">
-                  <CardHeader className="border-b py-4">
+                  <details open className="group/section">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b px-5 py-4 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                     <div>
-                      <CardTitle>{section.name}</CardTitle>
-                      <CardDescription>{section.payItems.length} owner pay item{section.payItems.length === 1 ? "" : "s"} · {section.evidenceIds.length} citations</CardDescription>
+                      <CardTitle className="flex items-center gap-2"><ChevronDown className="size-4 shrink-0 text-orange-400 transition-transform group-open/section:rotate-180" aria-hidden="true" />{section.key} · {section.name}</CardTitle>
+                      <CardDescription className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                        <span>{section.payItems.length} item{section.payItems.length === 1 ? "" : "s"}</span>
+                        <span>{section.payItems.filter((item) => item.reviewStatus === "accepted" || item.reviewStatus === "corrected").length} accepted owner items</span>
+                        <span>{section.payItems.filter((item) => item.reviewStatus === "proposed" || item.reviewStatus === "deferred").length} proposed Helios items</span>
+                        <span>Owner fixed {money(section.payItems.reduce((sum, item) => sum + (item.fixedAmountCents || 0), 0))}</span>
+                        <span>Estimated {section.payItems.some((item) => item.directCostCents === undefined) ? "Unpriced" : money(section.payItems.reduce((sum, item) => sum + (item.directCostCents || 0), 0))}</span>
+                      </CardDescription>
                     </div>
                     <Badge variant="outline" className="capitalize">{section.reviewStatus}</Badge>
-                  </CardHeader>
+                  </summary>
                   <CardContent className="px-0">
                     {section.payItems.filter((item) => item.reviewStatus !== "rejected").map((item) => (
                       <details key={item.id} className="group border-b last:border-b-0">
@@ -310,6 +317,7 @@ export function EstimateBuilder({
                       </details>
                     ))}
                   </CardContent>
+                  </details>
                 </Card>
               ))}
             </TabsContent>

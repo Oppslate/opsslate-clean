@@ -13,6 +13,7 @@ const buildRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId
 const supportRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/support/route.ts");
 const acceptRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/accept-import/route.ts");
 const acceptRemainingRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/accept-remaining/route.ts");
+const reclassifyWbsRoute = source("src/app/api/projects/[projectId]/estimate/[estimateId]/reclassify-wbs/route.ts");
 const gateway = source("../web/convex/heliosGateway.ts");
 const estimates = source("../web/convex/heliosEstimates.ts");
 const estimateReviews = source("../web/convex/heliosEstimateReviews.ts");
@@ -27,6 +28,7 @@ const costCodeWorkspace = source("src/components/estimate-cost-code-workspace.ts
 const supportCenter = source("src/components/estimate-support-center.tsx");
 const navigation = source("src/lib/navigation.ts");
 const domain = source("../../packages/helios-domain/src/index.ts");
+const wbs = source("../../packages/helios-domain/src/wbs.ts");
 
 test("estimate proposal requests enforce session, origin, gateway, tenant, and project ownership", () => {
   assert.match(route, /isSameOrigin/);
@@ -183,7 +185,35 @@ test("3E.1 deterministically stages new, unchanged, changed, conflicting, and mi
   assert.match(estimates, /previousAccepted/);
   assert.match(estimates, /previousByNumber/);
   assert.match(estimates, /proposedItemNumbers/);
-  assert.match(estimates, /prior-owner-items-missing/);
+  assert.match(estimates, /classifyEstimateWbsSection/);
+});
+
+test("contractor WBS is shared, ordered, secure, auditable, and independent of owner grouping", () => {
+  for (const section of [
+    "Mobilization",
+    "Site Preparation",
+    "Earthwork",
+    "Fill & Embankment",
+    "Drainage",
+    "Utilities",
+    "Concrete",
+    "Asphalt",
+    "Structures",
+    "Traffic Control",
+    "Restoration",
+    "Miscellaneous",
+  ]) assert.match(wbs, new RegExp(section.replace(/[&]/g, "&")));
+  assert.match(contracts, /HELIOS_ESTIMATE_WBS/);
+  assert.match(contracts, /Do not preserve the owner's specification grouping/);
+  assert.match(estimates, /reclassifyEstimateWbs/);
+  assert.match(estimates, /Accepted and superseded estimates are immutable/);
+  assert.match(estimates, /recordType: "estimate"/);
+  assert.match(estimates, /origin: "system"/);
+  assert.match(reclassifyWbsRoute, /isSameOrigin/);
+  assert.match(reclassifyWbsRoute, /readHeliosPrincipal/);
+  assert.match(importReview, /Apply contractor WBS/);
+  assert.match(importReview, /aria-expanded/);
+  assert.match(builder, /group\/section/);
 });
 
 test("estimate generations are versioned and never patch an accepted estimate", () => {

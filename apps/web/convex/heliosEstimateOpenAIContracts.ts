@@ -1,9 +1,14 @@
 import {
+  HELIOS_ESTIMATE_WBS,
   HELIOS_ESTIMATE_QUANTITY_STATUSES,
   HELIOS_ESTIMATE_RESOURCE_CLASSES,
   HELIOS_ESTIMATE_SCOPE_OWNERSHIP,
   HELIOS_OWNER_PAY_ITEM_TYPES,
 } from "@opsslate/helios-domain";
+
+const heliosWbsPrompt = HELIOS_ESTIMATE_WBS
+  .map((section) => `${section.id} - ${section.displayName}`)
+  .join("\n");
 
 const evidenceIds = {
   type: "array",
@@ -166,7 +171,7 @@ export const heliosEstimateProposalFormat = {
       sections: {
         type: "array",
         minItems: 1,
-        maxItems: 80,
+        maxItems: 12,
         items: sectionSchema,
       },
       risks: { type: "array", maxItems: 150, items: riskSchema },
@@ -188,6 +193,19 @@ survey, mobilization, maintenance and protection of traffic, removals,
 earthwork, excavation, dewatering, utilities, drainage, structures, concrete,
 reinforcing, fill, paving, restoration, testing, trucking, disposal, temporary
 works, and subcontract or supplier scope when supported by evidence.
+
+Organize every owner pay item into this exact Helios contractor work breakdown
+structure. Use the two-digit ID as the section key, the exact display name, and
+the listed order. Do not preserve the owner's specification grouping:
+
+${heliosWbsPrompt}
+
+Classify by the construction operation the contractor will estimate and build.
+Examples: 201.06 Clearing & Grubbing belongs in 02 Site Preparation; 203.02
+Unclassified Excavation and 206.01 Structural Excavation belong in 03
+Earthwork; 203.03 Embankment and 203.21 Select Structure Fill belong in 04 Fill
+& Embankment; and 603-series culvert pipe belongs in 05 Drainage. The server
+will validate and deterministically reclassify every item against the same WBS.
 
 For every cost code, identify the expected labor, equipment, material,
 subcontract, trucking, disposal, and other resources needed to price it. Never

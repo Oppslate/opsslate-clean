@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  HELIOS_ESTIMATE_WBS,
   HELIOS_MAX_PDF_BYTES,
   calculateAllocationBalance,
   calculateCostCodeDirectCost,
@@ -11,6 +12,7 @@ import {
   calculatePricingStatus,
   calculateResourceCost,
   calculateRiskExpectedExposure,
+  classifyEstimateWbsSection,
   deriveAllocationValues,
   canonicalPdfFileName,
   hasPdfMagicBytes,
@@ -24,6 +26,47 @@ import {
   reconcileAllocations,
   validatePdfCandidate,
 } from "../src/index.ts";
+
+test("defines the ordered contractor WBS independently of owner specification groupings", () => {
+  assert.deepEqual(
+    HELIOS_ESTIMATE_WBS.map(({ id, displayName }) => [id, displayName]),
+    [
+      ["01", "Mobilization"],
+      ["02", "Site Preparation"],
+      ["03", "Earthwork"],
+      ["04", "Fill & Embankment"],
+      ["05", "Drainage"],
+      ["06", "Utilities"],
+      ["07", "Concrete"],
+      ["08", "Asphalt"],
+      ["09", "Structures"],
+      ["10", "Traffic Control"],
+      ["11", "Restoration"],
+      ["12", "Miscellaneous"],
+    ],
+  );
+});
+
+test("classifies NYSDOT owner items into contractor work phases", () => {
+  const cases = [
+    ["201.06", "Clearing & Grubbing", "02"],
+    ["203.02", "Unclassified Excavation", "03"],
+    ["203.03", "Embankment", "04"],
+    ["203.21", "Select Structure Fill", "04"],
+    ["206.01", "Structural Excavation", "03"],
+    ["603.1715", "Culvert Pipe", "05"],
+    ["", "Install water main", "06"],
+    ["", "Precast box culvert", "09"],
+    ["999.99", "Special owner requirement", "12"],
+  ] as const;
+  for (const [officialItemNumber, description, expectedId] of cases) {
+    assert.equal(
+      classifyEstimateWbsSection({ officialItemNumber, description }).id,
+      expectedId,
+      `${officialItemNumber} ${description}`,
+    );
+  }
+});
 
 test("normalizes evidence-linked RFQ, submittal, and risk actions", () => {
   assert.deepEqual(normalizeEstimateSupportInput({ action: "generate_rfq", costCodeId: "code-1" }), {
@@ -398,6 +441,37 @@ test("parses the evidence-backed culvert estimate proposal without inventing pri
   assert.equal(
     proposal.sections[0]?.payItems[0]?.costCodes[0]?.resources[0]?.rateCents,
     undefined,
+  );
+});
+
+test("regroups mixed owner sections into the Helios WBS", () => {
+  const mixed = structuredClone(culvertProposal);
+  const baseItem = mixed.sections[0].payItems[0];
+  mixed.sections = [{
+    ...mixed.sections[0],
+    key: "owner-combined-site-work",
+    name: "Site Preparation, Excavation, Fill and Drainage Layers",
+    payItems: [
+      { officialSequence: 1, officialItemNumber: "201.06", description: "Clearing & Grubbing" },
+      { officialSequence: 2, officialItemNumber: "203.02", description: "Unclassified Excavation" },
+      { officialSequence: 3, officialItemNumber: "203.03", description: "Embankment In Place" },
+      { officialSequence: 4, officialItemNumber: "603.1715", description: "Culvert Pipe" },
+    ].map(({ officialSequence, officialItemNumber, description }) => ({
+      ...structuredClone(baseItem),
+      officialSequence,
+      officialItemNumber,
+      description,
+    })),
+  }];
+  const proposal = parseEstimateProposal(mixed, ["pay-item", "general", "scope", "risk"]);
+  assert.deepEqual(
+    proposal.sections.map((section) => [section.key, section.name, section.payItems[0]?.officialItemNumber]),
+    [
+      ["02", "Site Preparation", "201.06"],
+      ["03", "Earthwork", "203.02"],
+      ["04", "Fill & Embankment", "203.03"],
+      ["05", "Drainage", "603.1715"],
+    ],
   );
 });
 

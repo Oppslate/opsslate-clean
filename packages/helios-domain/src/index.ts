@@ -1,3 +1,10 @@
+export * from "./wbs.ts";
+
+import {
+  classifyEstimateWbsSection,
+  HELIOS_ESTIMATE_WBS,
+} from "./wbs.ts";
+
 export const HELIOS_MAX_PDF_BYTES = 50 * 1024 * 1024;
 export const HELIOS_MAX_UPLOAD_BATCH = 250;
 export const HELIOS_UPLOAD_INTENT_LIFETIME_MS = 60 * 60 * 1000;
@@ -717,6 +724,7 @@ export type HeliosOwnerPayItem = {
 
 export type HeliosEstimateSection = {
   id: string;
+  key: string;
   name: string;
   sequence: number;
   reviewStatus: HeliosEstimateReviewStatus;
@@ -1038,7 +1046,7 @@ export type HeliosEstimateProposalPayItemInput = Omit<
 
 export type HeliosEstimateProposalSectionInput = Omit<
   HeliosEstimateSection,
-  "id" | "payItems" | "reviewStatus"
+  "id" | "key" | "payItems" | "reviewStatus"
 > & { key: string; payItems: HeliosEstimateProposalPayItemInput[] };
 
 export type HeliosEstimateProposalRiskInput = Omit<
@@ -1715,7 +1723,7 @@ export function parseEstimateProposal(
   const sectionKeys = new Set<string>();
   const ownerItemNumbers = new Set<string>();
   const ownerItemSequences = new Set<number>();
-  const sections = input.sections.map((sectionValue, sectionIndex) => {
+  const sourceSections = input.sections.map((sectionValue, sectionIndex) => {
     const section = record(sectionValue, `Estimate section ${sectionIndex + 1}`);
     const key = textValue(section.key, `Estimate section ${sectionIndex + 1} key`, 80);
     if (sectionKeys.has(key)) throw new HeliosValidationError("Estimate section keys must be unique.");
@@ -1850,6 +1858,53 @@ export function parseEstimateProposal(
       evidenceIds: citedEvidence(section.evidenceIds, "Estimate section evidence", validEvidenceIds),
       payItems,
     };
+  });
+
+  const wbsBuckets = new Map<
+    string,
+    {
+      key: string;
+      name: string;
+      sequence: number;
+      evidenceIds: Set<string>;
+      payItems: HeliosEstimateProposalPayItemInput[];
+    }
+  >();
+  for (const sourceSection of sourceSections) {
+    for (const payItem of sourceSection.payItems) {
+      const wbsSection = classifyEstimateWbsSection({
+        officialItemNumber: payItem.officialItemNumber,
+        description: payItem.description,
+        estimatorDescription: payItem.estimatorDescription,
+        supportingText: payItem.costCodes.map(
+          (code) => `${code.code} ${code.description}`,
+        ),
+      });
+      const bucket = wbsBuckets.get(wbsSection.id) || {
+        key: wbsSection.id,
+        name: wbsSection.displayName,
+        sequence: wbsSection.sortOrder,
+        evidenceIds: new Set<string>(),
+        payItems: [],
+      };
+      sourceSection.evidenceIds.forEach((id) => bucket.evidenceIds.add(id));
+      payItem.evidenceIds.forEach((id) => bucket.evidenceIds.add(id));
+      bucket.payItems.push(payItem);
+      wbsBuckets.set(wbsSection.id, bucket);
+    }
+  }
+  const sections = HELIOS_ESTIMATE_WBS.flatMap((wbsSection) => {
+    const bucket = wbsBuckets.get(wbsSection.id);
+    if (!bucket?.payItems.length) return [];
+    return [
+      {
+        ...bucket,
+        evidenceIds: [...bucket.evidenceIds],
+        payItems: [...bucket.payItems].sort(
+          (left, right) => left.officialSequence - right.officialSequence,
+        ),
+      },
+    ];
   });
 
   if (!Array.isArray(input.risks) || input.risks.length > 150) {

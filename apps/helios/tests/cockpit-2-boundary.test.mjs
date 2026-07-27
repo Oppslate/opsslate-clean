@@ -33,6 +33,10 @@ test("Cockpit 2.0 uses the approved three-panel stacked-estimate workflow", () =
 
 test("Cockpit 2.0 connects real estimate, quantity, pricing, procurement, evidence, and risk records", () => {
   assert.match(cockpit, /workspace\.sections/);
+  assert.match(cockpit, /section\.key/);
+  assert.match(cockpit, /accepted/);
+  assert.match(cockpit, /proposed/);
+  assert.match(cockpit, /fixedSubtotal/);
   assert.match(cockpit, /code\.quantities/);
   assert.match(cockpit, /code\.pricingStatus/);
   assert.match(cockpit, /workspace\.rfqs/);

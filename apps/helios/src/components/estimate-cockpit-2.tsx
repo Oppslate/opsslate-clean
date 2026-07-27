@@ -464,11 +464,14 @@ function StackedEstimate({ workspace, selection, expandedSections, expandedPayIt
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {workspace.sections.map((section) => {
           const sectionCost = section.payItems.reduce((total, item) => total + (item.directCostCents || 0), 0);
+          const sectionCostReady = section.payItems.every((item) => item.directCostCents !== undefined);
+          const fixedSubtotal = section.payItems.reduce((total, item) => total + (item.fixedAmountCents || 0), 0);
           const expanded = expandedSections.has(section.id);
           const reviewed = section.payItems.filter((row) => ["accepted", "corrected"].includes(row.reviewStatus)).length;
+          const proposed = section.payItems.filter((row) => ["proposed", "deferred"].includes(row.reviewStatus)).length;
           return <div key={section.id} className="border-b border-border">
             <button type="button" onClick={() => onToggleSection(section.id)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-muted/35 px-3 py-2.5 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-              <span className="flex min-w-0 items-center gap-2">{expanded ? <ChevronDown className="size-4 text-orange-400" /> : <ChevronRight className="size-4 text-orange-400" />}<Layers3 className="size-3.5 text-info-foreground" /><span className="truncate text-xs font-semibold">{section.name}</span><Badge variant="outline" className="text-[9px]">{reviewed}/{section.payItems.length}</Badge></span><span className="font-mono text-xs font-semibold">{money(sectionCost)}</span>
+              <span className="flex min-w-0 items-start gap-2">{expanded ? <ChevronDown className="mt-0.5 size-4 text-orange-400" /> : <ChevronRight className="mt-0.5 size-4 text-orange-400" />}<Layers3 className="mt-0.5 size-3.5 text-info-foreground" /><span className="min-w-0"><span className="block truncate text-xs font-semibold">{section.key} · {section.name}</span><span className="mt-1 flex flex-wrap gap-x-2 text-[9px] text-muted-foreground"><span>{section.payItems.length} item{section.payItems.length === 1 ? "" : "s"}</span><span>{reviewed} accepted</span><span>{proposed} proposed</span><span>Owner {money(fixedSubtotal)}</span></span></span></span><span className="text-right"><span className="block font-mono text-xs font-semibold">{sectionCostReady ? money(sectionCost) : "Unpriced"}</span><span className="text-[9px] text-muted-foreground">estimated</span></span>
             </button>
             {expanded && section.payItems.map((payItem) => {
               const itemExpanded = expandedPayItems.has(payItem.id);
