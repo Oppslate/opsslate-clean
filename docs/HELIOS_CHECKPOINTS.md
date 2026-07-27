@@ -31,7 +31,8 @@ points.
 | Foundation item 3D.1: option-3 cockpit alignment | 2026-07-24 | Approved; locally verified at `a88c050`; tagged `helios-foundation-3d.1` | Create and verify a preview-only Vercel deployment; do not promote to production |
 | Foundation item 3D.1.1: above-fold decision dock | 2026-07-24 | Preview ready at `576a728`; tagged `helios-foundation-3d.1.1`; visual confirmation pending | Confirm the raised cockpit and decision-button visibility on the preview |
 | Foundation item 4 architecture: Bid Scout handoff, plan intelligence, deterministic takeoff, and bid digital twin | 2026-07-27 | Architecture approved at `2edd38b`; tagged `helios-foundation-4-architecture`; superseded by R1 before implementation | Preserve as the original architecture restore point; use R1 for implementation |
-| Foundation item 4 architecture R1: variable bid-basis profiles | 2026-07-27 | Architecture revised at `1eba29b`; tagged `helios-foundation-4-architecture-r1`; implementation not started | Implement plans-and-specifications, plans-only, specifications-only, written-scope-only, and mixed/other readiness without globally blocking the estimate when a source category was not issued |
+| Foundation item 4 architecture R1: variable bid-basis profiles | 2026-07-27 | Architecture revised at `1eba29b`; tagged `helios-foundation-4-architecture-r1`; superseded by R2 before implementation | Preserve the variable bid-basis decision; use R2 for implementation |
+| Foundation item 4 architecture R2: manual-first canonical intake with future Bid Scout adapter | 2026-07-27 | Architecture revised at `667f3a7`; tagged `helios-foundation-4-architecture-r2`; implementation not started | Build manual PDF/folder/ZIP/written-scope intake and bid-basis profiling first; keep live Bid Scout disabled while contract fixtures prove future adapter compatibility |
 
 ### Foundation item 2 evidence
 
