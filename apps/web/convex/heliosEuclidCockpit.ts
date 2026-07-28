@@ -1,0 +1,163 @@
+import {
+  HELIOS_EUCLID_INTEGRATION_SOLVER,
+  buildHeliosEngineeringParityFingerprint,
+  buildHeliosEuclidCockpitWorkspace,
+  heliosEuclidIntegrationSolutionFingerprint,
+  type HeliosEuclidEngineeringGraphEdge,
+  type HeliosEuclidEngineeringGraphNode,
+  type HeliosEuclidIntegrationCheck,
+  type HeliosEuclidIntegrationSolution,
+  type HeliosEuclidQuantityReadiness,
+  type HeliosEuclidCockpitWorkspace,
+} from "@opsslate/helios-domain";
+import { v } from "convex/values";
+
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalQuery, type QueryCtx } from "./_generated/server";
+import { heliosPrincipalValidator, requireHeliosPrincipal } from "./heliosAuthorization";
+import { reconstructEuclidModel } from "./heliosEuclidHorizontal";
+
+async function ownedProject(
+  ctx: QueryCtx,
+  companyId: Id<"companies">,
+  projectIdValue: string,
+) {
+  const projectId = ctx.db.normalizeId("heliosProjects", projectIdValue);
+  if (!projectId) throw new Error("Project not found.");
+  const project = await ctx.db.get(projectId);
+  if (!project || project.companyId !== companyId) throw new Error("Project not found.");
+  return project;
+}
+
+function projectSummary(project: Doc<"heliosProjects">) {
+  return {
+    id: String(project._id),
+    name: project.name,
+    projectNumber: project.projectNumber,
+    ownerClient: project.ownerClient,
+    bidDate: project.bidDate,
+    location: project.location,
+  };
+}
+
+async function reconstructIntegrationSolution(
+  ctx: QueryCtx,
+  record: Doc<"heliosEuclidIntegrationSolutions">,
+): Promise<HeliosEuclidIntegrationSolution> {
+  if (record.status === "failed" || record.status === "superseded") {
+    throw new Error("The current Euclid relationship graph is not readable.");
+  }
+  const chunks = await ctx.db
+    .query("heliosEuclidIntegrationSolutionChunks")
+    .withIndex("by_solution", (query) => query.eq("solutionId", record._id))
+    .collect();
+  if (chunks.length !== record.chunkCount) throw new Error("Euclid relationship graph chunks are incomplete.");
+  const nodes: HeliosEuclidEngineeringGraphNode[] = [];
+  const edges: HeliosEuclidEngineeringGraphEdge[] = [];
+  const readiness: HeliosEuclidQuantityReadiness[] = [];
+  const checks: HeliosEuclidIntegrationCheck[] = [];
+  let storedItemCount = 0;
+  for (const chunk of [...chunks].sort((left, right) => left.chunkIndex - right.chunkIndex)) {
+    const payload = JSON.parse(chunk.payloadJson) as Array<{ kind?: string; payload?: unknown }>;
+    if (!Array.isArray(payload) || payload.length !== chunk.itemCount) throw new Error("Euclid relationship graph chunk count is invalid.");
+    if (buildHeliosEngineeringParityFingerprint(payload) !== chunk.payloadFingerprint) throw new Error("Euclid relationship graph chunk fingerprint is invalid.");
+    storedItemCount += payload.length;
+    for (const item of payload) {
+      if (item.kind === "node") nodes.push(item.payload as HeliosEuclidEngineeringGraphNode);
+      else if (item.kind === "edge") edges.push(item.payload as HeliosEuclidEngineeringGraphEdge);
+      else if (item.kind === "readiness") readiness.push(item.payload as HeliosEuclidQuantityReadiness);
+      else if (item.kind === "check") checks.push(item.payload as HeliosEuclidIntegrationCheck);
+      else throw new Error("Euclid relationship graph contains an unsupported item.");
+    }
+  }
+  if (
+    storedItemCount !== record.nodeCount + record.edgeCount + record.readinessCount + record.checkCount ||
+    nodes.length !== record.nodeCount ||
+    edges.length !== record.edgeCount ||
+    readiness.length !== record.readinessCount ||
+    checks.length !== record.checkCount
+  ) throw new Error("Euclid relationship graph totals are inconsistent.");
+  const idBasis = {
+    modelFingerprint: record.modelFingerprint,
+    horizontal: record.horizontalSolutionFingerprint,
+    vertical: record.verticalSolutionFingerprint,
+    solver: HELIOS_EUCLID_INTEGRATION_SOLVER,
+  };
+  const solution: HeliosEuclidIntegrationSolution = {
+    id: `integration-solution:${buildHeliosEngineeringParityFingerprint(idBasis).split(":")[1]!.slice(0, 32)}`,
+    euclidModelId: String(record.euclidModelId),
+    sourceFingerprint: record.sourceFingerprint,
+    modelFingerprint: record.modelFingerprint,
+    horizontalSolutionFingerprint: record.horizontalSolutionFingerprint,
+    verticalSolutionFingerprint: record.verticalSolutionFingerprint,
+    solver: HELIOS_EUCLID_INTEGRATION_SOLVER,
+    solverVersion: record.solverVersion as HeliosEuclidIntegrationSolution["solverVersion"],
+    status: record.status,
+    nodes,
+    edges,
+    readiness,
+    checks,
+    readyCount: record.readyCount,
+    reviewCount: record.reviewCount,
+    blockedCount: record.blockedCount,
+    unavailableCount: record.unavailableCount,
+  };
+  if (heliosEuclidIntegrationSolutionFingerprint(solution) !== record.solutionFingerprint) {
+    throw new Error("Euclid relationship graph failed end-to-end fingerprint validation.");
+  }
+  return solution;
+}
+
+export const getWorkspace = internalQuery({
+  args: {
+    principal: heliosPrincipalValidator,
+    projectId: v.string(),
+    alignmentId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<HeliosEuclidCockpitWorkspace> => {
+    const { companyId } = await requireHeliosPrincipal(ctx, args.principal);
+    const project = await ownedProject(ctx, companyId, args.projectId);
+    const modelRecord = await ctx.db
+      .query("heliosEuclidModels")
+      .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
+      .first();
+    if (!modelRecord || modelRecord.companyId !== companyId) {
+      return buildHeliosEuclidCockpitWorkspace({ project: projectSummary(project) });
+    }
+    const solutionRecord = await ctx.db
+      .query("heliosEuclidIntegrationSolutions")
+      .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
+      .first();
+    if (solutionRecord && (solutionRecord.companyId !== companyId || solutionRecord.euclidModelId !== modelRecord._id)) {
+      throw new Error("Euclid cockpit identity is stale.");
+    }
+    const model = await reconstructEuclidModel(ctx, modelRecord);
+    const solution = solutionRecord && solutionRecord.status !== "failed"
+      ? await reconstructIntegrationSolution(ctx, solutionRecord)
+      : undefined;
+    return buildHeliosEuclidCockpitWorkspace({
+      project: projectSummary(project),
+      model,
+      modelRecord: {
+        packageRevision: modelRecord.packageRevision,
+        shadowMode: true,
+        issueCount: modelRecord.issueCount,
+        blockingIssueCount: modelRecord.blockingIssueCount,
+        updatedAt: modelRecord.updatedAt,
+      },
+      solution,
+      solutionRecord: solutionRecord ? {
+        id: String(solutionRecord._id),
+        status: solutionRecord.status === "superseded" ? "failed" : solutionRecord.status,
+        solver: solutionRecord.solver,
+        solverVersion: solutionRecord.solverVersion,
+        nodeCount: solutionRecord.nodeCount,
+        edgeCount: solutionRecord.edgeCount,
+        checkCount: solutionRecord.checkCount,
+        completedAt: solutionRecord.completedAt,
+        lastError: solutionRecord.lastError,
+      } : undefined,
+      selectedAlignmentId: args.alignmentId,
+    });
+  },
+});

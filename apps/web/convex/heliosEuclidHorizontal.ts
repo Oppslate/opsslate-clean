@@ -16,7 +16,7 @@ import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { scheduleEuclidIntegrationSolution } from "./heliosEuclidIntegrationSchedule";
 
 const solveHorizontalReference = makeFunctionReference<
@@ -36,7 +36,7 @@ function solutionKey(model: Doc<"heliosEuclidModels">) {
 }
 
 export async function reconstructEuclidModel(
-  ctx: MutationCtx,
+  ctx: MutationCtx | QueryCtx,
   stored: Doc<"heliosEuclidModels">,
 ): Promise<HeliosEuclidModel> {
   const [chunks, storedProvenance] = await Promise.all([

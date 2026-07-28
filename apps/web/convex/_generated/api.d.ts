@@ -92,6 +92,7 @@ import type * as heliosEstimateOpenAIContracts from "../heliosEstimateOpenAICont
 import type * as heliosEstimateReviews from "../heliosEstimateReviews.js";
 import type * as heliosEstimateSupport from "../heliosEstimateSupport.js";
 import type * as heliosEstimates from "../heliosEstimates.js";
+import type * as heliosEuclidCockpit from "../heliosEuclidCockpit.js";
 import type * as heliosEuclidHorizontal from "../heliosEuclidHorizontal.js";
 import type * as heliosEuclidHorizontalSchedule from "../heliosEuclidHorizontalSchedule.js";
 import type * as heliosEuclidIntegration from "../heliosEuclidIntegration.js";
@@ -246,6 +247,7 @@ declare const fullApi: ApiFromModules<{
   heliosEstimateReviews: typeof heliosEstimateReviews;
   heliosEstimateSupport: typeof heliosEstimateSupport;
   heliosEstimates: typeof heliosEstimates;
+  heliosEuclidCockpit: typeof heliosEuclidCockpit;
   heliosEuclidHorizontal: typeof heliosEuclidHorizontal;
   heliosEuclidHorizontalSchedule: typeof heliosEuclidHorizontalSchedule;
   heliosEuclidIntegration: typeof heliosEuclidIntegration;

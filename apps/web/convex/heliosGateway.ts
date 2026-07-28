@@ -16,6 +16,7 @@ import {
   type HeliosTakeoffReviewInput,
   type HeliosTakeoffWorkspace,
   type HeliosCivilGeometryReviewInput,
+  type HeliosEuclidCockpitWorkspace,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
   type HeliosFindingReviewEvent,
@@ -229,6 +230,11 @@ const reviewCivilGeometryReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string; input: HeliosCivilGeometryReviewInput },
   unknown
 >("heliosCivilGeometry:reviewGeometry");
+const getEuclidCockpitReference = makeFunctionReference<
+  "query",
+  { principal: GatewayPrincipal; projectId: string; alignmentId?: string },
+  HeliosEuclidCockpitWorkspace
+>("heliosEuclidCockpit:getWorkspace");
 const getEstimateWorkspaceReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal; projectId: string },
@@ -1069,6 +1075,29 @@ export const reviewHeliosCivilGeometry = httpAction(async (ctx, request) => {
     return json({ data }, 202);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Civil geometry action could not be saved." }, 400);
+  }
+});
+
+export const getHeliosEuclidCockpit = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (
+    !boundedString(payload.projectId) ||
+    (payload.alignmentId !== undefined && !boundedString(payload.alignmentId))
+  ) return json({ error: "Invalid Euclid cockpit request." }, 400);
+  try {
+    const data = await ctx.runQuery(getEuclidCockpitReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      alignmentId: typeof payload.alignmentId === "string" ? payload.alignmentId : undefined,
+    });
+    return json({ data }, 200);
+  } catch (error) {
+    console.error("[helios:euclid-cockpit-get] failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return json({ error: "Civil Geometry cockpit could not be loaded." }, 404);
   }
 });
 

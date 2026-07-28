@@ -89,6 +89,64 @@ Final result: passed
 
 ---
 
+# Helios Euclid Stage 4F Design QA
+
+## Target and state
+
+- Reference: the approved OpsSlate/Helios cockpit shell and three-panel
+  construction workspace.
+- Implementation: the authenticated Titus Culvert Civil Geometry route in its
+  honest `awaiting_model` state.
+- Desktop comparison evidence:
+  `docs/evidence/helios-euclid-4f-source-desktop.png` and
+  `docs/evidence/helios-euclid-4f-cockpit-desktop.png`.
+- Responsive evidence:
+  `docs/evidence/helios-euclid-4f-cockpit-tablet.png` and
+  `docs/evidence/helios-euclid-4f-cockpit-mobile.png`.
+
+## Fidelity review
+
+- Passed: the shared OpsSlate shell, sidebar structure, page gutter, dark
+  surfaces, border treatment, typography, icons, badges, and orange primary
+  action remain visually consistent with the reference project cockpit.
+- Passed: Civil Geometry appears as a real navigation destination and the
+  project cockpit exposes a direct action without introducing a duplicate
+  shell or UI library.
+- Passed: the empty state is truthful and uses live project state; no geometry,
+  confidence, or readiness values are fabricated.
+- Passed: the available-state component follows the approved three-panel
+  workflow with alignment inventory, engineering workspace, and intelligence
+  rail, using shared OpsSlate primitives.
+
+## Responsive review
+
+| Viewport | Result |
+| --- | --- |
+| Desktop `1440 × 900` | Passed; shared sidebar and workspace retain the OpsSlate hierarchy with no horizontal overflow |
+| Tablet `900 × 1100` | Passed; navigation becomes the shared drawer and the workspace fits the viewport with no horizontal overflow |
+| Mobile `390 × 844` | Passed; header and actions stack, the empty-state card fits at `358px`, and document width equals viewport width |
+
+## Interaction, states, and accessibility review
+
+- Passed: project, Civil Geometry, Ask Helios, source evidence, alignment, and
+  workspace-tab controls use semantic links, buttons, and tabs.
+- Passed: the read-only boundary is visible; Stage 4F adds no geometry-edit,
+  acceptance, quantity-publication, or export control.
+- Passed: loading, awaiting, failed, available, selected, evidence, conflict,
+  and limitation states are represented by the data contract.
+- Passed: runtime log review found no application errors; the only browser
+  warning is Clerk's expected development-key notice.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none after responsive verification.
+
+Final result: passed
+
+---
+
 # Helios Plan-Control Overlap Design QA
 
 ## Target and state

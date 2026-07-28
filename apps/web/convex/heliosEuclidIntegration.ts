@@ -173,7 +173,7 @@ export const solveEuclidIntegrationShadow = internalMutation({
       solver: solution.solver,
       solverVersion: solution.solverVersion,
       sourceFingerprint: solution.sourceFingerprint,
-      modelFingerprint: modelRecord.modelFingerprint,
+      modelFingerprint: solution.modelFingerprint,
       horizontalSolutionFingerprint: solution.horizontalSolutionFingerprint,
       verticalSolutionFingerprint: solution.verticalSolutionFingerprint,
       solutionFingerprint: fingerprint,

@@ -8,6 +8,7 @@ import type {
   HeliosProjectSummary,
   HeliosTakeoffWorkspace,
   HeliosAssistantWorkspace,
+  HeliosEuclidCockpitWorkspace,
 } from "@opsslate/helios-domain";
 import type { HeliosPrincipal } from "@/lib/helios-principal";
 
@@ -70,6 +71,18 @@ export function getTakeoffWorkspace(
     "/helios/v1/takeoff/get",
     principal,
     { projectId },
+  );
+}
+
+export function getEuclidCockpitWorkspace(
+  principal: HeliosPrincipal,
+  projectId: string,
+  alignmentId?: string,
+) {
+  return callHeliosGateway<HeliosEuclidCockpitWorkspace>(
+    "/helios/v1/euclid/cockpit",
+    principal,
+    { projectId, alignmentId },
   );
 }
 

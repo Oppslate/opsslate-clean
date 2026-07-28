@@ -8,7 +8,7 @@ import type {
 import type { HeliosPrincipal } from "@/lib/helios-principal";
 import { Badge } from "@opsslate/suite-ui/badge";
 import { Button } from "@opsslate/suite-ui/button";
-import { Bot, ChevronDown } from "lucide-react";
+import { Bot, ChevronDown, DraftingCompass } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -62,6 +62,9 @@ export function ProjectIntake({
       topActions={
         <div className="flex items-center gap-2">
           {!workspace && <Badge variant="secondary">Foundation 3D.1</Badge>}
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/projects/${project.id}/civil-geometry`}><DraftingCompass aria-hidden="true" />Civil Geometry</Link>
+          </Button>
           <Button asChild size="sm" variant="outline">
             <Link href={`/projects/${project.id}/ask`}><Bot aria-hidden="true" />Ask Helios</Link>
           </Button>

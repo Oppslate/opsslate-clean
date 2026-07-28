@@ -2,6 +2,7 @@ import type { SuiteNavigationItem } from "@opsslate/suite-ui/shell";
 import {
   Activity,
   ClipboardCheck,
+  DraftingCompass,
   FileSearch,
   FileText,
   FolderKanban,
@@ -58,6 +59,12 @@ export const heliosNavigation: SuiteNavigationItem[] = [
     disabled: true,
     disabledLabel: "Gated",
     disabledReason: gatedReason,
+  },
+  {
+    type: "link",
+    href: "/civil-geometry",
+    label: "Civil Geometry",
+    icon: icon(DraftingCompass),
   },
 
   { type: "section", label: "Estimate" },
