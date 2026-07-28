@@ -780,4 +780,8 @@ points.
 - Helios lint, targeted Convex lint, shared web TypeScript, Helios production
   build, and Convex development deployment: Passed
 - Convex development schema/functions: deployed to `kindly-tiger-289`
+- Vercel preview: `helios-foundation-item-2-preview-hzovteeoq-oppslate.vercel.app`
+  (`READY`, target `preview`); stable project preview alias updated
+- Preview verification: protected project URL redirects signed-out users to
+  Helios sign-in while preserving the complete conversation return path
 - Production deployment and production domain changes: Not performed
