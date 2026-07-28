@@ -948,3 +948,50 @@ points.
   changes, cockpit UI, LandXML, and reader cutover: Not performed
 - Approval gate: stop before Euclid Stage 4E combined engineering relationship
   graph and 3D quantity-readiness validation
+
+### Civil Geometry 2.0 - Euclid Stage 4E engineering graph
+
+- Application checkpoint: `22813ca`
+- Contract: [Euclid Stage 4E engineering graph](./HELIOS_EUCLID_STAGE_4E_ENGINEERING_GRAPH.md)
+- Scope: deterministic engineering relationship graph and method-specific
+  quantity-readiness validation only; no reader, quantity, or UI cutover
+- Canonical joins: alignments, control points, horizontal elements, station
+  equations, profiles, profile controls, sections, structures, inverts, and
+  material layers join only through frozen parent identities and explicit
+  relationship roles, never visual proximity
+- Control gates: fingerprint-verified Stage 4C horizontal and Stage 4D vertical
+  solutions must both belong to the same current Euclid model before Stage 4E
+  can publish a shadow result
+- Readiness: horizontal length, profile elevation, corridor 3D, earthwork,
+  material area and volume, structure count, and drainage 3D length report
+  ready, review, blocked, or not available without inventing quantities
+- Engineering safety: proposed controls cannot become ready, parent-range and
+  relationship-role errors block, earthwork requires matching existing/design
+  stations and offsets, and drainage remains review until connectivity is
+  explicitly confirmed
+- Storage: immutable `heliosEuclidIntegrationSolutions` and fingerprinted,
+  bounded `heliosEuclidIntegrationSolutionChunks` preserve current and
+  superseded graph/readiness results
+- Determinism: stable graph ordering, complete controlling-entity provenance,
+  fingerprints, idempotent reuse, and golden/corruption fixtures prevent silent
+  result drift
+- Failure isolation: Stage 4E is scheduled only after either independent
+  control solver commits; missing or mismatched inputs retry without changing
+  canonical geometry or existing estimator workflows
+- Honest live boundary: no authoritative live Euclid model exists in the
+  development project, so the integration table remains empty and no geometry
+  or readiness result was fabricated
+- Automated domain tests: 96 passed
+- Automated Helios security and boundary tests: 102 passed
+- Domain TypeScript, targeted Convex lint, Helios lint, shared UI ownership
+  boundary, Helios production build, shared OpsSlate production build, Convex
+  code generation/type validation/schema deployment: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`; solver
+  and status query are internal only
+- Existing Document Intelligence, Plan Intelligence, Civil Geometry, WBS,
+  Estimate Builder, Cockpit 2.0, Ask Helios, quantity, pricing, procurement,
+  evidence, risk, and review readers: Unchanged
+- OpenAI/PDF lifecycle changes, Vercel deployment, production promotion, domain
+  changes, cockpit UI, quantity publication, LandXML, and reader cutover: Not
+  performed
+- Approval gate: stop before Euclid Stage 4F read-only Civil Geometry cockpit
