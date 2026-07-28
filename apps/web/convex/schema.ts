@@ -765,6 +765,126 @@ export default defineSchema({
     .index("by_package", ["packageId"])
     .index("by_project_revision", ["projectId", "packageRevision"]),
 
+  // Civil Geometry 2.0, Euclid Stage 4B: versioned write-only shadow storage.
+  // Existing plan, civil-geometry, estimate, cockpit, and assistant readers do
+  // not consume these tables until a separately approved cutover milestone.
+  heliosEuclidModels: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringArtifactId: v.id("heliosEngineeringArtifacts"),
+    planRunId: v.id("heliosPlanRuns"),
+    geometryRunId: v.id("heliosCivilGeometryRuns"),
+    modelKey: v.string(),
+    schemaVersion: v.number(),
+    processingVersion: v.number(),
+    adapterVersion: v.string(),
+    sourceFingerprint: v.string(),
+    modelFingerprint: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("building"),
+      v.literal("proposed"),
+      v.literal("conflicted"),
+      v.literal("partially_accepted"),
+      v.literal("accepted"),
+      v.literal("export_eligible"),
+      v.literal("stale"),
+      v.literal("superseded"),
+      v.literal("failed"),
+    ),
+    isCurrent: v.boolean(),
+    shadowMode: v.boolean(),
+    sourceRecordCount: v.number(),
+    acceptedSourceRecordCount: v.number(),
+    provenanceCount: v.number(),
+    entityCount: v.number(),
+    entityChunkCount: v.number(),
+    issueCount: v.number(),
+    blockingIssueCount: v.number(),
+    validationStatus: v.union(v.literal("valid"), v.literal("invalid")),
+    validationIssues: v.array(v.object({
+      code: v.string(),
+      message: v.string(),
+      entityId: v.optional(v.string()),
+    })),
+    lastError: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_package_current", ["packageId", "isCurrent"])
+    .index("by_geometry_run", ["geometryRunId", "createdAt"])
+    .index("by_model_key", ["modelKey"])
+    .index("by_model_fingerprint", ["modelFingerprint"]),
+
+  heliosEuclidProvenance: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    euclidModelId: v.id("heliosEuclidModels"),
+    provenanceKey: v.string(),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    engineeringProvenanceId: v.id("heliosEngineeringProvenance"),
+    engineeringPageId: v.id("heliosEngineeringPages"),
+    sourceGeometryRecordId: v.id("heliosCivilGeometryRecords"),
+    documentId: v.optional(v.id("heliosDocuments")),
+    physicalPageNumber: v.number(),
+    sheetNumber: v.optional(v.string()),
+    viewKey: v.optional(v.string()),
+    locator: v.string(),
+    authority: v.union(
+      v.literal("coordinate_control"),
+      v.literal("dimensioned_geometry"),
+      v.literal("profile_geometry"),
+      v.literal("cross_section_geometry"),
+      v.literal("invert_geometry"),
+      v.literal("material_note"),
+      v.literal("calibrated_scale_fallback"),
+    ),
+    confidence: v.number(),
+    provenanceFingerprint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_model", ["euclidModelId", "createdAt"])
+    .index("by_model_key", ["euclidModelId", "provenanceKey"])
+    .index("by_source_geometry", ["sourceGeometryRecordId"])
+    .index("by_engineering_provenance", ["engineeringProvenanceId"]),
+
+  heliosEuclidEntityChunks: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    euclidModelId: v.id("heliosEuclidModels"),
+    entityType: v.union(
+      v.literal("spatial_reference"),
+      v.literal("alignment"),
+      v.literal("control_point"),
+      v.literal("horizontal_element"),
+      v.literal("station_equation"),
+      v.literal("profile"),
+      v.literal("profile_point"),
+      v.literal("vertical_tangent"),
+      v.literal("vertical_curve"),
+      v.literal("typical_section"),
+      v.literal("cross_section_point"),
+      v.literal("structure"),
+      v.literal("invert"),
+      v.literal("material_layer"),
+      v.literal("relationship"),
+      v.literal("issue"),
+    ),
+    chunkIndex: v.number(),
+    entityCount: v.number(),
+    payloadJson: v.string(),
+    payloadFingerprint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_model", ["euclidModelId", "entityType", "chunkIndex"])
+    .index("by_model_chunk", ["euclidModelId", "chunkIndex"]),
+
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

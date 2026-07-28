@@ -27,6 +27,7 @@ export const HELIOS_EUCLID_LINEAR_UNITS = [
   "us_survey_foot",
   "international_foot",
   "meter",
+  "unknown",
 ] as const;
 
 export const HELIOS_EUCLID_COORDINATE_BASES = [

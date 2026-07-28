@@ -10,6 +10,7 @@ import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { scheduleEuclidShadow } from "./heliosEuclidShadowSchedule";
 import { deriveProjectBidBasis } from "./heliosBidBasis";
 import {
   fingerprintEngineeringSource,
@@ -916,6 +917,7 @@ export const syncGeometryRunShadow = internalMutation({
       await ctx.scheduler.runAfter(0, syncGeometryDocumentReference, { runId: run._id, documentId });
     }
     await refreshRecord(ctx, shadow);
+    await scheduleEuclidShadow(ctx, run._id);
     await ctx.scheduler.runAfter(10_000, refreshProjectReference, {
       projectId: shadow.project._id,
       packageId: shadow.bidPackage._id,
