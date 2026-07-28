@@ -113,6 +113,15 @@ const appendPackageEntriesReference = makeFunctionReference<
   },
   HeliosBidPackage
 >("heliosPackages:appendPackageEntries");
+const abandonPackageReference = makeFunctionReference<
+  "mutation",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    packageId: string;
+  },
+  { packageId: string; status: "abandoned" }
+>("heliosPackages:abandonPackage");
 const finalizePackageReference = makeFunctionReference<
   "mutation",
   {
@@ -274,6 +283,12 @@ function json(body: unknown, status: number) {
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+
+function safePackageValidationMessage(error: unknown, fallback: string) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const validation = raw.match(/HeliosValidationError:\s*([^\r\n]+)/);
+  return validation?.[1]?.trim() || fallback;
 }
 
 function constantTimeEqual(left: string, right: string) {
@@ -629,7 +644,39 @@ export const createHeliosPackage = httpAction(async (ctx, request) => {
     console.error("[helios:package-create] failed", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return json({ error: "Bid package could not be created." }, 400);
+    return json(
+      {
+        error: safePackageValidationMessage(
+          error,
+          "Bid package could not be created.",
+        ),
+      },
+      400,
+    );
+  }
+});
+
+export const abandonHeliosPackage = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  if (
+    !boundedString(authorization.payload.projectId) ||
+    !boundedString(authorization.payload.packageId)
+  ) {
+    return json({ error: "Invalid bid package." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(abandonPackageReference, {
+      principal: principalFrom(authorization.payload),
+      projectId: authorization.payload.projectId,
+      packageId: authorization.payload.packageId,
+    });
+    return json({ data }, 200);
+  } catch (error) {
+    console.error("[helios:package-abandon] failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return json({ error: "Bid package could not be abandoned." }, 400);
   }
 });
 

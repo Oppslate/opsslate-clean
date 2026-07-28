@@ -141,6 +141,7 @@ export const HELIOS_PACKAGE_STATUSES = [
   "ready_for_review",
   "partially_ready",
   "failed",
+  "abandoned",
   "superseded",
 ] as const;
 

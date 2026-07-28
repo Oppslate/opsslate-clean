@@ -309,7 +309,10 @@ export const createPackage = internalMutation({
       )
       .order("desc")
       .take(20);
-    const active = existingPackages.find((row) =>
+    const retainedPackages = existingPackages.filter(
+      (row) => row.status !== "abandoned",
+    );
+    const active = retainedPackages.find((row) =>
       ["uploading", "ready_for_analysis", "processing"].includes(row.status),
     );
     if (active) {
@@ -318,7 +321,8 @@ export const createPackage = internalMutation({
       );
     }
 
-    const revision = (existingPackages[0]?.revision || 0) + 1;
+    const predecessor = retainedPackages[0];
+    const revision = (predecessor?.revision || 0) + 1;
     if (revision > 1 && input.revisionKind === "initial") {
       throw new Error("A later package must be an addendum, revision, or supplement.");
     }
@@ -339,7 +343,7 @@ export const createPackage = internalMutation({
       manifestVersion: input.manifestVersion,
       revisionKind: input.revisionKind,
       revisionLabel: input.revisionLabel,
-      predecessorPackageId: existingPackages[0]?._id,
+      predecessorPackageId: predecessor?._id,
       revision,
       status: "uploading",
       entryCount: input.entries.length,
@@ -399,6 +403,72 @@ export const createPackage = internalMutation({
     const bidPackage = await ctx.db.get(packageId);
     if (!bidPackage) throw new Error("Bid package could not be created.");
     return packageSummary(ctx, project, bidPackage);
+  },
+});
+
+export const abandonPackage = internalMutation({
+  args: {
+    principal: heliosPrincipalValidator,
+    projectId: v.string(),
+    packageId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { companyId } = await requireHeliosPrincipal(ctx, args.principal);
+    const projectId = ctx.db.normalizeId("heliosProjects", args.projectId);
+    const packageId = ctx.db.normalizeId("heliosBidPackages", args.packageId);
+    if (!projectId || !packageId) throw new Error("Bid package not found.");
+    const [project, bidPackage] = await Promise.all([
+      ctx.db.get(projectId),
+      ctx.db.get(packageId),
+    ]);
+    if (
+      !project ||
+      !bidPackage ||
+      project.companyId !== companyId ||
+      bidPackage.companyId !== companyId ||
+      bidPackage.projectId !== project._id ||
+      project.activePackageId !== bidPackage._id
+    ) {
+      throw new Error("Bid package not found.");
+    }
+    if (!["uploading", "failed"].includes(bidPackage.status)) {
+      throw new Error("Only an unfinished or failed intake can be abandoned.");
+    }
+    const predecessor = bidPackage.predecessorPackageId
+      ? await ctx.db.get(bidPackage.predecessorPackageId)
+      : null;
+    if (
+      predecessor &&
+      (predecessor.companyId !== companyId || predecessor.projectId !== project._id)
+    ) {
+      throw new Error("Previous bid package is unavailable.");
+    }
+    const now = Date.now();
+    await ctx.db.patch(bidPackage._id, {
+      status: "abandoned",
+      lastError: "Intake abandoned by estimator before finalization.",
+      updatedAt: now,
+    });
+    const envelopes = await ctx.db
+      .query("heliosPackageEnvelopes")
+      .withIndex("by_package", (query) => query.eq("packageId", bidPackage._id))
+      .collect();
+    for (const envelope of envelopes) {
+      if (envelope.status === "building") {
+        await ctx.db.patch(envelope._id, { status: "terminal", updatedAt: now });
+      }
+    }
+    await ctx.db.patch(project._id, {
+      activePackageId: predecessor?._id,
+      currentPackageRevision: predecessor?.revision,
+      status: predecessor ? "documents_ready" : "draft",
+      intelligenceStatus: predecessor
+        ? project.intelligenceStatus
+        : "awaiting_documents",
+      latestIntelligenceError: undefined,
+      updatedAt: now,
+    });
+    return { packageId: String(bidPackage._id), status: "abandoned" as const };
   },
 });
 

@@ -133,6 +133,7 @@ export function BidPackageIntake({
   const [uploads, setUploads] = useState<LocalUpload[]>([]);
   const [creating, setCreating] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [abandoning, setAbandoning] = useState(false);
   const [revisionKind, setRevisionKind] =
     useState<HeliosPackageRevisionKind>(
       packages.length ? "supplemental" : "initial",
@@ -145,7 +146,11 @@ export function BidPackageIntake({
         ["uploading", "ready_for_analysis", "processing", "failed"].includes(
           bidPackage.status,
         ),
-      ) || packages[0],
+      ) ||
+      packages.find(
+        (bidPackage) =>
+          !["abandoned", "superseded"].includes(bidPackage.status),
+      ),
     [packages],
   );
   const activeUpload =
@@ -170,6 +175,8 @@ export function BidPackageIntake({
     selected: File[],
     source: "files" | "folder" | "zip",
   ) {
+    setPrepared(undefined);
+    setUploads([]);
     setPreparing(true);
     try {
       const next =
@@ -177,7 +184,6 @@ export function BidPackageIntake({
           ? await prepareZipPackage(selected[0])
           : await prepareSelectedFiles(selected, source);
       setPrepared(next);
-      setUploads([]);
     } catch (error) {
       toast(
         error instanceof Error ? error.message : "Package could not be read.",
@@ -185,6 +191,47 @@ export function BidPackageIntake({
       );
     } finally {
       setPreparing(false);
+    }
+  }
+
+  function clearLocalSelection() {
+    setPrepared(undefined);
+    setUploads([]);
+    if (filesInputRef.current) filesInputRef.current.value = "";
+    if (folderInputRef.current) folderInputRef.current.value = "";
+    if (zipInputRef.current) zipInputRef.current.value = "";
+  }
+
+  async function abandonActivePackage() {
+    if (!activePackage || !["uploading", "failed"].includes(activePackage.status)) {
+      clearLocalSelection();
+      return;
+    }
+    setAbandoning(true);
+    try {
+      const response = await fetch(
+        `/api/projects/${projectId}/packages/${activePackage.id}/abandon`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Bid package could not be abandoned.");
+      }
+      clearLocalSelection();
+      toast(
+        "The unfinished intake was closed. You can choose a different upload method now.",
+        "success",
+      );
+      router.refresh();
+    } catch (error) {
+      toast(
+        error instanceof Error
+          ? error.message
+          : "Bid package could not be abandoned.",
+        "error",
+      );
+    } finally {
+      setAbandoning(false);
     }
   }
 
@@ -655,25 +702,33 @@ export function BidPackageIntake({
                 ))}
               </div>
             </details>
-            <Button
-              className="mt-4"
-              disabled={creating}
-              onClick={() => void startPackageUpload()}
-            >
-              {creating ? (
-                <LoaderCircle
-                  className="size-4 animate-spin"
-                  aria-hidden="true"
-                />
-              ) : (
-                <UploadCloud className="size-4" aria-hidden="true" />
-              )}
-              {activePackage?.status === "uploading"
-                ? "Add receipt to current package"
-                : prepared.writtenScopes.length
-                  ? "Register written scope"
-                  : "Create package and upload"}
-            </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                disabled={creating}
+                onClick={() => void startPackageUpload()}
+              >
+                {creating ? (
+                  <LoaderCircle
+                    className="size-4 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <UploadCloud className="size-4" aria-hidden="true" />
+                )}
+                {activePackage?.status === "uploading"
+                  ? "Add receipt to current package"
+                  : prepared.writtenScopes.length
+                    ? "Register written scope"
+                    : "Create package and upload"}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={creating}
+                onClick={clearLocalSelection}
+              >
+                Clear selection
+              </Button>
+            </div>
           </div>
         )}
 
@@ -772,6 +827,32 @@ export function BidPackageIntake({
                 same folder or ZIP if this browser no longer holds the files.
               </div>
             )}
+            {["uploading", "failed"].includes(activePackage.status) &&
+              (unresolved > 0 || activePackage.failedCount > 0) && (
+                <div className="mt-3 rounded-md border border-red-500/25 bg-red-500/5 p-3">
+                  <p className="text-sm text-red-100">
+                    If retrying or reselecting the files does not work, close
+                    this unfinished intake and choose another upload method.
+                    Successfully registered PDFs remain protected and can be
+                    recognized as duplicates in the replacement package.
+                  </p>
+                  <Button
+                    className="mt-3"
+                    size="sm"
+                    variant="outline"
+                    disabled={abandoning || finalizing}
+                    onClick={() => void abandonActivePackage()}
+                  >
+                    {abandoning && (
+                      <LoaderCircle
+                        className="size-3.5 animate-spin"
+                        aria-hidden="true"
+                      />
+                    )}
+                    Abandon intake and start over
+                  </Button>
+                </div>
+              )}
             {activePackage.status === "uploading" && (
               <Button
                 className="mt-4"

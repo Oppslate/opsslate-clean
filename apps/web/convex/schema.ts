@@ -143,6 +143,7 @@ export default defineSchema({
       v.literal("ready_for_review"),
       v.literal("partially_ready"),
       v.literal("failed"),
+      v.literal("abandoned"),
       v.literal("superseded"),
     ),
     entryCount: v.number(),

@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 
 import {
+  abandonHeliosPackage,
   appendHeliosPackageEntries,
   createHeliosProject,
   createHeliosPackage,
@@ -51,6 +52,11 @@ http.route({
   path: "/helios/v1/packages/append",
   method: "POST",
   handler: appendHeliosPackageEntries,
+});
+http.route({
+  path: "/helios/v1/packages/abandon",
+  method: "POST",
+  handler: abandonHeliosPackage,
 });
 http.route({
   path: "/helios/v1/packages/finalize",

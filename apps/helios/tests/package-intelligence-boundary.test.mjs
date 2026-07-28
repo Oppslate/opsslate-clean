@@ -16,6 +16,9 @@ const finalizeRoute = source(
 const appendRoute = source(
   "src/app/api/projects/[projectId]/packages/[packageId]/entries/route.ts",
 );
+const abandonRoute = source(
+  "src/app/api/projects/[projectId]/packages/[packageId]/abandon/route.ts",
+);
 const uploadRoute = source(
   "src/app/api/projects/[projectId]/upload-url/route.ts",
 );
@@ -30,12 +33,30 @@ const actions = source("../web/convex/heliosIntelligenceActions.ts");
 const schema = source("../web/convex/schema.ts");
 
 test("package mutations require signed session and same-origin requests", () => {
-  for (const route of [packageRoute, appendRoute, finalizeRoute, uploadRoute]) {
+  for (const route of [
+    packageRoute,
+    appendRoute,
+    abandonRoute,
+    finalizeRoute,
+    uploadRoute,
+  ]) {
     assert.match(route, /readHeliosPrincipal/);
     assert.match(route, /isSameOrigin/);
   }
   assert.match(packages, /requireHeliosPrincipal/);
   assert.match(intelligence, /requireHeliosPrincipal/);
+});
+
+test("failed intake can be abandoned without deleting immutable uploads", () => {
+  assert.match(abandonRoute, /\/helios\/v1\/packages\/abandon/);
+  assert.match(packages, /export const abandonPackage/);
+  assert.match(packages, /\["uploading", "failed"\]/);
+  assert.match(packages, /status: "abandoned"/);
+  assert.match(packages, /activePackageId: predecessor\?\._id/);
+  assert.doesNotMatch(packages, /abandonPackage[\s\S]*ctx\.db\.delete/);
+  assert.match(packageUi, /Abandon intake and start over/);
+  assert.match(packageUi, /Clear selection/);
+  assert.match(packageUi, /Successfully registered PDFs remain protected/);
 });
 
 test("separate folders append idempotently to the current unfinalized revision", () => {

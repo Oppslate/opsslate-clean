@@ -37,7 +37,15 @@ export async function POST(
       },
     );
     return apiJson({ data }, 201);
-  } catch {
-    return apiJson({ error: "Bid package could not be created." }, 400);
+  } catch (error) {
+    return apiJson(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Bid package could not be created.",
+      },
+      400,
+    );
   }
 }
