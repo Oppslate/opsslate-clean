@@ -905,3 +905,46 @@ points.
   Not performed
 - Approval gate: stop before Euclid Stage 4D vertical/profile solver and Titus
   PRO-1 golden validation
+
+### Civil Geometry 2.0 - Euclid Stage 4D vertical profiles
+
+- Application checkpoint: `389dc84`
+- Contract: [Euclid Stage 4D vertical profiles](./HELIOS_EUCLID_STAGE_4D_VERTICAL_PROFILES.md)
+- Scope: deterministic tangent and normal parabolic vertical-curve solver,
+  immutable shadow results, and controlled Titus PRO-1 mathematical validation
+  only; no reader or UI cutover
+- Profile safety: existing ground, proposed grade, subgrade, streambed, culvert
+  invert, utility invert, and other profile roles remain separate objects
+- Engineering math: tangent grade, PVC/PVI/PVT order, length and symmetry,
+  incoming/outgoing tangent closure, crest/sag type, algebraic grade difference,
+  K value, and internal high/low point
+- Fail-closed rules: no extrapolation beyond PVC/PVT, no plotted-line inference,
+  incomplete curve controls block, asymmetric curves remain uncertified, missing
+  datum requires review, and ambiguous station-equation branches block
+- Tolerances: versioned `estimating-profile-v1` pass/review/block thresholds are
+  persisted with each solution and are not represented as survey standards
+- Storage: versioned `heliosEuclidVerticalSolutions` and fingerprinted
+  `heliosEuclidVerticalSolutionChunks` preserve current and superseded checks
+- Determinism: unchanged canonical Euclid inputs reuse the current fingerprint;
+  changed models preserve prior results and create a new shadow solution
+- Failure isolation: Stage 4D schedules only after the complete Stage 4B model,
+  provenance, and entity chunks commit
+- Titus PRO-1 fixture: separate proposed finished-grade and existing-ground
+  profiles pass exact mathematical validation; corrupted PVT elevation, K value,
+  incomplete curve controls, and extrapolation fail closed
+- Honest live boundary: no authoritative Titus Civil Geometry run exists, so the
+  live vertical-solution table remains empty and no pass was fabricated
+- Automated domain tests: 88 passed
+- Automated Helios security and boundary tests: 97 passed
+- Domain TypeScript, targeted Convex lint, Helios lint, shared UI ownership
+  boundary, Helios production build, shared OpsSlate production build, Convex
+  code generation/type validation/schema deployment: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`; solver,
+  current-project scheduler, and status query are internal only
+- Existing Document Intelligence, Plan Intelligence, Civil Geometry, WBS,
+  Estimate Builder, Cockpit 2.0, Ask Helios, quantity, pricing, procurement,
+  evidence, risk, and review readers: Unchanged
+- OpenAI/PDF lifecycle changes, Vercel deployment, production promotion, domain
+  changes, cockpit UI, LandXML, and reader cutover: Not performed
+- Approval gate: stop before Euclid Stage 4E combined engineering relationship
+  graph and 3D quantity-readiness validation
