@@ -785,3 +785,40 @@ points.
 - Preview verification: protected project URL redirects signed-out users to
   Helios sign-in while preserving the complete conversation return path
 - Production deployment and production domain changes: Not performed
+
+### Civil Geometry 2.0 — Euclid Stage 4A engineering contract
+
+- Application checkpoint: `e71c796`
+- Contract: [Euclid Stage 4A engineering contract](./HELIOS_EUCLID_STAGE_4A_ENGINEERING_CONTRACT.md)
+- Scope: additive shared domain contract, fail-closed validation, reference
+  fixture, and architecture record only
+- Canonical identity: every model is company-, project-, package-, revision-,
+  source-fingerprint-, schema-, and processing-version-bound
+- Horizontal model: separate roadway, stream, survey, structure, utility, and
+  temporary alignments with control points, lines, circular curves, spirals,
+  and station equations
+- Vertical model: profiles attach to exactly one horizontal alignment and carry
+  profile points, tangents, vertical curves, solver identity, and review state
+- Engineering context: typical sections, cross-section points, structures,
+  inverts, material layers, relationships, and blocking issues share the same
+  model
+- Traceability: printed values retain source notation; computed values retain a
+  deterministic formula and input IDs; values and stations require physical-
+  page provenance
+- Coordinate safety: published, local, partial, unknown, and conflicted bases
+  are explicit; no datum or projection is inferred
+- Exchange safety: only accepted, complete, contract-valid geometry qualifies;
+  local-coordinate exchange requires explicit estimator acknowledgment
+- Titus reference fixture: Front Avenue roadway and Titus Run stream remain
+  separate while the roadway profile stays attached to Front Avenue
+- Automated domain tests: 70 passed
+- Domain TypeScript, Helios lint, Helios production build, and shared UI
+  ownership boundary: Passed
+- Existing Document Intelligence, Plan Intelligence, Civil Geometry, WBS,
+  Estimate Builder, Cockpit 2.0, Ask Helios, quantity, pricing, procurement,
+  evidence, risk, and review behavior: Unchanged
+- Convex schema, writers, OpenAI calls, extractors, solvers, cockpit UI,
+  navigation, and LandXML generation: Not started
+- Vercel deployment, production promotion, and domain changes: Not performed
+- Approval gate: stop before Euclid Stage 4B canonical storage and shadow
+  population
