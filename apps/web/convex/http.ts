@@ -7,6 +7,7 @@ import {
   createHeliosPackage,
   createHeliosUploadIntent,
   getHeliosProject,
+  getHeliosAssistantWorkspace,
   getHeliosEstimate,
   getHeliosTakeoff,
   finalizeHeliosPackage,
@@ -28,6 +29,7 @@ import {
   retryHeliosDocument,
   retryHeliosProject,
   viewHeliosDocument,
+  askHeliosProject,
 } from "./heliosGateway";
 
 const http = httpRouter();
@@ -72,6 +74,16 @@ http.route({
   path: "/helios/v1/projects/get",
   method: "POST",
   handler: getHeliosProject,
+});
+http.route({
+  path: "/helios/v1/assistant/get",
+  method: "POST",
+  handler: getHeliosAssistantWorkspace,
+});
+http.route({
+  path: "/helios/v1/assistant/ask",
+  method: "POST",
+  handler: askHeliosProject,
 });
 http.route({
   path: "/helios/v1/uploads/create",

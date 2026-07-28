@@ -28,6 +28,7 @@ import {
   type HeliosProjectInput,
   type HeliosProjectSummary,
   type HeliosPackageInput,
+  type HeliosAssistantWorkspace,
 } from "@opsslate/helios-domain";
 import { makeFunctionReference } from "convex/server";
 
@@ -71,6 +72,16 @@ const getProjectReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string },
   HeliosProjectDetail
 >("heliosProjects:getProject");
+const getAssistantWorkspaceReference = makeFunctionReference<
+  "query",
+  { principal: GatewayPrincipal; projectId: string; threadId?: string },
+  HeliosAssistantWorkspace
+>("heliosAssistant:getWorkspace");
+const askAssistantReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; threadId?: string; question: string },
+  { threadId: string; messageId: string; status: "pending" }
+>("heliosAssistant:askProject");
 const authorizeDocumentContentReference = makeFunctionReference<
   "query",
   {
@@ -565,6 +576,49 @@ export const getHeliosProject = httpAction(async (ctx, request) => {
       error: error instanceof Error ? error.message : String(error),
     });
     return json({ error: "Project was not found." }, 404);
+  }
+});
+
+export const getHeliosAssistantWorkspace = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) ||
+      (payload.threadId !== undefined && !boundedString(payload.threadId))) {
+    return json({ error: "Invalid Ask Helios workspace." }, 400);
+  }
+  try {
+    const data = await ctx.runQuery(getAssistantWorkspaceReference, {
+      principal: principalFrom(payload), projectId: payload.projectId,
+      threadId: typeof payload.threadId === "string" ? payload.threadId : undefined,
+    });
+    return json({ data }, 200);
+  } catch {
+    return json({ error: "Ask Helios workspace was not found." }, 404);
+  }
+});
+
+export const askHeliosProject = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !boundedString(payload.question, 2_000) ||
+      (payload.threadId !== undefined && !boundedString(payload.threadId))) {
+    return json({ error: "Enter a valid project question." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(askAssistantReference, {
+      principal: principalFrom(payload), projectId: payload.projectId,
+      threadId: typeof payload.threadId === "string" ? payload.threadId : undefined,
+      question: payload.question,
+    });
+    return json({ data }, 202);
+  } catch (error) {
+    return json({
+      error: error instanceof Error && error.message.includes("Wait for")
+        ? "Wait for the current answer to finish."
+        : "Ask Helios could not accept that question.",
+    }, 400);
   }
 });
 

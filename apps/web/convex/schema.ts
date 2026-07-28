@@ -1775,6 +1775,87 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_estimate", ["estimateId", "createdAt"]),
 
+  heliosAssistantThreads: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    createdBy: v.id("users"),
+    title: v.string(),
+    status: v.union(v.literal("active"), v.literal("archived")),
+    packageId: v.optional(v.id("heliosBidPackages")),
+    packageRevision: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project_updated", ["projectId", "updatedAt"])
+    .index("by_company_updated", ["companyId", "updatedAt"]),
+
+  heliosAssistantMessages: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    threadId: v.id("heliosAssistantThreads"),
+    createdBy: v.id("users"),
+    createdByName: v.string(),
+    replyToMessageId: v.optional(v.id("heliosAssistantMessages")),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("completed"),
+      v.literal("failed"),
+    ),
+    content: v.string(),
+    answerType: v.optional(v.union(
+      v.literal("document"),
+      v.literal("geometry"),
+      v.literal("quantity"),
+      v.literal("estimate"),
+      v.literal("risk"),
+      v.literal("mixed"),
+    )),
+    answerStatus: v.optional(v.union(
+      v.literal("accepted"),
+      v.literal("proposed"),
+      v.literal("inferred"),
+      v.literal("conflicted"),
+      v.literal("unavailable"),
+    )),
+    method: v.optional(v.string()),
+    assumptions: v.array(v.string()),
+    limitations: v.array(v.string()),
+    confidence: v.optional(v.number()),
+    citations: v.array(v.object({
+      sourceId: v.string(),
+      kind: v.union(
+        v.literal("document_evidence"),
+        v.literal("plan_sheet"),
+        v.literal("civil_geometry"),
+        v.literal("takeoff_quantity"),
+        v.literal("estimate_quantity"),
+        v.literal("estimate_item"),
+        v.literal("risk"),
+      ),
+      label: v.string(),
+      locator: v.string(),
+      status: v.string(),
+      documentId: v.optional(v.id("heliosDocuments")),
+      pageNumber: v.optional(v.number()),
+    })),
+    packageId: v.optional(v.id("heliosBidPackages")),
+    packageRevision: v.optional(v.number()),
+    model: v.optional(v.string()),
+    openaiResponseId: v.optional(v.string()),
+    inputTokens: v.optional(v.number()),
+    outputTokens: v.optional(v.number()),
+    totalTokens: v.optional(v.number()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_thread_created", ["threadId", "createdAt"])
+    .index("by_project_created", ["projectId", "createdAt"])
+    .index("by_reply", ["replyToMessageId"]),
+
   heliosEstimateDecisionEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

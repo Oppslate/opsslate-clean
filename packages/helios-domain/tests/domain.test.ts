@@ -26,11 +26,66 @@ import {
   parseDocumentIntelligence,
   parseEstimateProposal,
   parseProjectSynthesis,
+  parseAssistantAnswer,
+  parseStationNotation,
+  interpolateVerticalElevation,
   reconcileAllocations,
   sha256HexToBase64,
   sha256MatchesStorageDigest,
   validatePdfCandidate,
 } from "../src/index.ts";
+
+test("Ask Helios parses station notation and interpolates profile elevation deterministically", () => {
+  assert.equal(parseStationNotation("What is the elevation at Sta. 12+50?"), 1250);
+  assert.equal(parseStationNotation("station not supplied"), undefined);
+  assert.deepEqual(
+    interpolateVerticalElevation([
+      { station: 1200, elevation: 100 },
+      { station: 1300, elevation: 104 },
+    ], 1250),
+    { elevation: 102, method: "linear_interpolation", lowerStation: 1200, upperStation: 1300 },
+  );
+});
+
+test("Ask Helios accepts only canonical citations and requires support for available answers", () => {
+  const source = {
+    sourceId: "geometry:1", kind: "civil_geometry" as const,
+    label: "Mainline elevation", locator: "PR-2", status: "accepted",
+    content: "Elevation 102.0 FT at Station 12+50.",
+  };
+  const answer = {
+    directAnswer: "The elevation is 102.0 FT.", explanation: "Stored profile geometry controls.",
+    answerType: "geometry", answerStatus: "accepted", method: "Exact profile lookup",
+    assumptions: [], limitations: [], confidence: 98, citations: [{ sourceId: source.sourceId }],
+  };
+  assert.equal(parseAssistantAnswer(answer, [source]).citations[0]?.label, "Mainline elevation");
+  assert.throws(() => parseAssistantAnswer({ ...answer, citations: [{ sourceId: "outside" }] }, [source]), /not a valid project source/i);
+  assert.throws(() => parseAssistantAnswer({ ...answer, citations: [] }, [source]), /must cite/i);
+});
+
+test("Ask Helios preserves complete bounded assumption and limitation sentences", () => {
+  const sentence = "This is a complete engineering qualification that remains readable on bid day and retains enough context to explain why the answer is advisory rather than accepted.";
+  const answer = parseAssistantAnswer({
+    directAnswer: "The stored value is advisory.",
+    explanation: "Human review remains required.",
+    answerType: "mixed",
+    answerStatus: "proposed",
+    method: "Canonical project record lookup",
+    assumptions: [sentence],
+    limitations: [sentence],
+    confidence: 80,
+    citations: [{ sourceId: "risk:1" }],
+  }, [{
+    sourceId: "risk:1",
+    kind: "risk",
+    label: "Project risk",
+    locator: "Risk register",
+    status: "proposed",
+    content: "Stored risk evidence.",
+  }]);
+  assert.equal(answer.assumptions[0], sentence);
+  assert.equal(answer.limitations[0], sentence);
+});
 
 test("compares browser hexadecimal SHA-256 with Convex Base64 storage metadata", () => {
   const hexadecimal =

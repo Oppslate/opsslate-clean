@@ -7,6 +7,7 @@ import type {
   HeliosProjectInput,
   HeliosProjectSummary,
   HeliosTakeoffWorkspace,
+  HeliosAssistantWorkspace,
 } from "@opsslate/helios-domain";
 import type { HeliosPrincipal } from "@/lib/helios-principal";
 
@@ -35,6 +36,18 @@ export function getProject(principal: HeliosPrincipal, projectId: string) {
     "/helios/v1/projects/get",
     principal,
     { projectId },
+  );
+}
+
+export function getAssistantWorkspace(
+  principal: HeliosPrincipal,
+  projectId: string,
+  threadId?: string,
+) {
+  return callHeliosGateway<HeliosAssistantWorkspace>(
+    "/helios/v1/assistant/get",
+    principal,
+    { projectId, threadId },
   );
 }
 

@@ -766,6 +766,113 @@ export type HeliosProjectDetail = {
   takeoff?: import("./takeoff-intelligence.ts").HeliosTakeoffWorkspace;
 };
 
+export const HELIOS_ASSISTANT_SOURCE_KINDS = [
+  "document_evidence",
+  "plan_sheet",
+  "civil_geometry",
+  "takeoff_quantity",
+  "estimate_quantity",
+  "estimate_item",
+  "risk",
+] as const;
+export const HELIOS_ASSISTANT_ANSWER_TYPES = [
+  "document",
+  "geometry",
+  "quantity",
+  "estimate",
+  "risk",
+  "mixed",
+] as const;
+export const HELIOS_ASSISTANT_ANSWER_STATUSES = [
+  "accepted",
+  "proposed",
+  "inferred",
+  "conflicted",
+  "unavailable",
+] as const;
+
+export type HeliosAssistantSourceKind =
+  (typeof HELIOS_ASSISTANT_SOURCE_KINDS)[number];
+export type HeliosAssistantAnswerType =
+  (typeof HELIOS_ASSISTANT_ANSWER_TYPES)[number];
+export type HeliosAssistantAnswerStatus =
+  (typeof HELIOS_ASSISTANT_ANSWER_STATUSES)[number];
+
+export type HeliosAssistantCitation = {
+  sourceId: string;
+  kind: HeliosAssistantSourceKind;
+  label: string;
+  locator: string;
+  status: string;
+  documentId?: string;
+  pageNumber?: number;
+};
+
+export type HeliosAssistantMessage = {
+  id: string;
+  threadId: string;
+  role: "user" | "assistant";
+  status: "pending" | "completed" | "failed";
+  content: string;
+  answerType?: HeliosAssistantAnswerType;
+  answerStatus?: HeliosAssistantAnswerStatus;
+  method?: string;
+  assumptions: string[];
+  limitations: string[];
+  confidence?: number;
+  citations: HeliosAssistantCitation[];
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  error?: string;
+  createdByName: string;
+  packageRevision?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type HeliosAssistantThread = {
+  id: string;
+  projectId: string;
+  title: string;
+  status: "active" | "archived";
+  packageRevision?: number;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type HeliosAssistantWorkspace = {
+  project: HeliosProjectSummary;
+  threads: HeliosAssistantThread[];
+  activeThread?: HeliosAssistantThread;
+  messages: HeliosAssistantMessage[];
+  capabilities: {
+    documentEvidence: boolean;
+    civilGeometry: boolean;
+    governedQuantities: boolean;
+    estimate: boolean;
+    risks: boolean;
+  };
+};
+
+export type HeliosAssistantSource = HeliosAssistantCitation & {
+  content: string;
+};
+
+export type HeliosAssistantAnswerInput = {
+  directAnswer: string;
+  explanation: string;
+  answerType: HeliosAssistantAnswerType;
+  answerStatus: HeliosAssistantAnswerStatus;
+  method: string;
+  assumptions: string[];
+  limitations: string[];
+  confidence: number;
+  citations: HeliosAssistantCitation[];
+};
+
 export type HeliosEstimateResource = {
   id: string;
   resourceClass: HeliosEstimateResourceClass;
@@ -1731,11 +1838,12 @@ function stringArray(
   value: unknown,
   label: string,
   maximumItems = 40,
+  maximumLength = 128,
 ) {
   if (!Array.isArray(value) || value.length > maximumItems) {
     throw new HeliosValidationError(`${label} must be a bounded list.`);
   }
-  return [...new Set(value.map((item) => textValue(item, label, 128)))];
+  return [...new Set(value.map((item) => textValue(item, label, maximumLength)))];
 }
 
 function categoryValue(value: unknown): HeliosIntelligenceCategory {
@@ -2000,6 +2108,112 @@ export function parseProjectSynthesis(
     ),
     confidence: confidenceValue(input.confidence, "Project confidence"),
     findings,
+  };
+}
+
+export function normalizeAssistantQuestion(value: unknown) {
+  if (typeof value !== "string") {
+    throw new HeliosValidationError("Enter a project question.");
+  }
+  const question = value.trim().replace(/\s+/g, " ");
+  if (!question) throw new HeliosValidationError("Enter a project question.");
+  if (question.length > 2_000) {
+    throw new HeliosValidationError("Keep project questions under 2,000 characters.");
+  }
+  return question;
+}
+
+export function parseStationNotation(value: string) {
+  const match = value.match(/\b(\d{1,6})\s*\+\s*(\d{1,2}(?:\.\d+)?)\b/);
+  if (!match) return undefined;
+  const base = Number(match[1]);
+  const offset = Number(match[2]);
+  if (!Number.isFinite(base) || !Number.isFinite(offset) || offset >= 100) {
+    return undefined;
+  }
+  return base * 100 + offset;
+}
+
+export function interpolateVerticalElevation(
+  points: Array<{ station: number; elevation: number }>,
+  station: number,
+) {
+  if (!Number.isFinite(station)) return undefined;
+  const ordered = points
+    .filter((point) => Number.isFinite(point.station) && Number.isFinite(point.elevation))
+    .sort((left, right) => left.station - right.station);
+  const exact = ordered.find((point) => Math.abs(point.station - station) < 0.000001);
+  if (exact) {
+    return {
+      elevation: exact.elevation,
+      method: "exact" as const,
+      lowerStation: exact.station,
+      upperStation: exact.station,
+    };
+  }
+  for (let index = 1; index < ordered.length; index += 1) {
+    const lower = ordered[index - 1];
+    const upper = ordered[index];
+    if (!lower || !upper || station <= lower.station || station >= upper.station) continue;
+    const ratio = (station - lower.station) / (upper.station - lower.station);
+    return {
+      elevation: lower.elevation + ratio * (upper.elevation - lower.elevation),
+      method: "linear_interpolation" as const,
+      lowerStation: lower.station,
+      upperStation: upper.station,
+    };
+  }
+  return undefined;
+}
+
+export function parseAssistantAnswer(
+  value: unknown,
+  validSources: Iterable<HeliosAssistantSource>,
+): HeliosAssistantAnswerInput {
+  const input = record(value, "Ask Helios answer");
+  const sourceMap = new Map([...validSources].map((source) => [source.sourceId, source]));
+  if (!Array.isArray(input.citations) || input.citations.length > 20) {
+    throw new HeliosValidationError("Answer citations must be a bounded list.");
+  }
+  const citations = input.citations.map((citationValue, index) => {
+    const citation = record(citationValue, `Answer citation ${index + 1}`);
+    const sourceId = textValue(citation.sourceId, `Answer citation ${index + 1}`, 240);
+    const source = sourceMap.get(sourceId);
+    if (!source) {
+      throw new HeliosValidationError(`Answer citation ${index + 1} is not a valid project source.`);
+    }
+    return {
+      sourceId: source.sourceId,
+      kind: source.kind,
+      label: source.label,
+      locator: source.locator,
+      status: source.status,
+      documentId: source.documentId,
+      pageNumber: source.pageNumber,
+    };
+  });
+  const answerStatus = allowedValue(
+    input.answerStatus,
+    HELIOS_ASSISTANT_ANSWER_STATUSES,
+    "Answer status",
+  );
+  if (answerStatus !== "unavailable" && citations.length === 0) {
+    throw new HeliosValidationError("A project answer must cite at least one valid source.");
+  }
+  return {
+    directAnswer: textValue(input.directAnswer, "Direct answer", 1_200),
+    explanation: textValue(input.explanation, "Answer explanation", 4_000, true),
+    answerType: allowedValue(
+      input.answerType,
+      HELIOS_ASSISTANT_ANSWER_TYPES,
+      "Answer type",
+    ),
+    answerStatus,
+    method: textValue(input.method, "Answer method", 1_200, true),
+    assumptions: stringArray(input.assumptions, "Answer assumptions", 20, 320),
+    limitations: stringArray(input.limitations, "Answer limitations", 20, 320),
+    confidence: confidenceValue(input.confidence, "Answer confidence"),
+    citations,
   };
 }
 

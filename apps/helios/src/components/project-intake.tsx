@@ -7,7 +7,9 @@ import type {
 } from "@opsslate/helios-domain";
 import type { HeliosPrincipal } from "@/lib/helios-principal";
 import { Badge } from "@opsslate/suite-ui/badge";
-import { ChevronDown } from "lucide-react";
+import { Button } from "@opsslate/suite-ui/button";
+import { Bot, ChevronDown } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -58,9 +60,12 @@ export function ProjectIntake({
     <HeliosShell
       principal={principal}
       topActions={
-        workspace ? undefined : (
-          <Badge variant="secondary">Foundation 3D.1</Badge>
-        )
+        <div className="flex items-center gap-2">
+          {!workspace && <Badge variant="secondary">Foundation 3D.1</Badge>}
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/projects/${project.id}/ask`}><Bot aria-hidden="true" />Ask Helios</Link>
+          </Button>
+        </div>
       }
     >
       <div className="space-y-4">

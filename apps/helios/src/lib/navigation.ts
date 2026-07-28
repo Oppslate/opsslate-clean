@@ -6,6 +6,7 @@ import {
   FileText,
   FolderKanban,
   Gauge,
+  Bot,
   Handshake,
   Landmark,
   MailQuestion,
@@ -23,6 +24,12 @@ const gatedReason =
 export const heliosNavigation: SuiteNavigationItem[] = [
   { type: "section", label: "Command Center" },
   { type: "link", href: "/", label: "Cockpit", icon: icon(Gauge) },
+  {
+    type: "link",
+    href: "/ask",
+    label: "Ask Helios",
+    icon: icon(Bot),
+  },
 
   { type: "section", label: "Preconstruction" },
   {
