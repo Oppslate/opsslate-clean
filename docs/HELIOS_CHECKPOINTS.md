@@ -995,3 +995,39 @@ points.
   changes, cockpit UI, quantity publication, LandXML, and reader cutover: Not
   performed
 - Approval gate: stop before Euclid Stage 4F read-only Civil Geometry cockpit
+
+### Civil Geometry 2.0 - Euclid Stage 4F read-only cockpit
+
+- Application checkpoint: `3bda526`
+- Contract: [Euclid Stage 4F Civil Geometry cockpit](./HELIOS_EUCLID_STAGE_4F_COCKPIT.md)
+- Scope: authenticated, tenant-authorized, read-only estimator workspace for
+  the canonical Euclid model and Stage 4E engineering graph
+- Workflow: direct project navigation opens the approved three-panel pattern
+  with alignment inventory, horizontal/vertical/section/structure inspection,
+  and readiness/evidence/issues context
+- Canonical boundary: the server reconstructs fingerprint-verified Euclid and
+  Stage 4E chunks; it does not reread PDFs, call OpenAI, or accept browser
+  company identity
+- Payload boundary: all alignments remain visible as compact summaries while
+  only the selected alignment's controls, profiles, sections, structures,
+  readiness, checks, issues, and provenance are returned in detail
+- Evidence: every displayed engineering value retains canonical provenance and
+  protected source-page navigation to the immutable original PDF
+- Honest live boundary: Titus has no current canonical Euclid model, so browser
+  verification shows `awaiting_model`; no geometry or readiness was fabricated
+- Automated domain tests: 98 passed
+- Automated Helios security and boundary tests: 107 passed
+- Browser QA: desktop `1440 × 900`, tablet `900 × 1100`, and mobile
+  `390 × 844` passed with no horizontal overflow or application runtime errors
+- Domain TypeScript, targeted Convex lint, Helios lint, shared UI ownership
+  boundary, Helios production build, shared OpsSlate production build, Convex
+  code generation/type validation/schema deployment: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`; the new
+  cockpit query remains internal behind the existing Helios gateway
+- Existing Document Intelligence, Plan Intelligence, WBS, Estimate Builder,
+  Cockpit 2.0, Ask Helios, quantity, pricing, procurement, evidence, risk, and
+  review readers: Unchanged
+- Geometry editing, estimator acceptance, quantity calculation/publication,
+  LandXML, Vercel deployment, production promotion, and domain changes: Not
+  performed
+- Approval gate: stop before governed Euclid geometry review and correction
