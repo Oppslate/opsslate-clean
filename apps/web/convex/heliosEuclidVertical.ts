@@ -15,6 +15,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { reconstructEuclidModel } from "./heliosEuclidHorizontal";
+import { scheduleEuclidIntegrationSolution } from "./heliosEuclidIntegrationSchedule";
 
 const solveVerticalReference = makeFunctionReference<
   "mutation",
@@ -92,6 +93,7 @@ export const solveEuclidVerticalShadow = internalMutation({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Euclid model reconstruction failed.";
       const solutionId = await storeFailure(ctx, stored, message);
+      await scheduleEuclidIntegrationSolution(ctx, stored._id);
       return { status: "failed" as const, solutionId };
     }
     let solution;
@@ -100,6 +102,7 @@ export const solveEuclidVerticalShadow = internalMutation({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Euclid vertical solution failed.";
       const solutionId = await storeFailure(ctx, stored, message);
+      await scheduleEuclidIntegrationSolution(ctx, stored._id);
       return { status: "failed" as const, solutionId };
     }
     const fingerprint = heliosEuclidVerticalSolutionFingerprint(solution);
@@ -108,6 +111,7 @@ export const solveEuclidVerticalShadow = internalMutation({
       .withIndex("by_package_current", (query) => query.eq("packageId", stored.packageId).eq("isCurrent", true))
       .first();
     if (current?.euclidModelId === stored._id && current.solutionFingerprint === fingerprint && current.status !== "failed") {
+      await scheduleEuclidIntegrationSolution(ctx, stored._id);
       return { status: current.status, solutionId: String(current._id), reused: true };
     }
 
@@ -158,6 +162,7 @@ export const solveEuclidVerticalShadow = internalMutation({
         createdAt: now,
       });
     }
+    await scheduleEuclidIntegrationSolution(ctx, stored._id);
     return { status: solution.status, solutionId: String(solutionId), reused: false };
   },
 });

@@ -1027,6 +1027,68 @@ export default defineSchema({
     .index("by_solution", ["solutionId", "profileId", "chunkIndex"])
     .index("by_solution_chunk", ["solutionId", "chunkIndex"]),
 
+  // Euclid Stage 4E: immutable relationship graph and quantity-readiness results.
+  // These remain shadow-only and do not drive existing quantity or UI readers.
+  heliosEuclidIntegrationSolutions: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    euclidModelId: v.id("heliosEuclidModels"),
+    horizontalSolutionId: v.id("heliosEuclidHorizontalSolutions"),
+    verticalSolutionId: v.id("heliosEuclidVerticalSolutions"),
+    solutionKey: v.string(),
+    solver: v.string(),
+    solverVersion: v.number(),
+    sourceFingerprint: v.string(),
+    modelFingerprint: v.string(),
+    horizontalSolutionFingerprint: v.string(),
+    verticalSolutionFingerprint: v.string(),
+    solutionFingerprint: v.string(),
+    status: v.union(
+      v.literal("passed"),
+      v.literal("review"),
+      v.literal("blocked"),
+      v.literal("not_applicable"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    isCurrent: v.boolean(),
+    shadowMode: v.boolean(),
+    nodeCount: v.number(),
+    edgeCount: v.number(),
+    alignmentCount: v.number(),
+    readinessCount: v.number(),
+    readyCount: v.number(),
+    reviewCount: v.number(),
+    blockedCount: v.number(),
+    unavailableCount: v.number(),
+    checkCount: v.number(),
+    chunkCount: v.number(),
+    lastError: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_package_current", ["packageId", "isCurrent"])
+    .index("by_model", ["euclidModelId", "createdAt"])
+    .index("by_solution_key", ["solutionKey"])
+    .index("by_solution_fingerprint", ["solutionFingerprint"]),
+
+  heliosEuclidIntegrationSolutionChunks: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    solutionId: v.id("heliosEuclidIntegrationSolutions"),
+    chunkIndex: v.number(),
+    itemCount: v.number(),
+    payloadJson: v.string(),
+    payloadFingerprint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_solution", ["solutionId", "chunkIndex"]),
+
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),
