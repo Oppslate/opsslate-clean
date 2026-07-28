@@ -89,6 +89,64 @@ Final result: passed
 
 ---
 
+# Helios Euclid Stage 4G Design QA
+
+## Target and state
+
+- Reference: the approved OpsSlate/Helios three-panel Civil Geometry cockpit.
+- Implementation: Stage 4F's existing cockpit with an additive governed review
+  queue at the top of the intelligence rail.
+- Live state: the authenticated Titus project honestly reports
+  `awaiting_model`; no mock engineering entity was inserted.
+- Responsive evidence:
+  `docs/evidence/helios-euclid-4g-desktop.png` and
+  `docs/evidence/helios-euclid-4g-mobile.png`.
+
+## Fidelity and workflow review
+
+- Passed: shared OpsSlate shell, typography, spacing, semantic colors, borders,
+  radii, icons, buttons, badges, dialog, fields, tabs, and focus treatment are
+  retained.
+- Passed: the established alignment inventory and engineering workspace remain
+  unchanged; review is added to the existing intelligence rail instead of
+  introducing a fourth panel or disconnected screen.
+- Passed: acceptance is one click. Correction, deferral, and rejection share
+  one compact review dialog and require only the information needed for a
+  governed decision.
+- Passed: no copied shell, duplicate CSS, new UI library, arbitrary color,
+  placeholder component, fake geometry, or fake action was introduced.
+
+## Responsive review
+
+| Viewport | Result |
+| --- | --- |
+| Desktop `1440 × 900` | Passed; shared sidebar and honest empty state fit without horizontal overflow |
+| Tablet `1024 × 768` | Passed; shared navigation drawer and content reflow without horizontal overflow |
+| Mobile `390 × 844` | Passed; header, actions, and empty state remain readable and operable without horizontal overflow |
+
+## Interaction, states, and accessibility review
+
+- Passed: review controls use semantic buttons, labeled shared form fields,
+  visible focus rings, loading/disabled states, and server error feedback.
+- Passed: action labels and status badges communicate accepted, corrected,
+  deferred, rejected, stale, and pending states without color alone.
+- Passed: correction fields are constrained by entity type and consequential
+  decisions require a reason.
+- Passed: boundary and domain tests exercise the available-state review
+  workflow while the live project correctly remains empty.
+- Passed: runtime review found no application errors; the only browser warning
+  is Clerk's expected development-key notice.
+
+## Findings
+
+- P0: none.
+- P1: none.
+- P2: none after responsive verification.
+
+Final result: passed
+
+---
+
 # Helios Euclid Stage 4F Design QA
 
 ## Target and state

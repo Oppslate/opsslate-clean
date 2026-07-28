@@ -1031,3 +1031,41 @@ points.
   LandXML, Vercel deployment, production promotion, and domain changes: Not
   performed
 - Approval gate: stop before governed Euclid geometry review and correction
+
+### Civil Geometry 2.0 - Euclid Stage 4G governed review
+
+- Application checkpoint: `fd1223f`
+- Contract: [Euclid Stage 4G governed review](./HELIOS_EUCLID_STAGE_4G_GOVERNED_REVIEW.md)
+- Scope: estimator acceptance, correction, deferral, and rejection of current
+  canonical Euclid entities; no canonical geometry mutation or downstream
+  publication
+- Bid-day workflow: acceptance is one click; correction, deferral, and
+  rejection use one shared review dialog and require a reason
+- Governance: entity-specific correction allowlists prevent arbitrary object
+  edits; every decision retains the complete before snapshot and reviewer
+  identity
+- Integrity: model, source, and entity fingerprints prevent stale review;
+  request identities make exact retries idempotent and reject conflicting reuse
+- Storage: append-only `heliosEuclidReviewDecisions` records preserve all
+  decision history while the cockpit folds the latest decision per entity
+- Canonical boundary: the immutable Euclid model, Stage 4C/4D solvers, Stage 4E
+  engineering graph, source PDFs, and provenance remain unchanged
+- Honest live boundary: Titus has no current canonical Euclid model, so browser
+  verification remains in `awaiting_model`; no reviewable geometry was
+  fabricated
+- Automated domain tests: 102 passed
+- Automated Helios security and boundary tests: 109 passed
+- Browser QA: desktop `1440 × 900`, tablet `1024 × 768`, and mobile
+  `390 × 844` passed with no horizontal overflow or application runtime errors
+- Domain TypeScript, Helios lint, Helios production build, shared OpsSlate
+  production build, and generated Convex bindings: Passed
+- Convex development schema/functions: updated through the existing development
+  deployment; no production or Vercel deployment was performed
+- Existing Document Intelligence, Plan Intelligence, WBS, Estimate Builder,
+  Cockpit 2.0, Ask Helios, quantity, pricing, procurement, evidence, and risk
+  readers: Unchanged
+- Canonical correction application, geometry recalculation, quantity or estimate
+  publication, LandXML, Vercel deployment, production promotion, and domain
+  changes: Not performed
+- Approval gate: stop before applying reviewed corrections to a new canonical
+  model or allowing reviewed geometry to drive downstream quantities
