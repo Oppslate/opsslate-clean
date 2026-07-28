@@ -863,3 +863,45 @@ points.
   LandXML, PDF lifecycle changes, and reader cutover: Not performed
 - Approval gate: stop before Euclid Stage 4C horizontal control solver and
   golden Titus validation
+
+### Civil Geometry 2.0 - Euclid Stage 4C horizontal control
+
+- Application checkpoint: `113d931`
+- Contract: [Euclid Stage 4C horizontal control](./HELIOS_EUCLID_STAGE_4C_HORIZONTAL_CONTROL.md)
+- Scope: deterministic horizontal-control solver, immutable shadow results,
+  and controlled Titus mathematical validation only; no reader or UI cutover
+- Engineering math: quadrant bearings and azimuths, line coordinate closure,
+  bearing closure, circular-curve arc/chord/tangent checks, element sequence,
+  endpoint and station continuity, duplicate controls, and total-length closure
+- Station equations: physical locations resolve from the continuous offset
+  with printed values, formula, input IDs, and provenance retained; downstream
+  stations without an explicit equation branch remain blocked
+- Tolerances: versioned `estimating-control-v1` pass/review/block thresholds
+  are persisted with every immutable solution and are not represented as survey
+  or agency standards
+- Storage: versioned `heliosEuclidHorizontalSolutions` and fingerprinted
+  `heliosEuclidHorizontalSolutionChunks` preserve current and superseded checks
+- Determinism: unchanged model and tolerance fingerprints reuse the current
+  solution; changed Euclid models create new results without deleting history
+- Failure isolation: Stage 4C is scheduled only after Stage 4B model,
+  provenance, and chunks commit; solver failure cannot roll back canonical data
+- Titus golden fixture: separate Front Avenue roadway and Titus Run stream
+  control chains pass; corrupted curve math and ambiguous stationing block
+- Honest live boundary: the Titus development project still has no
+  authoritative Civil Geometry run, so no live Euclid model or horizontal
+  solution was fabricated
+- Automated domain tests: 82 passed
+- Automated Helios security and boundary tests: 93 passed
+- Domain TypeScript, targeted Convex lint, Helios lint, shared UI ownership
+  boundary, Helios production build, shared OpsSlate production build, Convex
+  code generation/type validation/schema deployment: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`; solver,
+  current-project scheduler, and status query are internal only
+- Existing Document Intelligence, Plan Intelligence, Civil Geometry, WBS,
+  Estimate Builder, Cockpit 2.0, Ask Helios, quantity, pricing, procurement,
+  evidence, risk, and review readers: Unchanged
+- OpenAI/PDF lifecycle changes, Vercel deployment, production promotion,
+  domain changes, cockpit UI, vertical solver, LandXML, and reader cutover:
+  Not performed
+- Approval gate: stop before Euclid Stage 4D vertical/profile solver and Titus
+  PRO-1 golden validation
