@@ -725,3 +725,25 @@ points.
 - Targeted modified-file lint, domain build, shared web TypeScript, Helios
   production build, and Convex schema/function deployment: Passed
 - Convex development schema/functions: deployed to `kindly-tiger-289`
+
+### Evidence-backed project metadata auto-population
+
+- Application checkpoint: `2547662`
+- Scope: project number, owner/client, engineer, bid date, and location are
+  extracted during the existing project-synthesis step from previously stored
+  document intelligence and evidence
+- Single-ingestion boundary: no PDF is re-uploaded or re-read and no new
+  OpenAI workflow is introduced
+- Evidence control: every populated value must cite valid project evidence;
+  bid dates must be valid ISO calendar dates (`YYYY-MM-DD`)
+- Manual-authority control: synthesis fills only blank project fields and
+  never overwrites estimator-entered values
+- Backward compatibility: metadata is additive and optional on earlier
+  intelligence generations, preserving all existing document, plan, geometry,
+  WBS, estimate, cockpit, and review records
+- Automated domain tests: 60 passed
+- Automated Helios security and boundary tests: 82 passed
+- Domain build, Helios lint, Helios production build, Convex code generation,
+  and shared web TypeScript: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Production deployment and production domain changes: Not performed
