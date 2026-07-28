@@ -1167,6 +1167,33 @@ export default defineSchema({
       confidence: v.number(),
       evidenceIds: v.array(v.id("heliosEvidence")),
     }),
+    projectMetadata: v.optional(v.object({
+      projectNumber: v.object({
+        value: v.string(),
+        confidence: v.number(),
+        evidenceIds: v.array(v.id("heliosEvidence")),
+      }),
+      ownerClient: v.object({
+        value: v.string(),
+        confidence: v.number(),
+        evidenceIds: v.array(v.id("heliosEvidence")),
+      }),
+      engineer: v.object({
+        value: v.string(),
+        confidence: v.number(),
+        evidenceIds: v.array(v.id("heliosEvidence")),
+      }),
+      bidDate: v.object({
+        value: v.string(),
+        confidence: v.number(),
+        evidenceIds: v.array(v.id("heliosEvidence")),
+      }),
+      location: v.object({
+        value: v.string(),
+        confidence: v.number(),
+        evidenceIds: v.array(v.id("heliosEvidence")),
+      }),
+    })),
     confidence: v.number(),
     findings: v.array(
       v.object({

@@ -714,6 +714,14 @@ export type HeliosEvidenceBackedValue = {
   evidenceIds: string[];
 };
 
+export type HeliosProjectMetadata = {
+  projectNumber: HeliosEvidenceBackedValue;
+  ownerClient: HeliosEvidenceBackedValue;
+  engineer: HeliosEvidenceBackedValue;
+  bidDate: HeliosEvidenceBackedValue;
+  location: HeliosEvidenceBackedValue;
+};
+
 export type HeliosProjectIntelligence = {
   id: string;
   projectId: string;
@@ -723,6 +731,7 @@ export type HeliosProjectIntelligence = {
   summaryEvidenceIds: string[];
   projectType: HeliosEvidenceBackedValue;
   fundingSource: HeliosEvidenceBackedValue;
+  projectMetadata?: HeliosProjectMetadata;
   confidence: number;
   findings: HeliosIntelligenceFinding[];
   reviewSummary: HeliosFindingReviewSummary;
@@ -1675,6 +1684,7 @@ export type HeliosProjectSynthesisInput = {
   summaryEvidenceIds: string[];
   projectType: HeliosEvidenceBackedValue;
   fundingSource: HeliosEvidenceBackedValue;
+  projectMetadata: HeliosProjectMetadata;
   confidence: number;
   findings: Omit<HeliosIntelligenceFinding, "id" | "review">[];
 };
@@ -1861,6 +1871,65 @@ function evidenceBackedValue(
   };
 }
 
+function projectMetadataValue(
+  value: unknown,
+  validEvidenceIds: Set<string>,
+): HeliosProjectMetadata {
+  const input = record(value, "Project metadata");
+  const projectNumber = evidenceBackedValue(
+    input.projectNumber,
+    "Project number",
+    validEvidenceIds,
+  );
+  const ownerClient = evidenceBackedValue(
+    input.ownerClient,
+    "Owner / client",
+    validEvidenceIds,
+  );
+  const engineer = evidenceBackedValue(
+    input.engineer,
+    "Engineer",
+    validEvidenceIds,
+  );
+  const bidDate = evidenceBackedValue(
+    input.bidDate,
+    "Bid date",
+    validEvidenceIds,
+  );
+  const location = evidenceBackedValue(
+    input.location,
+    "Project location",
+    validEvidenceIds,
+  );
+
+  if (projectNumber.value.length > 80) {
+    throw new HeliosValidationError("Project number must be 80 characters or fewer.");
+  }
+  if (ownerClient.value.length > 160) {
+    throw new HeliosValidationError("Owner / client must be 160 characters or fewer.");
+  }
+  if (engineer.value.length > 160) {
+    throw new HeliosValidationError("Engineer must be 160 characters or fewer.");
+  }
+  if (location.value.length > 240) {
+    throw new HeliosValidationError("Project location must be 240 characters or fewer.");
+  }
+  if (bidDate.value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(bidDate.value)) {
+      throw new HeliosValidationError("Bid date must use YYYY-MM-DD format.");
+    }
+    const parsed = new Date(`${bidDate.value}T00:00:00Z`);
+    if (
+      Number.isNaN(parsed.getTime()) ||
+      parsed.toISOString().slice(0, 10) !== bidDate.value
+    ) {
+      throw new HeliosValidationError("Bid date must be a valid calendar date.");
+    }
+  }
+
+  return { projectNumber, ownerClient, engineer, bidDate, location };
+}
+
 export function parseProjectSynthesis(
   value: unknown,
   validEvidence: Iterable<string>,
@@ -1923,6 +1992,10 @@ export function parseProjectSynthesis(
     fundingSource: evidenceBackedValue(
       input.fundingSource,
       "Funding source",
+      validEvidenceIds,
+    ),
+    projectMetadata: projectMetadataValue(
+      input.projectMetadata,
       validEvidenceIds,
     ),
     confidence: confidenceValue(input.confidence, "Project confidence"),

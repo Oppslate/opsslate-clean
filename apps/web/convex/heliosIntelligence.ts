@@ -859,7 +859,7 @@ export const completeProjectJob = internalMutation({
       outputTokens: args.outputTokens,
       totalTokens: args.totalTokens,
       model: args.model,
-      schemaVersion: 2,
+      schemaVersion: 3,
       summary: result.summary,
       summaryEvidenceIds: toEvidenceIds(result.summaryEvidenceIds),
       projectType: {
@@ -869,6 +869,28 @@ export const completeProjectJob = internalMutation({
       fundingSource: {
         ...result.fundingSource,
         evidenceIds: toEvidenceIds(result.fundingSource.evidenceIds),
+      },
+      projectMetadata: {
+        projectNumber: {
+          ...result.projectMetadata.projectNumber,
+          evidenceIds: toEvidenceIds(result.projectMetadata.projectNumber.evidenceIds),
+        },
+        ownerClient: {
+          ...result.projectMetadata.ownerClient,
+          evidenceIds: toEvidenceIds(result.projectMetadata.ownerClient.evidenceIds),
+        },
+        engineer: {
+          ...result.projectMetadata.engineer,
+          evidenceIds: toEvidenceIds(result.projectMetadata.engineer.evidenceIds),
+        },
+        bidDate: {
+          ...result.projectMetadata.bidDate,
+          evidenceIds: toEvidenceIds(result.projectMetadata.bidDate.evidenceIds),
+        },
+        location: {
+          ...result.projectMetadata.location,
+          evidenceIds: toEvidenceIds(result.projectMetadata.location.evidenceIds),
+        },
       },
       confidence: result.confidence,
       findings: result.findings.map((finding) => ({
@@ -910,7 +932,27 @@ export const completeProjectJob = internalMutation({
         });
       }
     }
+    const project = await ctx.db.get(job.projectId);
+    const metadata = result.projectMetadata;
+    const projectPatch = {
+      ...(!project?.projectNumber && metadata.projectNumber.value
+        ? { projectNumber: metadata.projectNumber.value }
+        : {}),
+      ...(!project?.ownerClient && metadata.ownerClient.value
+        ? { ownerClient: metadata.ownerClient.value }
+        : {}),
+      ...(!project?.engineer && metadata.engineer.value
+        ? { engineer: metadata.engineer.value }
+        : {}),
+      ...(!project?.bidDate && metadata.bidDate.value
+        ? { bidDate: metadata.bidDate.value }
+        : {}),
+      ...(!project?.location && metadata.location.value
+        ? { location: metadata.location.value }
+        : {}),
+    };
     await ctx.db.patch(job.projectId, {
+      ...projectPatch,
       intelligenceStatus: hasFailed ? "partially_ready" : "ready_for_review",
       latestIntelligenceError: undefined,
       intelligenceUpdatedAt: now,

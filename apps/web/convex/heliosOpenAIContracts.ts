@@ -139,6 +139,7 @@ export const heliosProjectSynthesisFormat = {
       "summaryEvidenceIds",
       "projectType",
       "fundingSource",
+      "projectMetadata",
       "confidence",
       "findings",
     ],
@@ -152,6 +153,24 @@ export const heliosProjectSynthesisFormat = {
       },
       projectType: evidenceBackedValueSchema,
       fundingSource: evidenceBackedValueSchema,
+      projectMetadata: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "projectNumber",
+          "ownerClient",
+          "engineer",
+          "bidDate",
+          "location",
+        ],
+        properties: {
+          projectNumber: evidenceBackedValueSchema,
+          ownerClient: evidenceBackedValueSchema,
+          engineer: evidenceBackedValueSchema,
+          bidDate: evidenceBackedValueSchema,
+          location: evidenceBackedValueSchema,
+        },
+      },
       confidence: { type: "integer", minimum: 0, maximum: 100 },
       findings: {
         type: "array",
@@ -219,6 +238,18 @@ separate warnings. Every summary statement and finding must cite one or more
 evidence IDs supplied in the input. Project type and funding source must cite
 evidence when populated; use an empty value and an empty evidence list when
 the source documents do not establish them.
+
+Project-metadata rules:
+- Extract the official project/contract number, owner or client, engineer,
+  bid date, and project location when the supplied documents establish them.
+- Prefer controlling advertisements, proposals, bid forms, instructions to
+  bidders, cover sheets, and specifications over incidental references.
+- Return bidDate as YYYY-MM-DD. Do not include the bid time in bidDate.
+- Use an empty value, confidence 0, and an empty evidence list for every field
+  that is not established by the supplied evidence.
+- Every populated metadata field must cite the exact supplied evidence IDs.
+- Do not copy estimator-entered context into projectMetadata unless the
+  supplied documents independently support it.
 
 Package-control rules:
 - Evaluate the supplied document register as one bid package.

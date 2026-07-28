@@ -657,6 +657,30 @@ export const getProject = internalQuery({
               ...intelligence.fundingSource,
               evidenceIds: intelligence.fundingSource.evidenceIds.map(String),
             },
+            projectMetadata: intelligence.projectMetadata
+              ? {
+                  projectNumber: {
+                    ...intelligence.projectMetadata.projectNumber,
+                    evidenceIds: intelligence.projectMetadata.projectNumber.evidenceIds.map(String),
+                  },
+                  ownerClient: {
+                    ...intelligence.projectMetadata.ownerClient,
+                    evidenceIds: intelligence.projectMetadata.ownerClient.evidenceIds.map(String),
+                  },
+                  engineer: {
+                    ...intelligence.projectMetadata.engineer,
+                    evidenceIds: intelligence.projectMetadata.engineer.evidenceIds.map(String),
+                  },
+                  bidDate: {
+                    ...intelligence.projectMetadata.bidDate,
+                    evidenceIds: intelligence.projectMetadata.bidDate.evidenceIds.map(String),
+                  },
+                  location: {
+                    ...intelligence.projectMetadata.location,
+                    evidenceIds: intelligence.projectMetadata.location.evidenceIds.map(String),
+                  },
+                }
+              : undefined,
             confidence: intelligence.confidence,
             findings,
             reviewSummary,

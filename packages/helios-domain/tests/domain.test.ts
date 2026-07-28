@@ -440,6 +440,29 @@ test("rejects project synthesis that cites evidence outside the project", () => 
       confidence: 0,
       evidenceIds: [],
     },
+    projectMetadata: {
+      projectNumber: {
+        value: "D040968",
+        confidence: 98,
+        evidenceIds: ["evidence-1"],
+      },
+      ownerClient: {
+        value: "New York State Department of Transportation",
+        confidence: 98,
+        evidenceIds: ["evidence-1"],
+      },
+      engineer: { value: "", confidence: 0, evidenceIds: [] },
+      bidDate: {
+        value: "2026-09-30",
+        confidence: 96,
+        evidenceIds: ["evidence-1"],
+      },
+      location: {
+        value: "Cattaraugus County, New York",
+        confidence: 94,
+        evidenceIds: ["evidence-1"],
+      },
+    },
     confidence: 88,
     findings: [
       {
@@ -452,13 +475,27 @@ test("rejects project synthesis that cites evidence outside the project", () => 
       },
     ],
   };
-  assert.equal(
-    parseProjectSynthesis(synthesis, ["evidence-1"]).findings.length,
-    1,
-  );
+  const parsed = parseProjectSynthesis(synthesis, ["evidence-1"]);
+  assert.equal(parsed.findings.length, 1);
+  assert.equal(parsed.projectMetadata.projectNumber.value, "D040968");
+  assert.equal(parsed.projectMetadata.bidDate.value, "2026-09-30");
   assert.throws(
     () => parseProjectSynthesis(synthesis, ["different-evidence"]),
     /summary must cite valid evidence/i,
+  );
+  assert.throws(
+    () => parseProjectSynthesis({
+      ...synthesis,
+      projectMetadata: {
+        ...synthesis.projectMetadata,
+        bidDate: {
+          value: "09/30/2026",
+          confidence: 96,
+          evidenceIds: ["evidence-1"],
+        },
+      },
+    }, ["evidence-1"]),
+    /YYYY-MM-DD/,
   );
 });
 

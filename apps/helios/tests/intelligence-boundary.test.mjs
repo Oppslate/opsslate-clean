@@ -83,6 +83,20 @@ test("confidence uses an explicit integer percentage contract", () => {
   assert.match(contracts, /never a\s+decimal fraction between 0 and 1/);
 });
 
+test("project synthesis auto-populates only blank project metadata from cited evidence", () => {
+  assert.match(contracts, /projectMetadata/);
+  assert.match(contracts, /projectNumber/);
+  assert.match(contracts, /ownerClient/);
+  assert.match(contracts, /engineer/);
+  assert.match(contracts, /bidDate/);
+  assert.match(contracts, /location/);
+  assert.match(contracts, /Return bidDate as YYYY-MM-DD/);
+  assert.match(intelligence, /const projectPatch/);
+  assert.match(intelligence, /!project\?\.projectNumber/);
+  assert.match(intelligence, /!project\?\.bidDate/);
+  assert.match(intelligence, /!project\?\.location/);
+});
+
 test("retry mutations preserve session, origin, tenant, and project boundaries", () => {
   for (const route of [retryDocumentRoute, retryProjectRoute]) {
     assert.match(route, /readHeliosPrincipal/);
