@@ -957,6 +957,76 @@ export default defineSchema({
     .index("by_solution", ["solutionId", "alignmentId", "chunkIndex"])
     .index("by_solution_chunk", ["solutionId", "chunkIndex"]),
 
+  // Euclid Stage 4D: immutable deterministic vertical/profile results.
+  // These remain shadow-only and do not replace existing geometry readers.
+  heliosEuclidVerticalSolutions: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    euclidModelId: v.id("heliosEuclidModels"),
+    solutionKey: v.string(),
+    solver: v.string(),
+    solverVersion: v.number(),
+    toleranceVersion: v.string(),
+    tolerances: v.object({
+      elevationPass: v.number(),
+      elevationBlock: v.number(),
+      stationPass: v.number(),
+      stationBlock: v.number(),
+      gradePassPercent: v.number(),
+      gradeBlockPercent: v.number(),
+      kValuePass: v.number(),
+      kValueBlock: v.number(),
+    }),
+    sourceFingerprint: v.string(),
+    modelFingerprint: v.string(),
+    solutionFingerprint: v.string(),
+    status: v.union(
+      v.literal("passed"),
+      v.literal("review"),
+      v.literal("blocked"),
+      v.literal("not_applicable"),
+      v.literal("failed"),
+      v.literal("superseded"),
+    ),
+    isCurrent: v.boolean(),
+    shadowMode: v.boolean(),
+    profileCount: v.number(),
+    passedProfileCount: v.number(),
+    reviewProfileCount: v.number(),
+    blockedProfileCount: v.number(),
+    notApplicableProfileCount: v.number(),
+    checkCount: v.number(),
+    reviewCount: v.number(),
+    blockingCount: v.number(),
+    chunkCount: v.number(),
+    lastError: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_package_current", ["packageId", "isCurrent"])
+    .index("by_model", ["euclidModelId", "createdAt"])
+    .index("by_solution_key", ["solutionKey"])
+    .index("by_solution_fingerprint", ["solutionFingerprint"]),
+
+  heliosEuclidVerticalSolutionChunks: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    solutionId: v.id("heliosEuclidVerticalSolutions"),
+    profileId: v.string(),
+    chunkIndex: v.number(),
+    checkCount: v.number(),
+    payloadJson: v.string(),
+    payloadFingerprint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_solution", ["solutionId", "profileId", "chunkIndex"])
+    .index("by_solution_chunk", ["solutionId", "chunkIndex"]),
+
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

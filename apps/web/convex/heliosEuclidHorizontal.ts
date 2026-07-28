@@ -34,7 +34,7 @@ function solutionKey(model: Doc<"heliosEuclidModels">) {
   ].join("|");
 }
 
-async function reconstructEuclidModel(
+export async function reconstructEuclidModel(
   ctx: MutationCtx,
   stored: Doc<"heliosEuclidModels">,
 ): Promise<HeliosEuclidModel> {

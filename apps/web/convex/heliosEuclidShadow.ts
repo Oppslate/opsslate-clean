@@ -17,6 +17,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { fingerprintEngineeringRecord } from "./heliosEngineeringParityPayloads";
 import { scheduleEuclidHorizontalSolution } from "./heliosEuclidHorizontalSchedule";
+import { scheduleEuclidVerticalSolution } from "./heliosEuclidVerticalSchedule";
 
 const retryEuclidReference = makeFunctionReference<
   "mutation",
@@ -234,6 +235,7 @@ export const syncEuclidRunShadow = internalMutation({
       .first();
     if (current?.modelFingerprint === fingerprint && current.validationStatus === "valid") {
       await scheduleEuclidHorizontalSolution(ctx, current._id);
+      await scheduleEuclidVerticalSolution(ctx, current._id);
       return { status: "ready" as const, modelId: String(current._id), reused: true };
     }
 
@@ -321,6 +323,7 @@ export const syncEuclidRunShadow = internalMutation({
       });
     }
     await scheduleEuclidHorizontalSolution(ctx, modelId);
+    await scheduleEuclidVerticalSolution(ctx, modelId);
     return { status: "ready" as const, modelId: String(modelId), reused: false };
   },
 });
