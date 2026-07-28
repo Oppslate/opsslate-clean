@@ -702,3 +702,26 @@ points.
   remote-file reuse, and duplicate OpenAI-call removal: Not performed
 - Approval gate: stop before Stage 4 canonical-reader pilot and wait for owner
   approval
+
+### Bid-package intake recovery hotfix
+
+- Application checkpoint: `44275e8`
+- Root cause: the stable July 24 preview did not send the canonical envelope ID
+  required by the July 27 Convex intake contract; folder and individual-PDF
+  attempts therefore failed at the same package-creation boundary
+- State recovery: every new selection clears the prior local manifest, and a
+  visible `Clear selection` action allows immediate upload-method switching
+- Persistent recovery: unfinished or failed package intake can be marked
+  `abandoned`, releasing the project for a replacement package without deleting
+  immutable PDFs that already reached protected storage
+- Revision safety: abandoned intake does not consume the next active package
+  revision or become a predecessor for later packages
+- Security: recovery requires same-origin authentication plus server-side
+  company, project, active-package, and allowed-status authorization
+- Operator feedback: safe package-validation errors are returned instead of a
+  generic creation failure
+- Automated domain tests: 60 passed
+- Automated Helios security and boundary tests: 79 passed
+- Targeted modified-file lint, domain build, shared web TypeScript, Helios
+  production build, and Convex schema/function deployment: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`
