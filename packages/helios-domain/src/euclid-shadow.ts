@@ -1,4 +1,5 @@
 import { buildHeliosEngineeringParityFingerprint } from "./engineering-record.ts";
+import { resolveHeliosEuclidStationEquations } from "./euclid-horizontal.ts";
 import {
   HELIOS_EUCLID_SCHEMA_VERSION,
   validateHeliosEuclidContract,
@@ -18,6 +19,7 @@ import {
   type HeliosEuclidRelationship,
   type HeliosEuclidReviewState,
   type HeliosEuclidStation,
+  type HeliosEuclidStationEquation,
   type HeliosEuclidStructure,
   type HeliosEuclidValue,
   type HeliosEuclidVerticalTangent,
@@ -314,6 +316,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
   }));
 
   const alignments: HeliosEuclidAlignment[] = [];
+  const stationEquations: HeliosEuclidStationEquation[] = [];
   const alignmentRecords = new Map<string, HeliosEuclidLegacyGeometryRecord[]>();
   for (const [key, records] of groups) {
     const candidates = records.flatMap(stationCandidates);
@@ -342,8 +345,26 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
         : "incomplete",
     });
     alignmentRecords.set(id, records);
-    if (records.some((record) => record.stationEquations.length)) {
-      addIssue(issues, first, "station_equation_requires_resolution", "Stored station equations do not include physical chainage and must be resolved before chainage-dependent use.", [id], "blocking");
+    const rawEquations = records.flatMap((record) => record.stationEquations.map((equation, index) => ({
+      id: `station-equation:${record.id}:${index + 1}`,
+      alignmentId: id,
+      backStation: equation.backStation,
+      aheadStation: equation.aheadStation,
+      printedEquation: boundedText(equation.label, `${printedStation(equation.backStation)} BK = ${printedStation(equation.aheadStation)} AH`),
+      provenanceIds: [`provenance:${record.id}`],
+      reviewState: reviewState(record.status),
+    })));
+    if (rawEquations.length) {
+      const resolution = resolveHeliosEuclidStationEquations({
+        alignmentId: id,
+        startChainage: start,
+        startDisplayedStation: start,
+        equations: rawEquations,
+      });
+      stationEquations.push(...resolution.equations);
+      for (const problem of resolution.issues) {
+        addIssue(issues, first, problem.code, `${problem.message} Source equations: ${problem.equationIds.join(", ")}.`, [id], "blocking");
+      }
     }
   }
 
@@ -601,7 +622,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
     alignments,
     controlPoints,
     horizontalElements,
-    stationEquations: [],
+    stationEquations,
     profiles,
     profilePoints,
     verticalTangents,

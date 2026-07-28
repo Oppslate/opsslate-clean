@@ -16,6 +16,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { fingerprintEngineeringRecord } from "./heliosEngineeringParityPayloads";
+import { scheduleEuclidHorizontalSolution } from "./heliosEuclidHorizontalSchedule";
 
 const retryEuclidReference = makeFunctionReference<
   "mutation",
@@ -232,6 +233,7 @@ export const syncEuclidRunShadow = internalMutation({
       .withIndex("by_package_current", (query) => query.eq("packageId", basis.run.packageId).eq("isCurrent", true))
       .first();
     if (current?.modelFingerprint === fingerprint && current.validationStatus === "valid") {
+      await scheduleEuclidHorizontalSolution(ctx, current._id);
       return { status: "ready" as const, modelId: String(current._id), reused: true };
     }
 
@@ -318,6 +320,7 @@ export const syncEuclidRunShadow = internalMutation({
         createdAt: now,
       });
     }
+    await scheduleEuclidHorizontalSolution(ctx, modelId);
     return { status: "ready" as const, modelId: String(modelId), reused: false };
   },
 });

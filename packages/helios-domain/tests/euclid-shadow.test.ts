@@ -6,6 +6,7 @@ import {
   buildHeliosEuclidShadowModel,
   deriveHeliosEuclidExportQualification,
   euclidModelFingerprint,
+  solveHeliosEuclidHorizontalControl,
   type BuildHeliosEuclidShadowInput,
   type HeliosEuclidLegacyGeometryRecord,
 } from "../src/index.ts";
@@ -132,13 +133,29 @@ test("Stage 4B does not guess ambiguous linear units or curve rotation", () => {
   assert.ok(model.issues.some((issue) => issue.code === "curve_rotation_missing"));
 });
 
-test("Stage 4B records unresolved station equations instead of fabricating chainage", () => {
+test("Stage 4C resolves equation locations but blocks unassigned downstream station branches", () => {
   const input = shadowInput();
   input.records[2]!.stationEquations = [{ backStation: 14500, aheadStation: 14480, label: "Sta. 145+00 BK = 144+80 AH" }];
   const model = buildHeliosEuclidShadowModel(input);
+  assert.equal(model.stationEquations.length, 1);
+  assert.equal(model.stationEquations[0]?.physicalChainage.value, 14500);
+  assert.equal(model.stationEquations[0]?.backStation.value, 14500);
+  assert.equal(model.stationEquations[0]?.aheadStation.value, 14480);
+  const solution = solveHeliosEuclidHorizontalControl(model);
+  assert.equal(solution.status, "blocked");
+  assert.ok(solution.alignmentSolutions.some((row) => row.checks.some((item) => item.code === "station_branch_unassigned")));
+});
+
+test("Stage 4C retains ambiguous station equations as a traceable blocking issue", () => {
+  const input = shadowInput();
+  input.records[2]!.stationEquations = [
+    { backStation: 14500, aheadStation: 14480, label: "Equation A" },
+    { backStation: 14500, aheadStation: 14470, label: "Equation B" },
+  ];
+  const model = buildHeliosEuclidShadowModel(input);
   assert.equal(model.status, "conflicted");
-  assert.ok(model.issues.some((issue) => issue.code === "station_equation_requires_resolution" && issue.severity === "blocking"));
   assert.equal(model.stationEquations.length, 0);
+  assert.ok(model.issues.some((issue) => issue.code === "station_equation_location_ambiguous" && issue.severity === "blocking"));
 });
 
 test("Stage 4B chunks entities without changing their count or fingerprint", () => {
