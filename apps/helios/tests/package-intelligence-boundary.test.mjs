@@ -60,7 +60,7 @@ test("failed intake can be abandoned without deleting immutable uploads", () => 
 });
 
 test("separate folders append idempotently to the current unfinalized revision", () => {
-  assert.match(packageUi, /Add receipt to current package/);
+  assert.match(packageUi, /Upload selected files/);
   assert.match(appendRoute, /\/helios\/v1\/packages\/append/);
   assert.match(packages, /export const appendPackageEntries/);
   assert.match(packages, /project\.activePackageId !== bidPackage\._id/);
@@ -117,11 +117,21 @@ test("upload authorization is bound to one package entry", () => {
 });
 
 test("project intelligence starts only after explicit package finalization", () => {
-  assert.match(packageUi, /Package ready for analysis/);
+  assert.match(packageUi, /Analyze complete package/);
   assert.match(intelligence, /export const finalizePackage/);
   assert.match(intelligence, /bidPackage\.finalizedAt/);
   assert.match(intelligence, /await enqueueDocument\(ctx, document\)/);
   assert.match(intelligence, /maybeStartProjectSynthesis/);
+});
+
+test("intake explains the coordinated source workflow without blocking incomplete bid sets", () => {
+  assert.match(packageUi, /Recommended intake sequence/);
+  assert.match(packageUi, /Add every available source/);
+  assert.match(packageUi, /Verify the complete package/);
+  assert.match(packageUi, /Analyze once/);
+  assert.match(packageUi, /Missing source types are allowed/);
+  assert.match(packageUi, /If plans exist, upload them now/);
+  assert.match(packageUi, /the estimate will not be blocked/);
 });
 
 test("package synthesis is durable, retryable, and retains prior generations", () => {

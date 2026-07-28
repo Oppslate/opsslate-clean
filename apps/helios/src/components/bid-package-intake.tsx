@@ -492,6 +492,67 @@ export function BidPackageIntake({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <section
+          aria-labelledby="intake-sequence-heading"
+          className="rounded-lg border border-border bg-muted/10 p-4"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 id="intake-sequence-heading" className="font-semibold">
+                Recommended intake sequence
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Build one coordinated bid package before Helios analyzes the
+                project.
+              </p>
+            </div>
+            <Badge variant="outline">One package · one analysis</Badge>
+          </div>
+          <ol className="mt-4 grid gap-3 lg:grid-cols-3">
+            <li className="rounded-md border border-border bg-background/40 p-3">
+              <div className="flex items-center gap-2">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-orange-500/40 bg-orange-500/10 text-xs font-semibold text-orange-200">
+                  1
+                </span>
+                <span className="text-sm font-semibold">
+                  Add every available source
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Upload specs, plans, bid forms, addenda, or an exact written
+                scope. Multiple selections stay together in this revision.
+              </p>
+            </li>
+            <li className="rounded-md border border-border bg-background/40 p-3">
+              <div className="flex items-center gap-2">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-orange-500/40 bg-orange-500/10 text-xs font-semibold text-orange-200">
+                  2
+                </span>
+                <span className="text-sm font-semibold">
+                  Verify the complete package
+                </span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Confirm the registered file count and resolve any failed
+                uploads. Missing source types are allowed when they do not
+                exist for the job.
+              </p>
+            </li>
+            <li className="rounded-md border border-border bg-background/40 p-3">
+              <div className="flex items-center gap-2">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-full border border-orange-500/40 bg-orange-500/10 text-xs font-semibold text-orange-200">
+                  3
+                </span>
+                <span className="text-sm font-semibold">Analyze once</span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                Release the package after all available sources are registered
+                so Helios can correlate scope, plans, quantities, and evidence.
+              </p>
+            </li>
+          </ol>
+        </section>
+
         <input
           ref={filesInputRef}
           type="file"
@@ -715,11 +776,9 @@ export function BidPackageIntake({
                 ) : (
                   <UploadCloud className="size-4" aria-hidden="true" />
                 )}
-                {activePackage?.status === "uploading"
-                  ? "Add receipt to current package"
-                  : prepared.writtenScopes.length
-                    ? "Register written scope"
-                    : "Create package and upload"}
+                {prepared.writtenScopes.length
+                  ? "Register written scope"
+                  : "Upload selected files"}
               </Button>
               <Button
                 variant="outline"
@@ -854,23 +913,34 @@ export function BidPackageIntake({
                 </div>
               )}
             {activePackage.status === "uploading" && (
-              <Button
-                className="mt-4"
-                disabled={
-                  finalizing ||
-                  unresolved > 0 ||
-                  registeredSourceCount === 0
-                }
-                onClick={() => void finalizePackage()}
-              >
-                {finalizing && (
-                  <LoaderCircle
-                    className="size-4 animate-spin"
-                    aria-hidden="true"
-                  />
-                )}
-                Package ready for analysis
-              </Button>
+              <div className="mt-4 rounded-md border border-orange-500/25 bg-orange-500/5 p-3">
+                <p className="text-sm font-medium text-orange-100">
+                  Before analysis: have you added every source that is
+                  available for this job?
+                </p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  If plans exist, upload them now so Helios can evaluate the
+                  specs and drawings together. If this job truly has no plans,
+                  continue—the estimate will not be blocked.
+                </p>
+                <Button
+                  className="mt-3"
+                  disabled={
+                    finalizing ||
+                    unresolved > 0 ||
+                    registeredSourceCount === 0
+                  }
+                  onClick={() => void finalizePackage()}
+                >
+                  {finalizing && (
+                    <LoaderCircle
+                      className="size-4 animate-spin"
+                      aria-hidden="true"
+                    />
+                  )}
+                  Analyze complete package
+                </Button>
+              </div>
             )}
             {activePackage.lastError && (
               <div className="mt-3 text-sm text-red-200">
