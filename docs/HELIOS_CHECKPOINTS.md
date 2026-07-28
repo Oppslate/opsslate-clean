@@ -822,3 +822,44 @@ points.
 - Vercel deployment, production promotion, and domain changes: Not performed
 - Approval gate: stop before Euclid Stage 4B canonical storage and shadow
   population
+
+### Civil Geometry 2.0 - Euclid Stage 4B canonical shadow storage
+
+- Application checkpoint: `b5a5920`
+- Contract: [Euclid Stage 4B canonical shadow storage](./HELIOS_EUCLID_STAGE_4B_SHADOW_STORAGE.md)
+- Scope: additive canonical Euclid persistence and shadow population only; no
+  application reader, extractor, solver, cockpit, or export cutover
+- Storage: versioned `heliosEuclidModels`, `heliosEuclidProvenance`, and
+  `heliosEuclidEntityChunks` tables preserve current and superseded models
+- Source boundary: the adapter consumes stored canonical engineering records,
+  civil-geometry records, page provenance, and package identity; it does not
+  upload, open, or reread a PDF and makes no OpenAI call
+- Determinism: stable ordering, fingerprints, bounded chunks, and idempotent
+  reuse prevent duplicate models when the canonical input is unchanged
+- Revision safety: changed canonical inputs create a new version and
+  supersede, but never delete, the prior model and provenance
+- Engineering safety: unknown coordinate systems and ambiguous units remain
+  unknown; unresolved station equations, incomplete curves, missing exact
+  endpoints, and unlocated inverts or material layers remain explicit issues
+- Traceability: every promoted entity retains physical-page provenance back to
+  the immutable original project document
+- Failure isolation: Stage 4B runs only after a completed authoritative Civil
+  Geometry shadow; bounded provenance retries and terminal diagnostics cannot
+  roll back or fail the existing workflow
+- Automated domain tests: 75 passed
+- Automated Helios security and boundary tests: 89 passed
+- Domain build, targeted modified Convex lint, Helios lint, shared UI ownership
+  boundary, Helios production build, and shared OpsSlate web production build:
+  Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`; Euclid
+  sync and status functions are internal only
+- Live Titus audit: a completed Plan Intelligence run exists, but there is no
+  authoritative `heliosCivilGeometryRuns` record; no Euclid model was
+  fabricated, and the first completed geometry run will schedule population
+- Existing Document Intelligence, Plan Intelligence, Civil Geometry, WBS,
+  Estimate Builder, Cockpit 2.0, Ask Helios, quantity, pricing, procurement,
+  evidence, risk, and review readers: Unchanged
+- Vercel deployment, production promotion, domain changes, UI/navigation,
+  LandXML, PDF lifecycle changes, and reader cutover: Not performed
+- Approval gate: stop before Euclid Stage 4C horizontal control solver and
+  golden Titus validation
