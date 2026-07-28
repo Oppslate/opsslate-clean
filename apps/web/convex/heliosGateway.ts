@@ -5,6 +5,7 @@ import {
   normalizePlanReviewInput,
   normalizeTakeoffReviewInput,
   normalizeCivilGeometryReviewInput,
+  normalizeHeliosEuclidReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
   normalizeEstimateReviewInput,
@@ -17,6 +18,7 @@ import {
   type HeliosTakeoffWorkspace,
   type HeliosCivilGeometryReviewInput,
   type HeliosEuclidCockpitWorkspace,
+  type HeliosEuclidReviewInput,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
   type HeliosFindingReviewEvent,
@@ -235,6 +237,11 @@ const getEuclidCockpitReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string; alignmentId?: string },
   HeliosEuclidCockpitWorkspace
 >("heliosEuclidCockpit:getWorkspace");
+const recordEuclidReviewReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidReviewInput },
+  { decisionId: string; action: string; createdAt: number }
+>("heliosEuclidReviews:recordDecision");
 const getEstimateWorkspaceReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal; projectId: string },
@@ -1098,6 +1105,25 @@ export const getHeliosEuclidCockpit = httpAction(async (ctx, request) => {
       error: error instanceof Error ? error.message : String(error),
     });
     return json({ error: "Civil Geometry cockpit could not be loaded." }, 404);
+  }
+});
+
+export const recordHeliosEuclidReview = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid review request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(recordEuclidReviewReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeHeliosEuclidReviewInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid review decision could not be saved." }, 400);
   }
 });
 

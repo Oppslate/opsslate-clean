@@ -22,6 +22,14 @@ import type {
   HeliosEuclidQuantityReadiness,
   HeliosEuclidReadinessStatus,
 } from "./euclid-integration.ts";
+import {
+  HELIOS_EUCLID_REVIEW_ENTITY_TYPES,
+  heliosEuclidReviewTargetFingerprint,
+  summarizeHeliosEuclidReviewDecisions,
+  type HeliosEuclidReviewDecision,
+  type HeliosEuclidReviewEntityType,
+  type HeliosEuclidReviewSummary,
+} from "./euclid-review.ts";
 
 export const HELIOS_EUCLID_COCKPIT_VERSION = 1;
 
@@ -162,6 +170,12 @@ export type HeliosEuclidCockpitAlignmentDetail = {
   checks: HeliosEuclidIntegrationCheck[];
   issues: HeliosEuclidIssue[];
   evidence: HeliosEuclidCockpitEvidence[];
+  reviewTargets: Array<{
+    entityType: HeliosEuclidReviewEntityType;
+    entityId: string;
+    label: string;
+    context: string;
+  }>;
 };
 
 export type HeliosEuclidCockpitWorkspace = {
@@ -175,10 +189,14 @@ export type HeliosEuclidCockpitWorkspace = {
     status: HeliosEuclidModelStatus;
     shadowMode: true;
     sourceFingerprint: string;
+    modelFingerprint: string;
     spatialReferenceCount: number;
     issueCount: number;
     blockingIssueCount: number;
     updatedAt: number;
+  };
+  review: HeliosEuclidReviewSummary & {
+    targetFingerprints: Record<string, string>;
   };
   solution?: {
     id: string;
@@ -203,12 +221,15 @@ export type HeliosEuclidCockpitSource = {
   project: HeliosEuclidCockpitProject;
   model?: HeliosEuclidModel;
   modelRecord?: {
+    id: string;
     packageRevision: number;
+    modelFingerprint: string;
     shadowMode: true;
     issueCount: number;
     blockingIssueCount: number;
     updatedAt: number;
   };
+  reviewDecisions?: HeliosEuclidReviewDecision[];
   solution?: HeliosEuclidIntegrationSolution;
   solutionRecord?: {
     id: string;
@@ -295,6 +316,7 @@ export function buildHeliosEuclidCockpitWorkspace(
       project: input.project,
       availability: "awaiting_model",
       message: "Civil Geometry has not produced a canonical Euclid model for this project yet.",
+      review: { total: 0, accepted: 0, corrected: 0, deferred: 0, rejected: 0, currentDecisions: [], targetFingerprints: {} },
       alignments: [],
     };
   }
@@ -304,6 +326,27 @@ export function buildHeliosEuclidCockpitWorkspace(
     .map((row) => summary(input.model!, input.solution, row));
   const selectedSummary = alignmentRows.find((row) => row.id === input.selectedAlignmentId) || alignmentRows[0];
   const solutionRecord = input.solutionRecord;
+  const reviewSummary = summarizeHeliosEuclidReviewDecisions(input.reviewDecisions || []);
+  const targetFingerprints: Record<string, string> = {};
+  const reviewCollections: Record<HeliosEuclidReviewEntityType, Array<{ id: string }>> = {
+    alignment: input.model.alignments,
+    control_point: input.model.controlPoints,
+    horizontal_element: input.model.horizontalElements,
+    station_equation: input.model.stationEquations,
+    profile: input.model.profiles,
+    profile_point: input.model.profilePoints,
+    vertical_tangent: input.model.verticalTangents,
+    vertical_curve: input.model.verticalCurves,
+    typical_section: input.model.typicalSections,
+    structure: input.model.structures,
+    invert: input.model.inverts,
+    material_layer: input.model.materialLayers,
+  };
+  for (const entityType of HELIOS_EUCLID_REVIEW_ENTITY_TYPES) {
+    for (const target of reviewCollections[entityType]) {
+      targetFingerprints[`${entityType}:${target.id}`] = heliosEuclidReviewTargetFingerprint(target);
+    }
+  }
   const base: HeliosEuclidCockpitWorkspace = {
     version: HELIOS_EUCLID_COCKPIT_VERSION,
     project: input.project,
@@ -318,16 +361,18 @@ export function buildHeliosEuclidCockpitWorkspace(
         ? "Read-only engineering controls are available for estimator review."
         : "The canonical Euclid model is available while horizontal, vertical, and relationship validation finishes.",
     model: {
-      id: input.model.id,
+      id: input.modelRecord.id,
       packageRevision: input.modelRecord.packageRevision,
       status: input.model.status,
       shadowMode: true,
       sourceFingerprint: input.model.sourceFingerprint,
+      modelFingerprint: input.modelRecord.modelFingerprint,
       spatialReferenceCount: input.model.spatialReferences.length,
       issueCount: input.modelRecord.issueCount,
       blockingIssueCount: input.modelRecord.blockingIssueCount,
       updatedAt: input.modelRecord.updatedAt,
     },
+    review: { ...reviewSummary, targetFingerprints },
     solution: solutionRecord ? {
       ...solutionRecord,
       readyCount: input.solution?.readyCount || 0,
@@ -419,6 +464,22 @@ export function buildHeliosEuclidCockpitWorkspace(
     checks,
     issues,
     evidence: input.model.provenance.filter((row) => evidenceIds.has(row.id)).map((row) => ({ id: row.id, documentId: row.documentId, physicalPageNumber: row.physicalPageNumber, sheetNumber: row.sheetNumber, viewKey: row.viewKey, locator: row.locator, authority: row.authority, confidence: row.confidence })).sort((left, right) => left.physicalPageNumber - right.physicalPageNumber || left.id.localeCompare(right.id)),
+    reviewTargets: [
+      { entityType: "alignment", entityId: alignmentId, label: selectedSummary.name, context: `${selectedSummary.startStation} – ${selectedSummary.endStation}` },
+      ...controlPoints.map((row) => ({ entityType: "control_point" as const, entityId: row.id, label: row.name, context: `${row.pointType} · ${row.station}` })),
+      ...horizontalElements.map((row) => ({ entityType: "horizontal_element" as const, entityId: row.id, label: `${row.elementType} ${row.sequence}`, context: `${row.startStation} – ${row.endStation}` })),
+      ...input.model.stationEquations.filter((row) => row.alignmentId === alignmentId).map((row) => ({ entityType: "station_equation" as const, entityId: row.id, label: "Station equation", context: row.printedEquation })),
+      ...profiles.flatMap((profile) => [
+        { entityType: "profile" as const, entityId: profile.id, label: profile.name, context: `${profile.role} · ${profile.startStation} – ${profile.endStation}` },
+        ...profile.points.map((row) => ({ entityType: "profile_point" as const, entityId: row.id, label: row.pointType, context: `${row.station} · ${row.elevation.printedValue || row.elevation.value}` })),
+        ...profile.tangents.map((row) => ({ entityType: "vertical_tangent" as const, entityId: row.id, label: `Vertical tangent ${row.sequence}`, context: `${row.gradePercent.printedValue || row.gradePercent.value}%` })),
+        ...profile.curves.map((row) => ({ entityType: "vertical_curve" as const, entityId: row.id, label: `${row.curveType} curve ${row.sequence}`, context: `L ${row.length.printedValue || row.length.value}` })),
+      ]),
+      ...typicalSections.map((row) => ({ entityType: "typical_section" as const, entityId: row.id, label: row.name, context: `${row.stationStart.printedStation} – ${row.stationEnd.printedStation}` })),
+      ...structures.map((row) => ({ entityType: "structure" as const, entityId: row.id, label: row.printedName, context: row.structureType })),
+      ...inverts.map((row) => ({ entityType: "invert" as const, entityId: row.id, label: "Invert control", context: `${row.station.printedStation} · ${row.invertElevation.printedValue || row.invertElevation.value}` })),
+      ...materialLayers.map((row) => ({ entityType: "material_layer" as const, entityId: row.id, label: row.name, context: `${row.stationStart.printedStation} – ${row.stationEnd.printedStation}` })),
+    ],
   };
   return base;
 }

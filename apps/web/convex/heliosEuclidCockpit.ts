@@ -9,6 +9,7 @@ import {
   type HeliosEuclidIntegrationSolution,
   type HeliosEuclidQuantityReadiness,
   type HeliosEuclidCockpitWorkspace,
+  type HeliosEuclidReviewDecision,
 } from "@opsslate/helios-domain";
 import { v } from "convex/values";
 
@@ -124,14 +125,37 @@ export const getWorkspace = internalQuery({
     if (!modelRecord || modelRecord.companyId !== companyId) {
       return buildHeliosEuclidCockpitWorkspace({ project: projectSummary(project) });
     }
-    const solutionRecord = await ctx.db
-      .query("heliosEuclidIntegrationSolutions")
-      .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
-      .first();
+    const [solutionRecord, reviewRecords] = await Promise.all([
+      ctx.db
+        .query("heliosEuclidIntegrationSolutions")
+        .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
+        .first(),
+      ctx.db
+        .query("heliosEuclidReviewDecisions")
+        .withIndex("by_model_created", (query) => query.eq("euclidModelId", modelRecord._id))
+        .collect(),
+    ]);
     if (solutionRecord && (solutionRecord.companyId !== companyId || solutionRecord.euclidModelId !== modelRecord._id)) {
       throw new Error("Euclid cockpit identity is stale.");
     }
     const model = await reconstructEuclidModel(ctx, modelRecord);
+    const reviewDecisions: HeliosEuclidReviewDecision[] = reviewRecords.map((row) => ({
+      id: String(row._id),
+      version: 1,
+      requestId: row.requestId,
+      action: row.action,
+      euclidModelId: String(row.euclidModelId),
+      modelFingerprint: row.modelFingerprint,
+      sourceFingerprint: row.sourceFingerprint,
+      targetEntityType: row.targetEntityType,
+      targetEntityId: row.targetEntityId,
+      targetFingerprint: row.targetFingerprint,
+      reason: row.reason,
+      changes: row.correctionJson ? JSON.parse(row.correctionJson) : undefined,
+      decisionFingerprint: row.decisionFingerprint,
+      reviewerName: row.reviewerName,
+      createdAt: row.createdAt,
+    }));
     const solution = solutionRecord && solutionRecord.status !== "failed"
       ? await reconstructIntegrationSolution(ctx, solutionRecord)
       : undefined;
@@ -139,12 +163,15 @@ export const getWorkspace = internalQuery({
       project: projectSummary(project),
       model,
       modelRecord: {
+        id: String(modelRecord._id),
         packageRevision: modelRecord.packageRevision,
+        modelFingerprint: modelRecord.modelFingerprint,
         shadowMode: true,
         issueCount: modelRecord.issueCount,
         blockingIssueCount: modelRecord.blockingIssueCount,
         updatedAt: modelRecord.updatedAt,
       },
+      reviewDecisions,
       solution,
       solutionRecord: solutionRecord ? {
         id: String(solutionRecord._id),

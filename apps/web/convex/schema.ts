@@ -1089,6 +1089,53 @@ export default defineSchema({
   })
     .index("by_solution", ["solutionId", "chunkIndex"]),
 
+  // Euclid Stage 4G: append-only estimator decisions. These records never
+  // rewrite canonical model chunks or deterministic solver outputs.
+  heliosEuclidReviewDecisions: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    euclidModelId: v.id("heliosEuclidModels"),
+    requestId: v.string(),
+    modelFingerprint: v.string(),
+    sourceFingerprint: v.string(),
+    targetEntityType: v.union(
+      v.literal("alignment"),
+      v.literal("control_point"),
+      v.literal("horizontal_element"),
+      v.literal("station_equation"),
+      v.literal("profile"),
+      v.literal("profile_point"),
+      v.literal("vertical_tangent"),
+      v.literal("vertical_curve"),
+      v.literal("typical_section"),
+      v.literal("structure"),
+      v.literal("invert"),
+      v.literal("material_layer"),
+    ),
+    targetEntityId: v.string(),
+    targetFingerprint: v.string(),
+    action: v.union(
+      v.literal("accept"),
+      v.literal("correct"),
+      v.literal("defer"),
+      v.literal("reject"),
+    ),
+    reason: v.optional(v.string()),
+    correctionJson: v.optional(v.string()),
+    beforeJson: v.string(),
+    decisionFingerprint: v.string(),
+    reviewerUserId: v.id("users"),
+    reviewerName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_project_created", ["projectId", "createdAt"])
+    .index("by_model_created", ["euclidModelId", "createdAt"])
+    .index("by_model_request", ["euclidModelId", "requestId"])
+    .index("by_target_created", ["euclidModelId", "targetEntityType", "targetEntityId", "createdAt"])
+    .index("by_decision_fingerprint", ["decisionFingerprint"]),
+
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

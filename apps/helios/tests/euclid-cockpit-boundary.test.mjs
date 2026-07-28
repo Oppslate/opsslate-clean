@@ -28,15 +28,26 @@ test("Euclid Stage 4F reconstructs fingerprint-verified canonical records withou
   assert.doesNotMatch(query, /openai|ctx\.storage|storageId|\.pdf|application\/pdf/i);
 });
 
-test("Euclid Stage 4F remains read only and does not publish quantities or LandXML", async () => {
-  const [component, page, navigation] = await Promise.all([
+test("Euclid Stage 4G adds governed review without publishing quantities or LandXML", async () => {
+  const [component, page, navigation, route, mutation] = await Promise.all([
     read("../src/components/euclid-cockpit.tsx"),
     read("../src/app/projects/[projectId]/civil-geometry/page.tsx"),
     read("../src/lib/navigation.ts"),
+    read("../src/app/api/projects/[projectId]/euclid/reviews/route.ts"),
+    read("../../web/convex/heliosEuclidReviews.ts"),
   ]);
-  assert.match(component, /Read only/);
-  assert.match(component, /does not change project documents or publish estimate quantities/);
-  assert.doesNotMatch(component, /fetch\(|onClick=|LandXML|download|edit geometry|accept geometry/i);
+  assert.match(component, /Governed review/);
+  assert.match(component, /append-only overlays/);
+  assert.match(component, /euclid\/reviews/);
+  assert.match(component, /Accept trusted controls in one click/);
+  assert.match(route, /isSameOrigin/);
+  assert.match(route, /readHeliosPrincipal/);
+  assert.match(mutation, /requireHeliosPrincipal/);
+  assert.match(mutation, /targetFingerprint !== input\.targetFingerprint/);
+  assert.match(mutation, /ctx\.db\.insert\("heliosEuclidReviewDecisions"/);
+  assert.doesNotMatch(mutation, /ctx\.db\.patch|ctx\.db\.replace|ctx\.db\.delete|openai|ctx\.storage/i);
+  assert.doesNotMatch(component, /LandXML|download/i);
+  assert.match(component, /does not change source geometry or publish estimate quantities/);
   assert.doesNotMatch(page, /POST|PATCH|DELETE|PUT/);
   assert.match(navigation, /href: "\/civil-geometry"/);
   assert.doesNotMatch(navigation, /label: "Civil Geometry"[\s\S]{0,120}disabled: true/);

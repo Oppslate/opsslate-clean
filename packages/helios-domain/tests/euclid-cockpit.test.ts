@@ -108,7 +108,7 @@ test("Stage 4F exposes only the selected canonical alignment with traceable cont
   const workspace = buildHeliosEuclidCockpitWorkspace({
     project: { id: "project-1", name: "Titus Culvert" },
     model: model(),
-    modelRecord: { packageRevision: 1, shadowMode: true, issueCount: 0, blockingIssueCount: 0, updatedAt: 2 },
+    modelRecord: { id: "model-record-1", packageRevision: 1, modelFingerprint: "parity:model", shadowMode: true, issueCount: 0, blockingIssueCount: 0, updatedAt: 2 },
     solution: solution(),
     solutionRecord: { id: "solution-record-1", status: "review", solver: HELIOS_EUCLID_INTEGRATION_SOLVER, solverVersion: 1, nodeCount: 0, edgeCount: 0, checkCount: 0, completedAt: 3 },
   });
