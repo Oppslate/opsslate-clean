@@ -376,7 +376,7 @@ export function EstimateCockpit2({ project, status, intelligence, workspace, lat
   const isUpdating = ["queued", "processing"].includes(status) || workspace.status === "proposal_processing";
 
   return (
-    <div className="relative z-10 flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl xl:-mt-20 xl:h-[calc(100vh-7rem)] xl:min-h-[720px] xl:max-h-[960px]">
+    <div className="relative z-10 flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl xl:h-[calc(100vh-7rem)] xl:min-h-[720px] xl:max-h-[960px]">
       <header className="grid shrink-0 gap-3 border-b border-border bg-card/90 p-3 md:grid-cols-2 md:items-center xl:grid-cols-[minmax(250px,1.45fr)_repeat(3,minmax(125px,.55fr))_auto] xl:pr-20">
         <div className="min-w-0 md:col-span-2 xl:col-span-1">
           <div className="flex flex-wrap items-center gap-2"><h1 className="truncate text-base font-semibold">{project.name}</h1><StatusBadge value={project.status} /></div>

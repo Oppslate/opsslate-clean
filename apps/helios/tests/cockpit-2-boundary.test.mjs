@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const source = (path) => readFileSync(join(root, path), "utf8");
 const cockpit = source("src/components/estimate-cockpit-2.tsx");
+const intelligenceCockpit = source("src/components/project-intelligence-cockpit.tsx");
 const projectIntake = source("src/components/project-intake.tsx");
 const projectPage = source("src/app/projects/[projectId]/page.tsx");
 
@@ -57,4 +58,13 @@ test("Cockpit 2.0 keeps bid-day decisions contextual, one-click, audited, and re
   assert.match(cockpit, /lg:grid-cols/);
   assert.match(cockpit, /xl:grid-cols/);
   assert.match(cockpit, /h-\[560px\]/);
+});
+
+test("cockpits remain in document flow and never cover upstream workflow controls", () => {
+  assert.doesNotMatch(cockpit, /-mt-20/);
+  assert.doesNotMatch(intelligenceCockpit, /-mt-20/);
+  assert.match(
+    projectIntake,
+    /<PlanIntelligencePanel[\s\S]*\{detail\.intelligence && workspace \? \([\s\S]*<EstimateCockpit2/,
+  );
 });

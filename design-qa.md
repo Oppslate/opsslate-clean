@@ -89,6 +89,83 @@ Final result: passed
 
 ---
 
+# Helios Plan-Control Overlap Design QA
+
+## Target and state
+
+- Source visual truth: user-reported authenticated Titus project at
+  `docs/evidence/helios-plan-control-overlap-before.png`.
+- Implementation: the same authenticated Titus project after removing the
+  cockpit's desktop negative top margin at
+  `docs/evidence/helios-plan-control-overlap-after.png`.
+- Side-by-side comparison:
+  `docs/evidence/helios-plan-control-overlap-comparison.png`.
+- Viewport: `1912 × 915` CSS pixels at device scale factor `1`.
+- Source normalization: the `1912 × 1058` Edge screenshot was cropped to its
+  `1912 × 915` application viewport by removing browser and operating-system
+  chrome. The implementation capture is `1912 × 915`; no density scaling was
+  applied.
+- State: Revision 1 has plans and specifications, project synthesis is
+  complete, no plan model exists yet, and **Build plan model** is actionable.
+
+## Full-view comparison evidence
+
+- Before: the cockpit was pulled upward by 80 pixels and covered the Plan
+  Intelligence description and most of its primary action.
+- After: Bid Basis, the complete Plan Intelligence card, and the cockpit follow
+  normal document flow. The plan action is fully visible at normal zoom.
+- Browser measurement confirms the **Build plan model** control is `36` pixels
+  high and has `61.6` pixels of clear vertical separation before the cockpit's
+  project heading.
+
+## Focused-region comparison evidence
+
+- The Plan Intelligence header, description, icon, orange action, border,
+  radius, typography, and spacing retain the existing OpsSlate design-system
+  treatment.
+- The fix removes only the overlapping position behavior. It does not move,
+  rename, restyle, disable, or reimplement the control.
+- The project cockpit retains its bounded height, internal scrolling, three
+  panels, and decision dock.
+
+## Required fidelity surfaces
+
+- Fonts and typography: passed; no typography classes changed.
+- Spacing and layout rhythm: passed after iteration; workflow cards now have a
+  consistent 16-pixel section gap and no negative overlap.
+- Colors and visual tokens: passed; existing shared semantic tokens remain.
+- Image quality and asset fidelity: passed; original protected PDF rendering
+  and Lucide icons remain unchanged, with no new image assets or substitutes.
+- Copy and content: passed; all app-specific labels and project data remain
+  unchanged.
+
+## Interaction and accessibility checks
+
+- Passed: **Build plan model** resolves to one visible semantic button.
+- Passed: the action is fully inside the viewport and is not covered by the
+  cockpit.
+- Passed: project headings and workflow order remain semantic and unchanged.
+- Passed: no browser console errors were observed during the authenticated
+  local verification.
+
+## Comparison history
+
+1. P1 finding: the cockpit's `xl:-mt-20` offset hid a required upstream action.
+2. Fix: removed the negative top margin from both estimate and intelligence
+   cockpit variants and added a regression boundary test.
+3. Post-fix evidence: the aligned browser capture and DOM measurements show the
+   complete action with 61.6 pixels of separation from the cockpit.
+
+## Findings
+
+- P0: none.
+- P1: none after correction.
+- P2: none.
+
+Final result: passed
+
+---
+
 # Helios Cockpit 2.0 Design QA
 
 ## Target and implemented state

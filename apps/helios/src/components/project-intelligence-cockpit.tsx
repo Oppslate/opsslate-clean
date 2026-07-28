@@ -107,7 +107,7 @@ export function ProjectIntelligenceCockpit({
   }
 
   return (
-    <div className="relative z-10 overflow-hidden rounded-xl border border-border bg-card shadow-lg xl:-mt-20">
+    <div className="relative z-10 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
       <header className="grid gap-3 border-b border-border bg-card/80 p-3 md:grid-cols-2 md:items-center xl:grid-cols-[minmax(240px,1.4fr)_repeat(3,minmax(120px,0.55fr))_minmax(210px,0.45fr)]">
         <div className="min-w-0 md:col-span-2 xl:col-span-1">
           <div className="flex flex-wrap items-center gap-2">
