@@ -747,3 +747,37 @@ points.
   and shared web TypeScript: Passed
 - Convex development schema/functions: deployed to `kindly-tiger-289`
 - Production deployment and production domain changes: Not performed
+
+### Ask Helios governed project assistant
+
+- Application checkpoint: `f6cb371`
+- Scope: additive, read-only, project-scoped conversations over the canonical
+  engineering project record; no estimate, quantity, risk, RFQ, document,
+  plan, or geometry mutation is exposed
+- Sources: stored document evidence, plan-sheet records, current civil
+  geometry, governed takeoff quantities, estimate quantities/items, and the
+  project risk register; original PDFs remain immutable protected evidence
+- Engineering controls: station notation and vertical-profile interpolation
+  are deterministic; numeric answers may copy supplied governed values or
+  deterministic totals but may not invent or silently recompute quantities
+- Answer governance: every supported answer records status, method,
+  assumptions, limitations, confidence, canonical citations, model identity,
+  response identity, token usage, package revision, and timestamps
+- Persistence: the user message and a pending assistant record are committed
+  before generation, and every conversation has an addressable project URL
+- Security: same-origin API entry, authenticated server-derived tenant,
+  project/thread ownership reauthorization, strict citation validation, and
+  no PDF upload or OpenAI file lifecycle in downstream questions
+- UI: OpsSlate shared primitives, saved conversations, quick bid-day prompts,
+  protected PDF citation links, answer-basis panel, and responsive desktop,
+  tablet, and mobile layouts
+- Live development verification: Titus Culvert risk question completed with a
+  proposed 92% confidence answer, eight canonical citations, disclosed method
+  and limitations, persisted OpenAI response/token metadata, and no browser
+  errors
+- Automated domain tests: 63 passed
+- Automated Helios security and boundary tests: 85 passed
+- Helios lint, targeted Convex lint, shared web TypeScript, Helios production
+  build, and Convex development deployment: Passed
+- Convex development schema/functions: deployed to `kindly-tiger-289`
+- Production deployment and production domain changes: Not performed
