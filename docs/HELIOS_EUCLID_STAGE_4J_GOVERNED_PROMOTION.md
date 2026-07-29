@@ -1,7 +1,9 @@
 # Helios Euclid Stage 4J — Governed Canonical Promotion
 
-**Status:** Complete  
-**Completed:** July 29, 2026  
+**Status:** Complete
+
+**Completed:** July 29, 2026
+
 **Code checkpoint:** `806c37b` (`feat(helios): add governed Euclid promotion`)
 
 ## Outcome
