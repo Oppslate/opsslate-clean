@@ -1069,3 +1069,42 @@ points.
   changes: Not performed
 - Approval gate: stop before applying reviewed corrections to a new canonical
   model or allowing reviewed geometry to drive downstream quantities
+
+### Civil Geometry 2.0 - Euclid Stage 4H reviewed candidate
+
+- Application checkpoint: `a8ff90a`
+- Contract: [Euclid Stage 4H reviewed candidate](./HELIOS_EUCLID_STAGE_4H_REVIEWED_CANDIDATE.md)
+- Scope: build an immutable, versioned reviewed-geometry candidate from the
+  current Stage 4G decision ledger; do not replace the source Euclid model or
+  publish downstream records
+- Candidate boundary: the builder clones the fingerprint-verified current
+  model, applies only previously allowlisted corrections, and retains the
+  source model as immutable source of truth
+- Governance: accepted and corrected entities can resolve review; deferred,
+  rejected, and unreviewed entities block deterministic validation
+- Integrity: source model, engineering source, target, review-set, candidate,
+  and decision fingerprints preserve complete stale-safe lineage
+- Status: `ready_for_validation` means review and frozen-contract checks pass;
+  it does not mean the candidate is downstream-ready or canonical
+- Storage: immutable candidate header, deterministic bounded entity chunks,
+  and decision-lineage joins preserve every candidate version without patch or
+  delete paths
+- Bid-day workflow: the approved three-panel cockpit adds one-click candidate
+  creation and compact status, resolution, correction, and blocker feedback
+- Honest live boundary: Titus has no current canonical Euclid model, so browser
+  verification remains in `awaiting_model`; no geometry or candidate was
+  fabricated
+- Automated domain tests: 105 passed
+- Automated Helios security and boundary tests: 113 passed
+- Browser QA: desktop `1440 × 900`, tablet `1024 × 768`, and mobile
+  `390 × 844` passed with no horizontal overflow or application runtime errors
+- Domain TypeScript, Helios lint, Helios production build, shared OpsSlate
+  production build, Convex code generation, and development schema/function
+  update: Passed
+- Existing Document Intelligence, Plan Intelligence, WBS, Estimate Builder,
+  Cockpit 2.0, Ask Helios, quantities, pricing, procurement, evidence, risk,
+  schedule, and LandXML consumers: Unchanged
+- Canonical promotion, solver rerun, quantity or estimate publication, LandXML,
+  Vercel deployment, production promotion, and domain changes: Not performed
+- Approval gate: stop before Stage 4I deterministic candidate validation and
+  engineering-delta comparison
