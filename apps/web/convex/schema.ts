@@ -781,6 +781,8 @@ export default defineSchema({
     schemaVersion: v.number(),
     processingVersion: v.number(),
     adapterVersion: v.string(),
+    canonicalVersion: v.optional(v.number()),
+    canonicalOrigin: v.optional(v.union(v.literal("ingestion"), v.literal("reviewed_candidate"))),
     sourceFingerprint: v.string(),
     modelFingerprint: v.string(),
     status: v.union(
@@ -1296,6 +1298,41 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_validation", ["validationId", "resultType", "chunkIndex"]),
+
+  // Euclid Stage 4J: append-only governed promotion lineage. The promoted
+  // model is stored as a new canonical Euclid version; downstream use remains
+  // separately gated.
+  heliosEuclidPromotions: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    sourceEuclidModelId: v.id("heliosEuclidModels"),
+    candidateId: v.id("heliosEuclidReviewCandidates"),
+    validationId: v.id("heliosEuclidCandidateValidations"),
+    promotedEuclidModelId: v.id("heliosEuclidModels"),
+    requestId: v.string(),
+    promotionKey: v.string(),
+    canonicalVersion: v.number(),
+    sourceModelFingerprint: v.string(),
+    candidateFingerprint: v.string(),
+    reviewSetFingerprint: v.string(),
+    validationFingerprint: v.string(),
+    promotedModelFingerprint: v.string(),
+    promoter: v.string(),
+    promoterVersion: v.number(),
+    adapterVersion: v.string(),
+    status: v.literal("promoted"),
+    downstreamEligible: v.boolean(),
+    createdBy: v.id("users"),
+    promotedByName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_project_created", ["projectId", "createdAt"])
+    .index("by_source_request", ["sourceEuclidModelId", "requestId"])
+    .index("by_validation", ["validationId"])
+    .index("by_promotion_key", ["promotionKey"])
+    .index("by_promoted_model", ["promotedEuclidModelId"]),
 
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),

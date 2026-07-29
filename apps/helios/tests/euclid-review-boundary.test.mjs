@@ -30,5 +30,5 @@ test("Stage 4G does not activate downstream quantity, estimate, or LandXML consu
     read("../src/components/euclid-cockpit.tsx"),
   ]);
   assert.doesNotMatch(mutation, /heliosQuantity|heliosEstimate|LandXML|schedule/i);
-  assert.match(component, /does not change source geometry or publish estimate quantities/);
+  assert.match(component, /remain separate from the immutable source model/);
 });

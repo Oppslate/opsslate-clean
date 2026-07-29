@@ -195,13 +195,24 @@ export type HeliosEuclidCockpitWorkspace = {
     id: string;
     packageRevision: number;
     status: HeliosEuclidModelStatus;
-    shadowMode: true;
+    shadowMode: boolean;
+    canonicalVersion: number;
+    canonicalOrigin: "ingestion" | "reviewed_candidate";
     sourceFingerprint: string;
     modelFingerprint: string;
     spatialReferenceCount: number;
     issueCount: number;
     blockingIssueCount: number;
     updatedAt: number;
+    promotion?: {
+      id: string;
+      sourceEuclidModelId: string;
+      candidateId: string;
+      validationId: string;
+      promotedByName: string;
+      downstreamEligible: false;
+      createdAt: number;
+    };
   };
   review: HeliosEuclidReviewSummary & {
     targetFingerprints: Record<string, string>;
@@ -227,9 +238,10 @@ export type HeliosEuclidCockpitWorkspace = {
       id: string;
       status: HeliosEuclidCandidateValidationStatus;
       validationPassed: boolean;
-      promotionEligible: false;
+      canPromote: boolean;
       downstreamEligible: false;
       current: boolean;
+      validationFingerprint: string;
       changedCount: number;
       improvedCount: number;
       degradedCount: number;
@@ -271,10 +283,21 @@ export type HeliosEuclidCockpitSource = {
     id: string;
     packageRevision: number;
     modelFingerprint: string;
-    shadowMode: true;
+    shadowMode: boolean;
+    canonicalVersion: number;
+    canonicalOrigin: "ingestion" | "reviewed_candidate";
     issueCount: number;
     blockingIssueCount: number;
     updatedAt: number;
+    promotion?: {
+      id: string;
+      sourceEuclidModelId: string;
+      candidateId: string;
+      validationId: string;
+      promotedByName: string;
+      downstreamEligible: false;
+      createdAt: number;
+    };
   };
   reviewDecisions?: HeliosEuclidReviewDecision[];
   candidateRecord?: {
@@ -298,6 +321,7 @@ export type HeliosEuclidCockpitSource = {
       validationPassed: boolean;
       promotionEligible: false;
       downstreamEligible: false;
+      validationFingerprint: string;
       candidateFingerprint: string;
       reviewSetFingerprint: string;
       changedCount: number;
@@ -459,13 +483,16 @@ export function buildHeliosEuclidCockpitWorkspace(
       id: input.modelRecord.id,
       packageRevision: input.modelRecord.packageRevision,
       status: input.model.status,
-      shadowMode: true,
+      shadowMode: input.modelRecord.shadowMode,
+      canonicalVersion: input.modelRecord.canonicalVersion,
+      canonicalOrigin: input.modelRecord.canonicalOrigin,
       sourceFingerprint: input.model.sourceFingerprint,
       modelFingerprint: input.modelRecord.modelFingerprint,
       spatialReferenceCount: input.model.spatialReferences.length,
       issueCount: input.modelRecord.issueCount,
       blockingIssueCount: input.modelRecord.blockingIssueCount,
       updatedAt: input.modelRecord.updatedAt,
+      promotion: input.modelRecord.promotion,
     },
     review: { ...reviewSummary, targetFingerprints, reviewSetFingerprint },
     candidate: input.candidateRecord ? {
@@ -476,6 +503,12 @@ export function buildHeliosEuclidCockpitWorkspace(
         current:
           input.candidateRecord.validation.candidateFingerprint === input.candidateRecord.candidateFingerprint &&
           input.candidateRecord.validation.reviewSetFingerprint === reviewSetFingerprint,
+        canPromote:
+          input.candidateRecord.validation.candidateFingerprint === input.candidateRecord.candidateFingerprint &&
+          input.candidateRecord.validation.reviewSetFingerprint === reviewSetFingerprint &&
+          input.candidateRecord.validation.validationPassed &&
+          input.candidateRecord.validation.status === "passed" &&
+          input.candidateRecord.validation.degradedCount === 0,
       } : undefined,
     } : undefined,
     solution: solutionRecord ? {

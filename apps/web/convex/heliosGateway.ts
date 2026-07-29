@@ -7,6 +7,7 @@ import {
   normalizeCivilGeometryReviewInput,
   normalizeHeliosEuclidCandidateBuildInput,
   normalizeHeliosEuclidCandidateValidationInput,
+  normalizeHeliosEuclidPromotionInput,
   normalizeHeliosEuclidReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
@@ -22,6 +23,7 @@ import {
   type HeliosEuclidCockpitWorkspace,
   type HeliosEuclidCandidateBuildInput,
   type HeliosEuclidCandidateValidationInput,
+  type HeliosEuclidPromotionInput,
   type HeliosEuclidReviewInput,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
@@ -256,6 +258,11 @@ const validateEuclidCandidateReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidCandidateValidationInput },
   { validationId: string; status: string; validationPassed: boolean; promotionEligible: false; downstreamEligible: false; reused: boolean }
 >("heliosEuclidCandidateValidations:validateCandidate");
+const promoteEuclidCandidateReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidPromotionInput },
+  { promotionId: string; promotedEuclidModelId: string; canonicalVersion: number; status: "promoted"; downstreamEligible: false; reused: boolean }
+>("heliosEuclidPromotions:promoteCandidate");
 const getEstimateWorkspaceReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal; projectId: string },
@@ -1176,6 +1183,25 @@ export const validateHeliosEuclidCandidate = httpAction(async (ctx, request) => 
     return json({ data }, 201);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Euclid candidate validation could not be completed." }, 400);
+  }
+});
+
+export const promoteHeliosEuclidCandidate = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid promotion request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(promoteEuclidCandidateReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeHeliosEuclidPromotionInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid candidate could not be promoted." }, 400);
   }
 });
 

@@ -10,6 +10,7 @@ export * from "./euclid-integration.ts";
 export * from "./euclid-cockpit.ts";
 export * from "./euclid-candidate.ts";
 export * from "./euclid-candidate-validation.ts";
+export * from "./euclid-promotion.ts";
 export * from "./euclid-review.ts";
 export * from "./euclid-vertical.ts";
 export * from "./euclid-shadow.ts";

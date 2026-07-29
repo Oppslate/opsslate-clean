@@ -126,7 +126,7 @@ export const getWorkspace = internalQuery({
     if (!modelRecord || modelRecord.companyId !== companyId) {
       return buildHeliosEuclidCockpitWorkspace({ project: projectSummary(project) });
     }
-    const [solutionRecord, reviewRecords, candidateRecord] = await Promise.all([
+    const [solutionRecord, reviewRecords, candidateRecord, promotionRecord] = await Promise.all([
       ctx.db
         .query("heliosEuclidIntegrationSolutions")
         .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
@@ -139,6 +139,10 @@ export const getWorkspace = internalQuery({
         .query("heliosEuclidReviewCandidates")
         .withIndex("by_model_created", (query) => query.eq("sourceEuclidModelId", modelRecord._id))
         .order("desc")
+        .first(),
+      ctx.db
+        .query("heliosEuclidPromotions")
+        .withIndex("by_promoted_model", (query) => query.eq("promotedEuclidModelId", modelRecord._id))
         .first(),
     ]);
     if (solutionRecord && (solutionRecord.companyId !== companyId || solutionRecord.euclidModelId !== modelRecord._id)) {
@@ -153,6 +157,7 @@ export const getWorkspace = internalQuery({
         candidateRecord.downstreamEligible !== false
       )
     ) throw new Error("Euclid reviewed candidate identity is invalid.");
+    if (promotionRecord && (promotionRecord.companyId !== companyId || promotionRecord.projectId !== project._id || promotionRecord.promotedEuclidModelId !== modelRecord._id || promotionRecord.promotedModelFingerprint !== modelRecord.modelFingerprint || promotionRecord.downstreamEligible !== false)) throw new Error("Euclid canonical promotion identity is invalid.");
     const model = await reconstructEuclidModel(ctx, modelRecord);
     const validationRecord = candidateRecord
       ? await ctx.db
@@ -211,10 +216,21 @@ export const getWorkspace = internalQuery({
         id: String(modelRecord._id),
         packageRevision: modelRecord.packageRevision,
         modelFingerprint: modelRecord.modelFingerprint,
-        shadowMode: true,
+        shadowMode: modelRecord.shadowMode,
+        canonicalVersion: modelRecord.canonicalVersion ?? 1,
+        canonicalOrigin: modelRecord.canonicalOrigin ?? "ingestion",
         issueCount: modelRecord.issueCount,
         blockingIssueCount: modelRecord.blockingIssueCount,
         updatedAt: modelRecord.updatedAt,
+        promotion: promotionRecord ? {
+          id: String(promotionRecord._id),
+          sourceEuclidModelId: String(promotionRecord.sourceEuclidModelId),
+          candidateId: String(promotionRecord.candidateId),
+          validationId: String(promotionRecord.validationId),
+          promotedByName: promotionRecord.promotedByName,
+          downstreamEligible: false,
+          createdAt: promotionRecord.createdAt,
+        } : undefined,
       },
       reviewDecisions,
       candidateRecord: candidateRecord ? {
@@ -238,6 +254,7 @@ export const getWorkspace = internalQuery({
           validationPassed: validationRecord.validationPassed,
           promotionEligible: false,
           downstreamEligible: false,
+          validationFingerprint: validationRecord.validationFingerprint,
           candidateFingerprint: validationRecord.candidateFingerprint,
           reviewSetFingerprint: validationRecord.reviewSetFingerprint,
           changedCount: validationRecord.changedCount,

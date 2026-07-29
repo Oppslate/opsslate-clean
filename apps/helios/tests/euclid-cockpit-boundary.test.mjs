@@ -36,7 +36,7 @@ test("Euclid Stage 4G adds governed review without publishing quantities or Land
     read("../src/app/api/projects/[projectId]/euclid/reviews/route.ts"),
     read("../../web/convex/heliosEuclidReviews.ts"),
   ]);
-  assert.match(component, /Governed review/);
+  assert.match(component, /Governed estimator review/);
   assert.match(component, /remain separate from the immutable source model/);
   assert.match(component, /euclid\/reviews/);
   assert.match(component, /Accept trusted controls in one click/);
@@ -46,24 +46,27 @@ test("Euclid Stage 4G adds governed review without publishing quantities or Land
   assert.match(mutation, /targetFingerprint !== input\.targetFingerprint/);
   assert.match(mutation, /ctx\.db\.insert\("heliosEuclidReviewDecisions"/);
   assert.doesNotMatch(mutation, /ctx\.db\.patch|ctx\.db\.replace|ctx\.db\.delete|openai|ctx\.storage/i);
-  assert.doesNotMatch(component, /LandXML|download/i);
-  assert.match(component, /does not change source geometry or publish estimate quantities/);
+  assert.match(component, /LandXML publication remain disabled/);
+  assert.doesNotMatch(component, /download/i);
+  assert.match(component, /remain separate from the immutable source model/);
   assert.doesNotMatch(page, /POST|PATCH|DELETE|PUT/);
   assert.match(navigation, /href: "\/civil-geometry"/);
   assert.doesNotMatch(navigation, /label: "Civil Geometry"[\s\S]{0,120}disabled: true/);
 });
 
-test("Euclid Stage 4I exposes candidate validation without changing the three-panel workflow", async () => {
+test("Euclid Stage 4J exposes governed promotion without changing the three-panel workflow", async () => {
   const [component, cockpit] = await Promise.all([
     read("../src/components/euclid-cockpit.tsx"),
     read("../../../packages/helios-domain/src/euclid-cockpit.ts"),
   ]);
   assert.match(component, /ReviewedCandidateControl/);
-  assert.match(component, /Stage 4I/);
+  assert.match(component, /Stage 4J/);
   assert.match(component, /Validate candidate/);
+  assert.match(component, /Promote canonical/);
   assert.match(cockpit, /candidateRecord/);
   assert.match(cockpit, /reviewSetFingerprint/);
   assert.match(cockpit, /validationPassed/);
+  assert.match(cockpit, /canPromote/);
 });
 
 test("Euclid Stage 4F uses the approved three-panel OpsSlate workflow", async () => {

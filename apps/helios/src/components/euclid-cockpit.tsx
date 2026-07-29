@@ -10,6 +10,7 @@ import type {
 import {
   HELIOS_EUCLID_CANDIDATE_VERSION,
   HELIOS_EUCLID_CANDIDATE_VALIDATION_VERSION,
+  HELIOS_EUCLID_PROMOTION_VERSION,
   HELIOS_EUCLID_REVIEW_VERSION,
   heliosEuclidCorrectableFields,
   type HeliosEuclidReviewAction,
@@ -271,7 +272,7 @@ function EntityReviewControls({ workspace, target }: {
 
 function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpitWorkspace }) {
   const router = useRouter();
-  const [pending, setPending] = useState<"build" | "validate" | null>(null);
+  const [pending, setPending] = useState<"build" | "validate" | "promote" | null>(null);
   const [error, setError] = useState("");
   const candidate = workspace.candidate;
 
@@ -322,6 +323,37 @@ function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpi
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Reviewed candidate could not be validated.");
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function promoteCandidate() {
+    const validation = candidate?.validation;
+    if (!workspace.model || !candidate?.current || !validation?.current || !validation.canPromote) return;
+    setPending("promote");
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${workspace.project.id}/euclid/promotions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: HELIOS_EUCLID_PROMOTION_VERSION,
+          requestId: crypto.randomUUID(),
+          sourceEuclidModelId: workspace.model.id,
+          sourceModelFingerprint: workspace.model.modelFingerprint,
+          candidateId: candidate.id,
+          candidateFingerprint: candidate.candidateFingerprint,
+          reviewSetFingerprint: candidate.reviewSetFingerprint,
+          validationId: validation.id,
+          validationFingerprint: validation.validationFingerprint,
+        }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Reviewed candidate could not be promoted.");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Reviewed candidate could not be promoted.");
     } finally {
       setPending(null);
     }
@@ -403,10 +435,21 @@ function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpi
             {pending === "validate" ? "Validating…" : candidate.validation?.current ? "Validation current" : "Validate candidate"}
           </Button>
         )}
+        {candidate?.validation?.current && (
+          <Button
+            size="sm"
+            className="h-8 text-[10px]"
+            disabled={pending !== null || !candidate.validation.canPromote}
+            onClick={promoteCandidate}
+          >
+            <ShieldCheck aria-hidden="true" />
+            {pending === "promote" ? "Promoting canonical version…" : `Promote canonical v${(workspace.model?.canonicalVersion || 1) + 1}`}
+          </Button>
+        )}
       </div>
       {error && <p role="alert" className="mt-2 text-[10px] text-danger-foreground">{error}</p>}
       <p className="mt-2 text-[9px] leading-4 text-muted-foreground">
-        Stage 4I reruns horizontal, vertical, and relationship validation but never promotes geometry or publishes downstream records.
+        Stage 4J creates a new canonical version only from a current passing validation with no degraded results. Downstream records remain gated.
       </p>
     </div>
   );
@@ -435,7 +478,7 @@ export function EuclidCockpit({ workspace }: { workspace: HeliosEuclidCockpitWor
     <div className="space-y-4">
       <header className="rounded-xl border border-orange-500/30 bg-card/55">
         <div className="flex flex-col justify-between gap-4 px-4 py-3 lg:flex-row lg:items-center">
-          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="border-orange-500/35 text-orange-300"><DraftingCompass aria-hidden="true" />Euclid Model</Badge><StateBadge value={workspace.solution?.status || workspace.availability} /><Badge variant="outline">Governed review</Badge></div><h1 className="mt-2 truncate text-2xl font-bold leading-8">{workspace.project.name}</h1><p className="mt-0.5 text-xs text-muted-foreground">{workspace.project.projectNumber || "No project number"}{workspace.project.location ? ` · ${workspace.project.location}` : ""}</p></div>
+          <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="border-orange-500/35 text-orange-300"><DraftingCompass aria-hidden="true" />Euclid Model</Badge><StateBadge value={workspace.solution?.status || workspace.availability} /><Badge variant="outline">Canonical v{workspace.model?.canonicalVersion || 1}</Badge><Badge variant="outline">{workspace.model?.canonicalOrigin === "reviewed_candidate" ? "Estimator promoted" : "Ingestion basis"}</Badge></div><h1 className="mt-2 truncate text-2xl font-bold leading-8">{workspace.project.name}</h1><p className="mt-0.5 text-xs text-muted-foreground">{workspace.project.projectNumber || "No project number"}{workspace.project.location ? ` · ${workspace.project.location}` : ""}</p>{workspace.model?.promotion && <p className="mt-1 text-[10px] text-success-foreground">Promoted by {workspace.model.promotion.promotedByName} · {formatTimestamp(workspace.model.promotion.createdAt)}</p>}</div>
           <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link href={`/projects/${workspace.project.id}`}><ArrowLeft aria-hidden="true" />Project cockpit</Link></Button><Button asChild size="sm" variant="outline"><Link href={`/projects/${workspace.project.id}/ask`}>Ask Helios</Link></Button></div>
         </div>
         <div className="grid border-t border-border sm:grid-cols-2 lg:grid-cols-5"><HeaderMetric icon={<Waypoints />} label="Alignments" value={workspace.alignments.length} /><HeaderMetric icon={<GitBranch />} label="Graph" value={`${workspace.solution?.nodeCount || 0} nodes · ${workspace.solution?.edgeCount || 0} edges`} /><HeaderMetric icon={<CheckCircle2 />} label="Quantity ready" value={workspace.solution?.readyCount || 0} /><HeaderMetric icon={<AlertTriangle />} label="Review / blocked" value={`${workspace.solution?.reviewCount || 0} / ${workspace.solution?.blockedCount || 0}`} /><HeaderMetric icon={<Ruler />} label="Last validated" value={workspace.solution?.completedAt ? formatTimestamp(workspace.solution.completedAt) : workspace.model?.updatedAt ? formatTimestamp(workspace.model.updatedAt) : "Pending"} /></div>
@@ -445,7 +488,7 @@ export function EuclidCockpit({ workspace }: { workspace: HeliosEuclidCockpitWor
         <EngineeringWorkspace detail={selectedAlignment} />
         <GovernedIntelligenceRail projectId={workspace.project.id} detail={selectedAlignment} workspace={workspace} />
       </section>
-      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Review decisions, candidates, and validation results are traceable derivatives. Helios does not change source geometry or publish estimate quantities.</span><span className="shrink-0 font-mono">Model revision {workspace.model?.packageRevision} · Stage 4I</span></footer>
+      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Canonical promotion preserves every prior version and full review lineage. Quantity, estimate, schedule, and LandXML publication remain disabled.</span><span className="shrink-0 font-mono">Canonical v{workspace.model?.canonicalVersion || 1} · Stage 4J</span></footer>
     </div>
   );
 }

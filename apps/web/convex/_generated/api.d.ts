@@ -92,6 +92,7 @@ import type * as heliosEstimateOpenAIContracts from "../heliosEstimateOpenAICont
 import type * as heliosEstimateReviews from "../heliosEstimateReviews.js";
 import type * as heliosEstimateSupport from "../heliosEstimateSupport.js";
 import type * as heliosEstimates from "../heliosEstimates.js";
+import type * as heliosEuclidCandidateReconstruction from "../heliosEuclidCandidateReconstruction.js";
 import type * as heliosEuclidCandidateValidations from "../heliosEuclidCandidateValidations.js";
 import type * as heliosEuclidCandidates from "../heliosEuclidCandidates.js";
 import type * as heliosEuclidCockpit from "../heliosEuclidCockpit.js";
@@ -99,6 +100,7 @@ import type * as heliosEuclidHorizontal from "../heliosEuclidHorizontal.js";
 import type * as heliosEuclidHorizontalSchedule from "../heliosEuclidHorizontalSchedule.js";
 import type * as heliosEuclidIntegration from "../heliosEuclidIntegration.js";
 import type * as heliosEuclidIntegrationSchedule from "../heliosEuclidIntegrationSchedule.js";
+import type * as heliosEuclidPromotions from "../heliosEuclidPromotions.js";
 import type * as heliosEuclidReviews from "../heliosEuclidReviews.js";
 import type * as heliosEuclidShadow from "../heliosEuclidShadow.js";
 import type * as heliosEuclidShadowSchedule from "../heliosEuclidShadowSchedule.js";
@@ -250,6 +252,7 @@ declare const fullApi: ApiFromModules<{
   heliosEstimateReviews: typeof heliosEstimateReviews;
   heliosEstimateSupport: typeof heliosEstimateSupport;
   heliosEstimates: typeof heliosEstimates;
+  heliosEuclidCandidateReconstruction: typeof heliosEuclidCandidateReconstruction;
   heliosEuclidCandidateValidations: typeof heliosEuclidCandidateValidations;
   heliosEuclidCandidates: typeof heliosEuclidCandidates;
   heliosEuclidCockpit: typeof heliosEuclidCockpit;
@@ -257,6 +260,7 @@ declare const fullApi: ApiFromModules<{
   heliosEuclidHorizontalSchedule: typeof heliosEuclidHorizontalSchedule;
   heliosEuclidIntegration: typeof heliosEuclidIntegration;
   heliosEuclidIntegrationSchedule: typeof heliosEuclidIntegrationSchedule;
+  heliosEuclidPromotions: typeof heliosEuclidPromotions;
   heliosEuclidReviews: typeof heliosEuclidReviews;
   heliosEuclidShadow: typeof heliosEuclidShadow;
   heliosEuclidShadowSchedule: typeof heliosEuclidShadowSchedule;
