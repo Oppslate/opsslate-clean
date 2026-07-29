@@ -1186,3 +1186,45 @@ points.
 - Vercel deployment and production promotion: Not performed
 - Approval gate: stop before the next separately governed Euclid downstream
   capability
+
+### Canonical-record cutover - Stage 2 source materialization
+
+- Application checkpoint: `90043fb`
+- Scope: materialize reusable native text, full-page renders, and registered
+  plan-view crops from each immutable canonical PDF source after its first and
+  only upload
+- Source boundary: PDFium performs local extraction and rendering; view crops
+  are derived from stored canonical page renders; this stage does not call
+  OpenAI or create a second provider file
+- Storage: versioned materialization jobs, page-channel state, bounded text
+  span writes, immutable render assets, retryable page failures, and current
+  asset ownership remain attached to the canonical engineering record
+- Live Titus verification: 78/78 sources and 460/460 pages materialized, 400
+  pages with native text, 55,628 stored text spans, 460 page renders, and
+  377/377 registered plan-view crops; zero failed pages and zero failed sources
+- Drawing authority correction: EXB-1, EXB-2, and ABT-1 are version-authority
+  pairs, not duplicate uploads. The June 2026 issued-for-bid sheets govern and
+  the February 2024 sheets embedded in `920000 Permits.pdf` remain immutable
+  permit references. Ambiguous version evidence still requires estimator
+  review.
+- Cutover audit: drawing-authority blockers are cleared. Reader cutover remains
+  blocked by native/OCR coverage on 46 of 179 usable plan pages and incomplete
+  civil-geometry coverage/parity; the legacy Plan and Civil workflows still
+  contain two duplicate PDF-upload paths pending later approved cutover stages.
+- Automated domain tests: 124 passed
+- Automated Helios security and boundary tests: 128 passed
+- Domain TypeScript, Helios production build, shared OpsSlate production
+  build, Convex code generation, and development function/schema
+  synchronization: Passed
+- Targeted ESLint: unavailable because the repository does not currently
+  provide an ESLint 9 flat configuration; both production builds completed
+  their configured prebuild checks and TypeScript validation
+- Existing Document Intelligence, Plan Intelligence, WBS, Estimate Builder,
+  Cockpit 2.0, Ask Helios, quantity, pricing, procurement, evidence, risk,
+  schedule, and LandXML readers: Unchanged
+- Original PDFs, accepted estimate decisions, owner quantities, fixed amounts,
+  pricing, and production data: Unchanged
+- Vercel deployment, production promotion, reader cutover, OCR implementation,
+  and civil-geometry promotion: Not performed
+- Approval gate: stop before Stage 3 canonical OCR and downstream reader
+  cutover work
