@@ -1141,3 +1141,48 @@ points.
 - Canonical promotion, quantity or estimate publication, scheduling, LandXML,
   Vercel deployment, production promotion, and domain changes: Not performed
 - Approval gate: stop before Stage 4J governed canonical promotion
+
+### Civil Geometry 2.0 - Euclid Stage 4J governed canonical promotion
+
+- Application checkpoint: `806c37b`
+- Contract: [Euclid Stage 4J governed canonical promotion](./HELIOS_EUCLID_STAGE_4J_GOVERNED_PROMOTION.md)
+- Scope: promote only a current, passing, non-degraded reviewed candidate into
+  a new immutable canonical Euclid version
+- Lineage: source model, review set, candidate, validation, and promoted-model
+  fingerprints are retained in append-only promotion history
+- Continuation: the promoted model reruns the deterministic horizontal,
+  vertical, and integration solvers without rereading PDFs or calling OpenAI
+- Existing source models and solver results are superseded, never deleted
+- Quantity, estimate, pricing, procurement, schedule, and LandXML publication:
+  Not performed
+- Approval gate: stop before Stage 4K governed quantity publication
+
+### Civil Geometry 2.0 - Euclid Stage 4K governed quantity publication
+
+- Application checkpoint: `83a877c`
+- Contract: [Euclid Stage 4K governed quantity publication](./HELIOS_EUCLID_STAGE_4K_QUANTITY_PUBLICATION.md)
+- Scope: calculate deterministic candidates from the current promoted Euclid
+  model and let the estimator map one result to one existing estimate cost code
+- Quantities: horizontal length, structure count, material area/volume, and
+  separate average-end-area excavation and embankment volumes
+- Governance: only a passing integration solution and a `ready` capability can
+  publish; exact model, solution, candidate, and estimate fingerprints fail
+  closed on stale data
+- Estimate boundary: every publication creates a new proposed plan quantity;
+  comparative and production uses remain distinct, and production units must
+  match the receiving cost code
+- Traceability: append-only publication lineage and estimate decision history
+  preserve controlling entities, provenance, formulas, confidence, user, and
+  time; exact retries are idempotent
+- Single ingestion: canonical chunks are reconstructed from stored data; no PDF,
+  OpenAI, upload, or object-storage access occurs
+- Automated domain tests: 114 passed
+- Automated Helios security and boundary tests: 124 passed
+- Domain TypeScript, Helios lint, Helios production build, shared OpsSlate
+  production build, Convex code generation, and development synchronization:
+  Passed
+- Owner quantities, fixed amounts, accepted decisions, resources, pricing,
+  procurement, risk, schedule, source PDFs, and LandXML: Unchanged
+- Vercel deployment and production promotion: Not performed
+- Approval gate: stop before the next separately governed Euclid downstream
+  capability
