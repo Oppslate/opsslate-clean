@@ -119,6 +119,7 @@ import type * as heliosIntelligenceActions from "../heliosIntelligenceActions.js
 import type * as heliosOpenAIContracts from "../heliosOpenAIContracts.js";
 import type * as heliosPackages from "../heliosPackages.js";
 import type * as heliosPlanActions from "../heliosPlanActions.js";
+import type * as heliosPlanAuthority from "../heliosPlanAuthority.js";
 import type * as heliosPlanIntelligence from "../heliosPlanIntelligence.js";
 import type * as heliosPlanOpenAIContracts from "../heliosPlanOpenAIContracts.js";
 import type * as heliosProjects from "../heliosProjects.js";
@@ -285,6 +286,7 @@ declare const fullApi: ApiFromModules<{
   heliosOpenAIContracts: typeof heliosOpenAIContracts;
   heliosPackages: typeof heliosPackages;
   heliosPlanActions: typeof heliosPlanActions;
+  heliosPlanAuthority: typeof heliosPlanAuthority;
   heliosPlanIntelligence: typeof heliosPlanIntelligence;
   heliosPlanOpenAIContracts: typeof heliosPlanOpenAIContracts;
   heliosProjects: typeof heliosProjects;

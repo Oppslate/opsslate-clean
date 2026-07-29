@@ -18,6 +18,7 @@ import { internalMutation, internalQuery, type MutationCtx } from "./_generated/
 import { fingerprintEngineeringRecord } from "./heliosEngineeringParityPayloads";
 import { scheduleEuclidHorizontalSolution } from "./heliosEuclidHorizontalSchedule";
 import { scheduleEuclidVerticalSolution } from "./heliosEuclidVerticalSchedule";
+import { deriveStoredPlanSheetConflicts } from "./heliosPlanAuthority";
 
 const retryEuclidReference = makeFunctionReference<
   "mutation",
@@ -172,25 +173,19 @@ export const syncEuclidRunShadow = internalMutation({
         .withIndex("by_run_page", (query) => query.eq("runId", basis.run.planRunId))
         .collect(),
     ]);
-    const decisionBySheet = new Map(sheetDecisions.map((decision) => [decision.normalizedSheetNumber, decision]));
-    const sheetCounts = new Map<string, number>();
-    for (const page of planPages.filter((page) => page.pageKind === "sheet" && page.sheetNumber.trim())) {
-      const sheet = page.sheetNumber.trim().toUpperCase();
-      sheetCounts.set(sheet, (sheetCounts.get(sheet) || 0) + 1);
-    }
-    const unresolvedAuthority = [...sheetCounts.entries()]
-      .filter(([, count]) => count > 1)
-      .map(([sheet]) => sheet)
-      .filter((sheet) => decisionBySheet.get(sheet)?.status !== "resolved");
+    const drawingAuthority = deriveStoredPlanSheetConflicts(planPages, sheetDecisions);
+    const unresolvedAuthority = drawingAuthority
+      .filter((conflict) => conflict.status !== "resolved")
+      .map((conflict) => conflict.sheetNumber);
     if (unresolvedAuthority.length) {
       const message = `Resolve drawing authority before Euclid promotion: ${unresolvedAuthority.join(", ")}.`;
       const id = await storeTerminalFailure(ctx, basis, message, "drawing_authority_unresolved");
       return { status: "failed" as const, modelId: id };
     }
     const referencePageIds = new Set(
-      sheetDecisions
-        .filter((decision) => decision.status === "resolved")
-        .flatMap((decision) => decision.referencePageIds.map(String)),
+      drawingAuthority
+        .filter((conflict) => conflict.status === "resolved")
+        .flatMap((conflict) => conflict.referencePageIds),
     );
     const records = geometryRecords.filter((record) =>
       !["rejected", "superseded"].includes(record.status) && !referencePageIds.has(String(record.pageId)),

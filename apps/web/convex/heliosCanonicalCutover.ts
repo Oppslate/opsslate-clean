@@ -1,12 +1,8 @@
 import {
-  derivePlanSheetConflicts,
   evaluateHeliosCanonicalCutover,
   type HeliosCanonicalCutoverInput,
   type HeliosEngineeringParityArea,
   type HeliosEngineeringParityStatus,
-  type HeliosPlanPage,
-  type HeliosPlanSheetDecision,
-  type HeliosPlanViewType,
 } from "@opsslate/helios-domain";
 import { v } from "convex/values";
 
@@ -17,6 +13,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
+import { deriveStoredPlanSheetConflicts } from "./heliosPlanAuthority";
 
 type CutoverContext = {
   companyId: Id<"companies">;
@@ -28,88 +25,6 @@ type CutoverContext = {
   sourceFingerprint?: string;
   input: HeliosCanonicalCutoverInput;
 };
-
-function cutoverPlanPage(page: {
-  _id: Id<"heliosPlanPages">;
-  documentId: Id<"heliosDocuments">;
-  documentName: string;
-  physicalPageNumber: number;
-  pageKind: "sheet" | "non_sheet" | "exception";
-  printedPageNumber: string;
-  sheetNumber: string;
-  title: string;
-  discipline: string;
-  subdiscipline: string;
-  issueDate: string;
-  revisionMarker: string;
-  addendumAssociation: string;
-  modality: "vector" | "scanned" | "hybrid" | "unusable";
-  titleBlockBoundary?: { x: number; y: number; width: number; height: number };
-  titleBlockText: string;
-  confidence: number;
-  unresolvedIssues: string[];
-  views: Array<{
-    viewKey: string;
-    viewType: string;
-    label: string;
-    boundary: { x: number; y: number; width: number; height: number };
-    northOrientation: string;
-    measurable: boolean;
-    unresolvedIssues: string[];
-  }>;
-}): HeliosPlanPage {
-  return {
-    id: String(page._id),
-    documentId: String(page.documentId),
-    documentName: page.documentName,
-    physicalPageNumber: page.physicalPageNumber,
-    pageKind: page.pageKind,
-    printedPageNumber: page.printedPageNumber,
-    sheetNumber: page.sheetNumber,
-    title: page.title,
-    discipline: page.discipline,
-    subdiscipline: page.subdiscipline,
-    issueDate: page.issueDate,
-    revisionMarker: page.revisionMarker,
-    addendumAssociation: page.addendumAssociation,
-    modality: page.modality,
-    titleBlockBoundary: page.titleBlockBoundary,
-    titleBlockText: page.titleBlockText,
-    confidence: page.confidence,
-    unresolvedIssues: page.unresolvedIssues,
-    views: page.views.map((view) => ({
-      ...view,
-      viewType: view.viewType as HeliosPlanViewType,
-      scaleCandidates: [],
-    })),
-  };
-}
-
-function cutoverSheetDecision(decision: {
-  _id: Id<"heliosPlanSheetDecisions">;
-  normalizedSheetNumber: string;
-  sheetNumber: string;
-  decision: "apply_recommended" | "use_as_current" | "keep_both" | "escalate";
-  status: "resolved" | "review_required" | "escalated";
-  primaryPageId?: Id<"heliosPlanPages">;
-  referencePageIds: Id<"heliosPlanPages">[];
-  reason: string;
-  reviewerName: string;
-  updatedAt: number;
-}): HeliosPlanSheetDecision {
-  return {
-    id: String(decision._id),
-    normalizedSheetNumber: decision.normalizedSheetNumber,
-    sheetNumber: decision.sheetNumber,
-    decision: decision.decision,
-    status: decision.status,
-    primaryPageId: decision.primaryPageId ? String(decision.primaryPageId) : undefined,
-    referencePageIds: decision.referencePageIds.map(String),
-    reason: decision.reason,
-    reviewerName: decision.reviewerName,
-    reviewedAt: decision.updatedAt,
-  };
-}
 
 function summarizeEvaluation(
   context: CutoverContext,
@@ -183,10 +98,7 @@ async function loadCutoverContext(
         ctx.db.query("heliosPlanSheetDecisions").withIndex("by_run_current", (query) => query.eq("runId", planRun._id).eq("isCurrent", true)).collect(),
       ])
     : [[], []];
-  const drawingAuthority = derivePlanSheetConflicts(
-    planPages.map(cutoverPlanPage),
-    sheetDecisions.map(cutoverSheetDecision),
-  );
+  const drawingAuthority = deriveStoredPlanSheetConflicts(planPages, sheetDecisions);
   const unresolvedDrawingAuthorityCount = drawingAuthority.filter(
     (authority) => authority.status !== "resolved",
   ).length;

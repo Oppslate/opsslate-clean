@@ -60,3 +60,18 @@ test("Euclid Stage 4B fails closed on missing canonical provenance", async () =>
   assert.match(writer, /bounded retries/i);
   assert.match(writer, /validationStatus: "invalid"/);
 });
+
+test("Euclid and cutover share deterministic bid-over-permit drawing authority", async () => {
+  const [writer, cutover, authority] = await Promise.all([
+    source("web/convex/heliosEuclidShadow.ts"),
+    source("web/convex/heliosCanonicalCutover.ts"),
+    source("web/convex/heliosPlanAuthority.ts"),
+  ]);
+  assert.match(authority, /derivePlanSheetConflicts/);
+  assert.match(authority, /deriveStoredPlanSheetConflicts/);
+  assert.match(authority, /deterministic bid-over-permit authority/i);
+  assert.match(writer, /deriveStoredPlanSheetConflicts\(planPages, sheetDecisions\)/);
+  assert.match(cutover, /deriveStoredPlanSheetConflicts\(planPages, sheetDecisions\)/);
+  assert.match(writer, /conflict\.referencePageIds/);
+  assert.doesNotMatch(writer, /sheetCounts|decisionBySheet/);
+});
