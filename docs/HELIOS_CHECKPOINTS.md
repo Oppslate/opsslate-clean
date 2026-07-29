@@ -1228,3 +1228,41 @@ points.
   and civil-geometry promotion: Not performed
 - Approval gate: stop before Stage 3 canonical OCR and downstream reader
   cutover work
+
+### Canonical-record cutover - Stage 3 canonical plan OCR
+
+- Application checkpoint: `71018df`
+- Scope: materialize OCR text only for canonical plan pages whose stored
+  modality is scanned or hybrid and whose native text is insufficient
+- Single-ingestion boundary: OCR reads the exact SHA-pinned canonical page
+  render created in Stage 2; it cannot access an original PDF, OpenAI, PDFium,
+  or either legacy downstream PDF-upload path
+- Processing: versioned durable jobs, two-page bounded concurrency, three
+  bounded attempts, stale-attempt protection, explicit processing phases, and
+  safe recovery of interrupted work
+- Provenance: every OCR span retains stable reading order, normalized bounds,
+  confidence, canonical page locator, OCR engine/version, render SHA-256, and
+  completion status
+- Live Titus verification: 46/46 OCR-eligible pages ready, 1,578 canonical OCR
+  spans, 91,040 OCR characters, and zero pending or failed OCR pages
+- Canonical coverage: 179/179 usable plan pages have canonical text, 179/179
+  have full-page renders, and 377/377 expected plan-view crops are current;
+  the engineering record contains 57,206 total canonical text spans
+- Drawing authority: zero unresolved blockers; the June 2026 bid sheets remain
+  current and the February 2024 permit-package sheets remain references
+- Parity audit: source, Document Intelligence, evidence, plan pages, plan
+  views, references, and calibrations pass. Civil Geometry parity remains
+  incomplete, so overall reader cutover remains blocked.
+- Automated domain tests: 125 passed
+- Automated Helios security and boundary tests: 129 passed
+- Helios and shared OpsSlate production builds and independent web TypeScript
+  validation: Passed
+- Existing Document Intelligence, Plan Intelligence, Civil Geometry, WBS,
+  Estimate Builder, Cockpit 2.0, Ask Helios, quantity, pricing, procurement,
+  evidence, risk, schedule, and LandXML readers: Unchanged
+- Original PDFs, accepted estimate decisions, owner quantities, fixed amounts,
+  pricing, procurement, and production data: Unchanged
+- Vercel deployment, production promotion, canonical-reader cutover, and
+  legacy upload-path removal: Not performed
+- Approval gate: stop before Civil Geometry canonical parity and any staged
+  canonical-reader cutover
