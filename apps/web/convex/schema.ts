@@ -429,6 +429,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_page_channel", ["pageId", "channel", "readingOrder"])
+    .index("by_record", ["engineeringRecordId", "createdAt"])
     .index("by_source", ["engineeringSourceId", "createdAt"]),
 
   heliosEngineeringAssets: defineTable({
@@ -593,6 +594,74 @@ export default defineSchema({
     createdBy: v.id("users"),
     createdAt: v.number(),
     completedAt: v.number(),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_record_created", ["engineeringRecordId", "createdAt"])
+    .index("by_package_created", ["packageId", "createdAt"]),
+
+  // Stage 1 canonical-reader cutover control plane. These immutable audits do
+  // not switch readers; they prove eligibility and preserve every blocker.
+  heliosCanonicalCutoverRuns: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.optional(v.id("heliosEngineeringRecords")),
+    parityRunId: v.optional(v.id("heliosEngineeringParityRuns")),
+    contractVersion: v.number(),
+    sourceFingerprint: v.optional(v.string()),
+    status: v.union(v.literal("blocked"), v.literal("shadow_ready")),
+    isCurrent: v.boolean(),
+    eligibleWorkflowCount: v.number(),
+    blockedWorkflowCount: v.number(),
+    duplicatePdfUploadWorkflowCount: v.number(),
+    sourceCount: v.number(),
+    immutableSourceCount: v.number(),
+    canonicalPageCount: v.number(),
+    canonicalTextSpanCount: v.number(),
+    canonicalAssetCount: v.number(),
+    unresolvedDrawingAuthorityCount: v.number(),
+    workflows: v.array(v.object({
+      id: v.union(
+        v.literal("source_ingestion"),
+        v.literal("document_intelligence"),
+        v.literal("project_synthesis"),
+        v.literal("plan_reconstruction"),
+        v.literal("civil_geometry"),
+        v.literal("euclid"),
+        v.literal("takeoff"),
+        v.literal("estimate"),
+        v.literal("ask_helios"),
+      ),
+      label: v.string(),
+      cutoverStage: v.number(),
+      currentMode: v.union(
+        v.literal("first_ingestion"),
+        v.literal("legacy_authoritative"),
+        v.literal("canonical_shadow"),
+        v.literal("canonical_required"),
+      ),
+      targetMode: v.union(
+        v.literal("first_ingestion"),
+        v.literal("legacy_authoritative"),
+        v.literal("canonical_shadow"),
+        v.literal("canonical_required"),
+      ),
+      originalPdfPolicy: v.union(
+        v.literal("required_once"),
+        v.literal("review_only"),
+        v.literal("forbidden"),
+      ),
+      status: v.union(
+        v.literal("ingestion_boundary"),
+        v.literal("blocked"),
+        v.literal("shadow_ready"),
+      ),
+      blockers: v.array(v.string()),
+      legacyImplementation: v.array(v.string()),
+    })),
+    blockers: v.array(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
   })
     .index("by_project_current", ["projectId", "isCurrent"])
     .index("by_record_created", ["engineeringRecordId", "createdAt"])

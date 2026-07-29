@@ -4,6 +4,7 @@ export * from "./plan-intelligence.ts";
 export * from "./takeoff-intelligence.ts";
 export * from "./civil-geometry.ts";
 export * from "./engineering-record.ts";
+export * from "./canonical-cutover.ts";
 export * from "./euclid-contract.ts";
 export * from "./euclid-horizontal.ts";
 export * from "./euclid-integration.ts";

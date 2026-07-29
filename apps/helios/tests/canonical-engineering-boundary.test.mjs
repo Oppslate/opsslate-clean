@@ -176,3 +176,31 @@ test("Stage 3 remains internal and does not cut over application consumers", asy
     assert.doesNotMatch(consumer, /heliosEngineeringParityRuns|runGoldenParity/);
   }
 });
+
+test("Cutover Stage 1 freezes a workflow-by-workflow original-PDF policy", async () => {
+  const contract = await source("../packages/helios-domain/src/canonical-cutover.ts");
+  assert.match(contract, /HELIOS_CANONICAL_READER_CONTRACT_VERSION/);
+  assert.match(contract, /source_ingestion/);
+  assert.match(contract, /required_once/);
+  assert.match(contract, /review_only/);
+  assert.match(contract, /forbidden/);
+  assert.match(contract, /heliosPlanActions:startPlanDocument/);
+  assert.match(contract, /heliosCivilGeometryActions:startGeometryDocument/);
+});
+
+test("Cutover Stage 1 records immutable readiness audits without switching readers", async () => {
+  const [schema, audit, planActions, geometryActions] = await Promise.all([
+    source("web/convex/schema.ts"),
+    source("web/convex/heliosCanonicalCutover.ts"),
+    source("web/convex/heliosPlanActions.ts"),
+    source("web/convex/heliosCivilGeometryActions.ts"),
+  ]);
+  assert.match(schema, /heliosCanonicalCutoverRuns: defineTable/);
+  assert.match(audit, /auditCanonicalCutover = internalMutation/);
+  assert.match(audit, /getCanonicalCutoverReadiness = internalQuery/);
+  assert.doesNotMatch(audit, /from "openai"|files\.create|responses\.create/);
+
+  // The legacy actions remain intact until their separately approved stages.
+  assert.match(planActions, /openai\.files\.create/);
+  assert.match(geometryActions, /openai\.files\.create/);
+});

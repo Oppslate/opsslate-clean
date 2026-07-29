@@ -79,6 +79,7 @@ import type * as heliosAssistantActions from "../heliosAssistantActions.js";
 import type * as heliosAssistantOpenAI from "../heliosAssistantOpenAI.js";
 import type * as heliosAuthorization from "../heliosAuthorization.js";
 import type * as heliosBidBasis from "../heliosBidBasis.js";
+import type * as heliosCanonicalCutover from "../heliosCanonicalCutover.js";
 import type * as heliosCivilGeometry from "../heliosCivilGeometry.js";
 import type * as heliosCivilGeometryActions from "../heliosCivilGeometryActions.js";
 import type * as heliosCivilGeometryOpenAIContracts from "../heliosCivilGeometryOpenAIContracts.js";
@@ -240,6 +241,7 @@ declare const fullApi: ApiFromModules<{
   heliosAssistantOpenAI: typeof heliosAssistantOpenAI;
   heliosAuthorization: typeof heliosAuthorization;
   heliosBidBasis: typeof heliosBidBasis;
+  heliosCanonicalCutover: typeof heliosCanonicalCutover;
   heliosCivilGeometry: typeof heliosCivilGeometry;
   heliosCivilGeometryActions: typeof heliosCivilGeometryActions;
   heliosCivilGeometryOpenAIContracts: typeof heliosCivilGeometryOpenAIContracts;
