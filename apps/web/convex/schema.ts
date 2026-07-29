@@ -412,6 +412,12 @@ export default defineSchema({
       v.literal("partially_ready"), v.literal("failed"),
     )),
     nativeTextSpanCount: v.optional(v.number()),
+    ocrTextSpanCount: v.optional(v.number()),
+    ocrVersion: v.optional(v.number()),
+    ocrEngine: v.optional(v.string()),
+    ocrRenderSha256: v.optional(v.string()),
+    ocrError: v.optional(v.string()),
+    ocrCompletedAt: v.optional(v.number()),
     materializationError: v.optional(v.string()),
     materializedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -506,6 +512,43 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_source_version", ["engineeringSourceId", "materializationVersion"])
+    .index("by_record_status", ["engineeringRecordId", "status", "updatedAt"])
+    .index("by_project_updated", ["projectId", "updatedAt"]),
+
+  // OCR is a canonical-page derivation. Every job is pinned to the immutable
+  // page-render hash and never receives or reopens the source PDF.
+  heliosEngineeringOcrJobs: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    pageId: v.id("heliosEngineeringPages"),
+    pageRenderAssetId: v.id("heliosEngineeringAssets"),
+    ocrVersion: v.number(),
+    renderSha256: v.string(),
+    engine: v.string(),
+    language: v.string(),
+    status: v.union(
+      v.literal("queued"), v.literal("processing"), v.literal("ready"),
+      v.literal("failed"), v.literal("superseded"),
+    ),
+    attemptCount: v.number(),
+    spanCount: v.number(),
+    characterCount: v.number(),
+    meanConfidence: v.optional(v.number()),
+    phase: v.optional(v.union(
+      v.literal("loading_render"), v.literal("loading_engine"),
+      v.literal("recognizing"), v.literal("persisting"),
+    )),
+    lastError: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_page_version", ["pageId", "ocrVersion"])
     .index("by_record_status", ["engineeringRecordId", "status", "updatedAt"])
     .index("by_project_updated", ["projectId", "updatedAt"]),
 

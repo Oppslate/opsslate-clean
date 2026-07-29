@@ -241,3 +241,25 @@ test("Cutover Stage 2 keeps materialized channels shadow-only and coverage-compl
     assert.doesNotMatch(consumer, /heliosEngineeringTextSpans|heliosEngineeringAssets/);
   }
 });
+
+test("Cutover Stage 3 OCR consumes only pinned canonical page renders", async () => {
+  const [schema, ocr, actions, planActions, geometryActions] = await Promise.all([
+    source("web/convex/schema.ts"),
+    source("web/convex/heliosEngineeringOcr.ts"),
+    source("web/convex/heliosEngineeringOcrActions.ts"),
+    source("web/convex/heliosPlanActions.ts"),
+    source("web/convex/heliosCivilGeometryActions.ts"),
+  ]);
+  assert.match(schema, /heliosEngineeringOcrJobs: defineTable/);
+  assert.match(ocr, /renderSha256/);
+  assert.match(ocr, /replaceOcrPageTextSpans/);
+  assert.match(actions, /buildHeliosCanonicalOcrSpans/);
+  assert.match(actions, /ctx\.storage\.get\(context\.render\.storageId\)/);
+  assert.doesNotMatch(actions, /originalStorageId|FPDF_LoadMemDocument|from "openai"|files\.create|responses\.create/);
+
+  // Stage 3 remains shadow-only. Reader cutover is a separate approval gate.
+  assert.match(planActions, /openai\.files\.create/);
+  assert.match(geometryActions, /openai\.files\.create/);
+  assert.doesNotMatch(planActions, /heliosEngineeringTextSpans/);
+  assert.doesNotMatch(geometryActions, /heliosEngineeringTextSpans/);
+});

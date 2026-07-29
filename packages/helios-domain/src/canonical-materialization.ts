@@ -1,4 +1,5 @@
 export const HELIOS_CANONICAL_MATERIALIZATION_VERSION = 1;
+export const HELIOS_CANONICAL_OCR_VERSION = 1;
 
 export type HeliosPdfTextItem = {
   text: string;
@@ -15,6 +16,12 @@ export type HeliosCanonicalTextSpan = {
   text: string;
   boundary: { x: number; y: number; width: number; height: number };
   confidence: number;
+};
+
+export type HeliosOcrLine = {
+  text: string;
+  confidence: number;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
 };
 
 function finite(value: number, label: string) {
@@ -116,3 +123,45 @@ export function buildHeliosCanonicalTextSpans(input: {
   }));
 }
 
+export function buildHeliosCanonicalOcrSpans(input: {
+  pixelWidth: number;
+  pixelHeight: number;
+  lines: HeliosOcrLine[];
+}) {
+  const pixelWidth = finite(input.pixelWidth, "OCR image width");
+  const pixelHeight = finite(input.pixelHeight, "OCR image height");
+  if (pixelWidth <= 0 || pixelHeight <= 0) {
+    throw new Error("OCR image dimensions must be positive.");
+  }
+  return input.lines
+    .map((line) => {
+      const x0 = clamp(finite(line.bbox.x0, "OCR x0"), 0, pixelWidth);
+      const y0 = clamp(finite(line.bbox.y0, "OCR y0"), 0, pixelHeight);
+      const x1 = clamp(finite(line.bbox.x1, "OCR x1"), x0, pixelWidth);
+      const y1 = clamp(finite(line.bbox.y1, "OCR y1"), y0, pixelHeight);
+      const text = line.text.replace(/\s+/g, " ").trim().slice(0, 2_000);
+      if (!text || x1 <= x0 || y1 <= y0) return null;
+      return {
+        text,
+        confidence: rounded(clamp(finite(line.confidence, "OCR confidence"), 0, 100)),
+        boundary: {
+          x: rounded(x0 / pixelWidth),
+          y: rounded(y0 / pixelHeight),
+          width: rounded((x1 - x0) / pixelWidth),
+          height: rounded((y1 - y0) / pixelHeight),
+        },
+      };
+    })
+    .filter((line): line is NonNullable<typeof line> => Boolean(line))
+    .sort((left, right) => {
+      const verticalTolerance = Math.max(left.boundary.height, right.boundary.height) * 0.45;
+      return Math.abs(left.boundary.y - right.boundary.y) <= verticalTolerance
+        ? left.boundary.x - right.boundary.x
+        : left.boundary.y - right.boundary.y;
+    })
+    .map((line, readingOrder): HeliosCanonicalTextSpan => ({
+      ...line,
+      spanKey: `ocr-v${HELIOS_CANONICAL_OCR_VERSION}:${readingOrder}`,
+      readingOrder,
+    }));
+}
