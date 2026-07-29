@@ -124,6 +124,13 @@ export function getHeliosEuclidReviewTarget(
   return rows.find((row) => row.id === entityId);
 }
 
+export function listHeliosEuclidReviewTargets(model: HeliosEuclidModel) {
+  return HELIOS_EUCLID_REVIEW_ENTITY_TYPES.flatMap((entityType) => {
+    const rows = model[entityCollection[entityType]] as unknown as Array<{ id: string }>;
+    return rows.map((target) => ({ entityType, target }));
+  });
+}
+
 export function heliosEuclidReviewTargetFingerprint(target: unknown) {
   return buildHeliosEngineeringParityFingerprint(target);
 }

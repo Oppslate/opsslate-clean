@@ -23,6 +23,10 @@ import type {
   HeliosEuclidReadinessStatus,
 } from "./euclid-integration.ts";
 import {
+  heliosEuclidReviewSetFingerprint,
+  type HeliosEuclidCandidateStatus,
+} from "./euclid-candidate.ts";
+import {
   HELIOS_EUCLID_REVIEW_ENTITY_TYPES,
   heliosEuclidReviewTargetFingerprint,
   summarizeHeliosEuclidReviewDecisions,
@@ -197,6 +201,24 @@ export type HeliosEuclidCockpitWorkspace = {
   };
   review: HeliosEuclidReviewSummary & {
     targetFingerprints: Record<string, string>;
+    reviewSetFingerprint: string;
+  };
+  candidate?: {
+    id: string;
+    status: HeliosEuclidCandidateStatus;
+    validationEligible: boolean;
+    downstreamEligible: false;
+    current: boolean;
+    reviewSetFingerprint: string;
+    candidateFingerprint: string;
+    totalTargetCount: number;
+    acceptedCount: number;
+    correctedCount: number;
+    deferredCount: number;
+    rejectedCount: number;
+    unreviewedCount: number;
+    blockingReasons: string[];
+    createdAt: number;
   };
   solution?: {
     id: string;
@@ -230,6 +252,22 @@ export type HeliosEuclidCockpitSource = {
     updatedAt: number;
   };
   reviewDecisions?: HeliosEuclidReviewDecision[];
+  candidateRecord?: {
+    id: string;
+    status: HeliosEuclidCandidateStatus;
+    validationEligible: boolean;
+    downstreamEligible: false;
+    reviewSetFingerprint: string;
+    candidateFingerprint: string;
+    totalTargetCount: number;
+    acceptedCount: number;
+    correctedCount: number;
+    deferredCount: number;
+    rejectedCount: number;
+    unreviewedCount: number;
+    blockingReasons: string[];
+    createdAt: number;
+  };
   solution?: HeliosEuclidIntegrationSolution;
   solutionRecord?: {
     id: string;
@@ -316,7 +354,16 @@ export function buildHeliosEuclidCockpitWorkspace(
       project: input.project,
       availability: "awaiting_model",
       message: "Civil Geometry has not produced a canonical Euclid model for this project yet.",
-      review: { total: 0, accepted: 0, corrected: 0, deferred: 0, rejected: 0, currentDecisions: [], targetFingerprints: {} },
+      review: {
+        total: 0,
+        accepted: 0,
+        corrected: 0,
+        deferred: 0,
+        rejected: 0,
+        currentDecisions: [],
+        targetFingerprints: {},
+        reviewSetFingerprint: heliosEuclidReviewSetFingerprint([]),
+      },
       alignments: [],
     };
   }
@@ -327,6 +374,7 @@ export function buildHeliosEuclidCockpitWorkspace(
   const selectedSummary = alignmentRows.find((row) => row.id === input.selectedAlignmentId) || alignmentRows[0];
   const solutionRecord = input.solutionRecord;
   const reviewSummary = summarizeHeliosEuclidReviewDecisions(input.reviewDecisions || []);
+  const reviewSetFingerprint = heliosEuclidReviewSetFingerprint(reviewSummary.currentDecisions);
   const targetFingerprints: Record<string, string> = {};
   const reviewCollections: Record<HeliosEuclidReviewEntityType, Array<{ id: string }>> = {
     alignment: input.model.alignments,
@@ -372,7 +420,11 @@ export function buildHeliosEuclidCockpitWorkspace(
       blockingIssueCount: input.modelRecord.blockingIssueCount,
       updatedAt: input.modelRecord.updatedAt,
     },
-    review: { ...reviewSummary, targetFingerprints },
+    review: { ...reviewSummary, targetFingerprints, reviewSetFingerprint },
+    candidate: input.candidateRecord ? {
+      ...input.candidateRecord,
+      current: input.candidateRecord.reviewSetFingerprint === reviewSetFingerprint,
+    } : undefined,
     solution: solutionRecord ? {
       ...solutionRecord,
       readyCount: input.solution?.readyCount || 0,

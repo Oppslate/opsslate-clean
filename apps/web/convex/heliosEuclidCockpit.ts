@@ -125,7 +125,7 @@ export const getWorkspace = internalQuery({
     if (!modelRecord || modelRecord.companyId !== companyId) {
       return buildHeliosEuclidCockpitWorkspace({ project: projectSummary(project) });
     }
-    const [solutionRecord, reviewRecords] = await Promise.all([
+    const [solutionRecord, reviewRecords, candidateRecord] = await Promise.all([
       ctx.db
         .query("heliosEuclidIntegrationSolutions")
         .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
@@ -134,10 +134,24 @@ export const getWorkspace = internalQuery({
         .query("heliosEuclidReviewDecisions")
         .withIndex("by_model_created", (query) => query.eq("euclidModelId", modelRecord._id))
         .collect(),
+      ctx.db
+        .query("heliosEuclidReviewCandidates")
+        .withIndex("by_model_created", (query) => query.eq("sourceEuclidModelId", modelRecord._id))
+        .order("desc")
+        .first(),
     ]);
     if (solutionRecord && (solutionRecord.companyId !== companyId || solutionRecord.euclidModelId !== modelRecord._id)) {
       throw new Error("Euclid cockpit identity is stale.");
     }
+    if (
+      candidateRecord &&
+      (
+        candidateRecord.companyId !== companyId ||
+        candidateRecord.projectId !== project._id ||
+        candidateRecord.sourceEuclidModelId !== modelRecord._id ||
+        candidateRecord.downstreamEligible !== false
+      )
+    ) throw new Error("Euclid reviewed candidate identity is invalid.");
     const model = await reconstructEuclidModel(ctx, modelRecord);
     const reviewDecisions: HeliosEuclidReviewDecision[] = reviewRecords.map((row) => ({
       id: String(row._id),
@@ -172,6 +186,22 @@ export const getWorkspace = internalQuery({
         updatedAt: modelRecord.updatedAt,
       },
       reviewDecisions,
+      candidateRecord: candidateRecord ? {
+        id: String(candidateRecord._id),
+        status: candidateRecord.status,
+        validationEligible: candidateRecord.validationEligible,
+        downstreamEligible: false,
+        reviewSetFingerprint: candidateRecord.reviewSetFingerprint,
+        candidateFingerprint: candidateRecord.candidateFingerprint,
+        totalTargetCount: candidateRecord.totalTargetCount,
+        acceptedCount: candidateRecord.acceptedCount,
+        correctedCount: candidateRecord.correctedCount,
+        deferredCount: candidateRecord.deferredCount,
+        rejectedCount: candidateRecord.rejectedCount,
+        unreviewedCount: candidateRecord.unreviewedCount,
+        blockingReasons: candidateRecord.blockingReasons,
+        createdAt: candidateRecord.createdAt,
+      } : undefined,
       solution,
       solutionRecord: solutionRecord ? {
         id: String(solutionRecord._id),

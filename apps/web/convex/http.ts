@@ -10,6 +10,7 @@ import {
   getHeliosAssistantWorkspace,
   getHeliosEstimate,
   getHeliosEuclidCockpit,
+  buildHeliosEuclidCandidate,
   recordHeliosEuclidReview,
   getHeliosTakeoff,
   finalizeHeliosPackage,
@@ -151,6 +152,11 @@ http.route({
   path: "/helios/v1/euclid/reviews",
   method: "POST",
   handler: recordHeliosEuclidReview,
+});
+http.route({
+  path: "/helios/v1/euclid/candidates",
+  method: "POST",
+  handler: buildHeliosEuclidCandidate,
 });
 http.route({
   path: "/helios/v1/estimates/get",

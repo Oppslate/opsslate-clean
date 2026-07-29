@@ -53,6 +53,17 @@ test("Euclid Stage 4G adds governed review without publishing quantities or Land
   assert.doesNotMatch(navigation, /label: "Civil Geometry"[\s\S]{0,120}disabled: true/);
 });
 
+test("Euclid Stage 4H exposes candidate status without changing the three-panel workflow", async () => {
+  const [component, cockpit] = await Promise.all([
+    read("../src/components/euclid-cockpit.tsx"),
+    read("../../../packages/helios-domain/src/euclid-cockpit.ts"),
+  ]);
+  assert.match(component, /ReviewedCandidateControl/);
+  assert.match(component, /Stage 4H/);
+  assert.match(cockpit, /candidateRecord/);
+  assert.match(cockpit, /reviewSetFingerprint/);
+});
+
 test("Euclid Stage 4F uses the approved three-panel OpsSlate workflow", async () => {
   const component = await read("../src/components/euclid-cockpit.tsx");
   assert.match(component, /AlignmentList/);

@@ -8,6 +8,7 @@ import type {
   HeliosEuclidReviewState,
 } from "@opsslate/helios-domain";
 import {
+  HELIOS_EUCLID_CANDIDATE_VERSION,
   HELIOS_EUCLID_REVIEW_VERSION,
   heliosEuclidCorrectableFields,
   type HeliosEuclidReviewAction,
@@ -46,13 +47,13 @@ import { useState, type ReactNode } from "react";
 import { formatTimestamp, humanizeStatus } from "@/lib/format";
 
 function stateClass(value: string) {
-  if (["ready", "passed", "accepted", "corrected", "complete"].includes(value)) {
+  if (["ready", "passed", "accepted", "corrected", "complete", "ready_for_validation"].includes(value)) {
     return "border-success/35 bg-success/10 text-success-foreground";
   }
   if (["blocked", "failed", "conflicted", "rejected", "incomplete"].includes(value)) {
     return "border-danger/40 bg-danger/10 text-danger-foreground";
   }
-  if (["review", "proposed", "complete_with_limitations", "partially_accepted"].includes(value)) {
+  if (["review", "proposed", "complete_with_limitations", "partially_accepted", "incomplete_review"].includes(value)) {
     return "border-warning/40 bg-warning/10 text-warning-foreground";
   }
   return "border-border bg-muted/25 text-muted-foreground";
@@ -267,10 +268,88 @@ function EntityReviewControls({ workspace, target }: {
   </>;
 }
 
+function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpitWorkspace }) {
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const candidate = workspace.candidate;
+
+  async function buildCandidate() {
+    if (!workspace.model) return;
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${workspace.project.id}/euclid/candidates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: HELIOS_EUCLID_CANDIDATE_VERSION,
+          requestId: crypto.randomUUID(),
+          euclidModelId: workspace.model.id,
+          modelFingerprint: workspace.model.modelFingerprint,
+          sourceFingerprint: workspace.model.sourceFingerprint,
+        }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Reviewed candidate could not be built.");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Reviewed candidate could not be built.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="mb-3 rounded-lg border border-orange-500/25 bg-orange-500/5 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <ShieldCheck className="size-4 text-orange-300" aria-hidden="true" />
+            Reviewed geometry candidate
+          </div>
+          <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+            Freeze the current review decisions into a separate candidate for deterministic validation. Source geometry remains unchanged.
+          </p>
+        </div>
+        {candidate && <StateBadge value={candidate.current ? candidate.status : "stale"} />}
+      </div>
+      {candidate && (
+        <>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
+            <Metric label="Resolved" value={`${candidate.acceptedCount + candidate.correctedCount}/${candidate.totalTargetCount}`} />
+            <Metric label="Corrections" value={String(candidate.correctedCount)} />
+            <Metric label="Validation" value={candidate.validationEligible ? "Eligible" : "Blocked"} />
+          </div>
+          {candidate.blockingReasons[0] && (
+            <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
+              {candidate.current ? candidate.blockingReasons[0] : "Review decisions changed after this candidate was built."}
+            </p>
+          )}
+        </>
+      )}
+      <Button
+        size="sm"
+        className="mt-3 h-8 text-[10px]"
+        disabled={pending || !workspace.model || candidate?.current}
+        onClick={buildCandidate}
+      >
+        <Layers3 aria-hidden="true" />
+        {pending ? "Building candidate…" : candidate?.current ? "Candidate current" : candidate ? "Refresh candidate" : "Build reviewed candidate"}
+      </Button>
+      {error && <p role="alert" className="mt-2 text-[10px] text-danger-foreground">{error}</p>}
+      <p className="mt-2 text-[9px] leading-4 text-muted-foreground">
+        Stage 4H never promotes this candidate or publishes quantities, estimates, or exchange files.
+      </p>
+    </div>
+  );
+}
+
 function GovernedIntelligenceRail({ projectId, detail, workspace }: { projectId: string; detail: HeliosEuclidCockpitAlignmentDetail; workspace: HeliosEuclidCockpitWorkspace }) {
   return <div className="flex min-h-0 flex-col border-t border-border xl:border-t-0">
     <section aria-label="Governed Euclid review" className="max-h-[46%] shrink-0 overflow-y-auto border-b border-border p-3">
-      <div className="mb-3 rounded-lg border border-orange-500/25 bg-orange-500/5 p-3"><div className="text-xs font-semibold">Governed estimator review</div><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Accept trusted controls in one click. Corrections, deferrals, and rejections require a reason and remain separate from the immutable source model.</p><div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="outline">{workspace.review.accepted} accepted</Badge><Badge variant="outline">{workspace.review.corrected} corrected</Badge><Badge variant="outline">{workspace.review.deferred} deferred</Badge><Badge variant="outline">{workspace.review.rejected} rejected</Badge></div></div>
+      <ReviewedCandidateControl workspace={workspace} />
+      <div className="mb-3 rounded-lg border border-border bg-background/25 p-3"><div className="text-xs font-semibold">Governed estimator review</div><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Accept trusted controls in one click. Corrections, deferrals, and rejections require a reason and remain separate from the immutable source model.</p><div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="outline">{workspace.review.accepted} accepted</Badge><Badge variant="outline">{workspace.review.corrected} corrected</Badge><Badge variant="outline">{workspace.review.deferred} deferred</Badge><Badge variant="outline">{workspace.review.rejected} rejected</Badge></div></div>
       <div className="space-y-2">{detail.reviewTargets.map((target) => <article key={`${target.entityType}:${target.entityId}`} className="rounded-lg border border-border bg-background/30 p-3"><div className="min-w-0"><div className="text-[9px] uppercase tracking-wider text-info-foreground">{humanizeStatus(target.entityType)}</div><h3 className="mt-0.5 truncate text-xs font-semibold">{target.label}</h3><p className="mt-1 truncate text-[10px] text-muted-foreground">{target.context}</p></div><div className="mt-2"><EntityReviewControls workspace={workspace} target={target} /></div></article>)}</div>
     </section>
     <IntelligenceRail projectId={projectId} detail={detail} />
@@ -299,7 +378,7 @@ export function EuclidCockpit({ workspace }: { workspace: HeliosEuclidCockpitWor
         <EngineeringWorkspace detail={selectedAlignment} />
         <GovernedIntelligenceRail projectId={workspace.project.id} detail={selectedAlignment} workspace={workspace} />
       </section>
-      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Review decisions are append-only overlays. Helios does not change source geometry or publish estimate quantities.</span><span className="shrink-0 font-mono">Model revision {workspace.model?.packageRevision} · Stage 4G</span></footer>
+      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Review decisions are append-only overlays; candidates are immutable derivatives. Helios does not change source geometry or publish estimate quantities.</span><span className="shrink-0 font-mono">Model revision {workspace.model?.packageRevision} · Stage 4H</span></footer>
     </div>
   );
 }

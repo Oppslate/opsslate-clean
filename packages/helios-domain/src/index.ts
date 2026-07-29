@@ -8,6 +8,7 @@ export * from "./euclid-contract.ts";
 export * from "./euclid-horizontal.ts";
 export * from "./euclid-integration.ts";
 export * from "./euclid-cockpit.ts";
+export * from "./euclid-candidate.ts";
 export * from "./euclid-review.ts";
 export * from "./euclid-vertical.ts";
 export * from "./euclid-shadow.ts";

@@ -1136,6 +1136,91 @@ export default defineSchema({
     .index("by_target_created", ["euclidModelId", "targetEntityType", "targetEntityId", "createdAt"])
     .index("by_decision_fingerprint", ["decisionFingerprint"]),
 
+  // Euclid Stage 4H: immutable reviewed candidates. These are derived overlays
+  // only and never replace heliosEuclidModels or drive quantity readers.
+  heliosEuclidReviewCandidates: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    sourceEuclidModelId: v.id("heliosEuclidModels"),
+    requestId: v.string(),
+    candidateKey: v.string(),
+    sourceModelFingerprint: v.string(),
+    sourceFingerprint: v.string(),
+    reviewSetFingerprint: v.string(),
+    candidateFingerprint: v.string(),
+    builder: v.string(),
+    builderVersion: v.number(),
+    status: v.union(
+      v.literal("incomplete_review"),
+      v.literal("blocked"),
+      v.literal("ready_for_validation"),
+    ),
+    validationEligible: v.boolean(),
+    downstreamEligible: v.boolean(),
+    totalTargetCount: v.number(),
+    acceptedCount: v.number(),
+    correctedCount: v.number(),
+    deferredCount: v.number(),
+    rejectedCount: v.number(),
+    unreviewedCount: v.number(),
+    blockingReasons: v.array(v.string()),
+    decisionCount: v.number(),
+    entityCount: v.number(),
+    chunkCount: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_project_created", ["projectId", "createdAt"])
+    .index("by_model_created", ["sourceEuclidModelId", "createdAt"])
+    .index("by_model_request", ["sourceEuclidModelId", "requestId"])
+    .index("by_candidate_key", ["candidateKey"]),
+
+  heliosEuclidReviewCandidateChunks: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    candidateId: v.id("heliosEuclidReviewCandidates"),
+    entityType: v.union(
+      v.literal("spatial_reference"),
+      v.literal("alignment"),
+      v.literal("control_point"),
+      v.literal("horizontal_element"),
+      v.literal("station_equation"),
+      v.literal("profile"),
+      v.literal("profile_point"),
+      v.literal("vertical_tangent"),
+      v.literal("vertical_curve"),
+      v.literal("typical_section"),
+      v.literal("cross_section_point"),
+      v.literal("structure"),
+      v.literal("invert"),
+      v.literal("material_layer"),
+      v.literal("relationship"),
+      v.literal("issue"),
+    ),
+    chunkIndex: v.number(),
+    entityCount: v.number(),
+    payloadJson: v.string(),
+    payloadFingerprint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_candidate", ["candidateId", "entityType", "chunkIndex"]),
+
+  heliosEuclidReviewCandidateDecisions: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    candidateId: v.id("heliosEuclidReviewCandidates"),
+    decisionId: v.id("heliosEuclidReviewDecisions"),
+    targetEntityType: v.string(),
+    targetEntityId: v.string(),
+    action: v.string(),
+    decisionFingerprint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_candidate", ["candidateId", "createdAt"])
+    .index("by_decision", ["decisionId", "createdAt"]),
+
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

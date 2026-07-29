@@ -109,6 +109,22 @@ test("Stage 4F exposes only the selected canonical alignment with traceable cont
     project: { id: "project-1", name: "Titus Culvert" },
     model: model(),
     modelRecord: { id: "model-record-1", packageRevision: 1, modelFingerprint: "parity:model", shadowMode: true, issueCount: 0, blockingIssueCount: 0, updatedAt: 2 },
+    candidateRecord: {
+      id: "candidate-1",
+      status: "incomplete_review",
+      validationEligible: false,
+      downstreamEligible: false,
+      reviewSetFingerprint: "parity:old-review-set",
+      candidateFingerprint: "parity:candidate",
+      totalTargetCount: 2,
+      acceptedCount: 0,
+      correctedCount: 0,
+      deferredCount: 0,
+      rejectedCount: 0,
+      unreviewedCount: 2,
+      blockingReasons: ["2 geometry records still require estimator review."],
+      createdAt: 3,
+    },
     solution: solution(),
     solutionRecord: { id: "solution-record-1", status: "review", solver: HELIOS_EUCLID_INTEGRATION_SOLVER, solverVersion: 1, nodeCount: 0, edgeCount: 0, checkCount: 0, completedAt: 3 },
   });
@@ -118,4 +134,6 @@ test("Stage 4F exposes only the selected canonical alignment with traceable cont
   assert.equal(workspace.selectedAlignment?.controlPoints[0]?.northing.value, 7810374.812);
   assert.equal(workspace.selectedAlignment?.evidence[0]?.documentId, "document-1");
   assert.equal(workspace.selectedAlignment?.evidence[0]?.physicalPageNumber, 2);
+  assert.equal(workspace.candidate?.current, false);
+  assert.equal(workspace.candidate?.downstreamEligible, false);
 });
