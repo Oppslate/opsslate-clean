@@ -158,11 +158,43 @@ export const syncEuclidRunShadow = internalMutation({
   handler: async (ctx, args) => {
     const basis = await loadBasis(ctx, args.geometryRunId);
     if (!basis) return { status: "not_ready" as const };
-    const records = (await ctx.db
-      .query("heliosCivilGeometryRecords")
-      .withIndex("by_run_created", (query) => query.eq("geometryRunId", basis.run._id))
-      .collect())
-      .filter((record) => !["rejected", "superseded"].includes(record.status));
+    const [geometryRecords, sheetDecisions, planPages] = await Promise.all([
+      ctx.db
+        .query("heliosCivilGeometryRecords")
+        .withIndex("by_run_created", (query) => query.eq("geometryRunId", basis.run._id))
+        .collect(),
+      ctx.db
+        .query("heliosPlanSheetDecisions")
+        .withIndex("by_run_current", (query) => query.eq("runId", basis.run.planRunId).eq("isCurrent", true))
+        .collect(),
+      ctx.db
+        .query("heliosPlanPages")
+        .withIndex("by_run_page", (query) => query.eq("runId", basis.run.planRunId))
+        .collect(),
+    ]);
+    const decisionBySheet = new Map(sheetDecisions.map((decision) => [decision.normalizedSheetNumber, decision]));
+    const sheetCounts = new Map<string, number>();
+    for (const page of planPages.filter((page) => page.pageKind === "sheet" && page.sheetNumber.trim())) {
+      const sheet = page.sheetNumber.trim().toUpperCase();
+      sheetCounts.set(sheet, (sheetCounts.get(sheet) || 0) + 1);
+    }
+    const unresolvedAuthority = [...sheetCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([sheet]) => sheet)
+      .filter((sheet) => decisionBySheet.get(sheet)?.status !== "resolved");
+    if (unresolvedAuthority.length) {
+      const message = `Resolve drawing authority before Euclid promotion: ${unresolvedAuthority.join(", ")}.`;
+      const id = await storeTerminalFailure(ctx, basis, message, "drawing_authority_unresolved");
+      return { status: "failed" as const, modelId: id };
+    }
+    const referencePageIds = new Set(
+      sheetDecisions
+        .filter((decision) => decision.status === "resolved")
+        .flatMap((decision) => decision.referencePageIds.map(String)),
+    );
+    const records = geometryRecords.filter((record) =>
+      !["rejected", "superseded"].includes(record.status) && !referencePageIds.has(String(record.pageId)),
+    );
     if (!records.length) {
       const id = await storeTerminalFailure(ctx, basis, "No active stored civil geometry records are available for Euclid shadow population.", "no_source_geometry");
       return { status: "failed" as const, modelId: id };

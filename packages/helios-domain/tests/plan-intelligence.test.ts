@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  derivePlanSheetConflicts,
   normalizePlanReviewInput,
+  planSheetAuthorityByPage,
   parsePlanDocumentIntelligence,
 } from "../src/plan-intelligence.ts";
 
@@ -109,4 +111,109 @@ test("requires calibration identity for calibration decisions", () => {
     () => normalizePlanReviewInput({ action: "approve_calibration" }),
     /Select a view calibration/,
   );
+});
+
+test("distinguishes a newer bid sheet from an older permit reference", () => {
+  const base = {
+    physicalPageNumber: 1,
+    pageKind: "sheet" as const,
+    printedPageNumber: "",
+    sheetNumber: "EXB-1",
+    title: "Excavation and Backfill Plan",
+    discipline: "Civil",
+    subdiscipline: "Earthwork",
+    revisionMarker: "",
+    addendumAssociation: "",
+    modality: "vector" as const,
+    confidence: 98,
+    unresolvedIssues: [],
+    views: [],
+  };
+  const pages = [
+    {
+      ...base,
+      id: "bid-page",
+      documentId: "bid-document",
+      documentName: "026 EXB-1 EXCAVATION AND BACKFILL PLAN.pdf",
+      issueDate: "June 2026",
+      titleBlockText: "PHASE: BID; DRAWING NO: EXB-1",
+    },
+    {
+      ...base,
+      id: "permit-page",
+      documentId: "permit-document",
+      documentName: "920000 Permits.pdf",
+      physicalPageNumber: 28,
+      issueDate: "February 2024",
+      titleBlockText: "FINAL; DRAWING NO: EXB-1",
+    },
+  ];
+
+  const conflicts = derivePlanSheetConflicts(pages);
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].conflictType, "version_conflict");
+  assert.equal(conflicts[0].suggestedPrimaryPageId, "bid-page");
+  assert.equal(conflicts[0].status, "unresolved");
+});
+
+test("applies an audited drawing decision without changing source pages", () => {
+  const pages = ["bid-page", "permit-page"].map((id, index) => ({
+    id,
+    documentId: `${id}-document`,
+    documentName: index ? "920000 Permits.pdf" : "EXB-1.pdf",
+    physicalPageNumber: index + 1,
+    pageKind: "sheet" as const,
+    printedPageNumber: "",
+    sheetNumber: "EXB-1",
+    title: "Excavation and Backfill Plan",
+    discipline: "Civil",
+    subdiscipline: "",
+    issueDate: index ? "February 2024" : "June 2026",
+    revisionMarker: "",
+    addendumAssociation: "",
+    modality: "vector" as const,
+    titleBlockText: index ? "FINAL" : "PHASE: BID",
+    confidence: 98,
+    unresolvedIssues: [],
+    views: [],
+  }));
+  const conflicts = derivePlanSheetConflicts(pages, [{
+    id: "decision-1",
+    normalizedSheetNumber: "EXB-1",
+    sheetNumber: "EXB-1",
+    decision: "apply_recommended",
+    status: "resolved",
+    primaryPageId: "bid-page",
+    referencePageIds: ["permit-page"],
+    reason: "Issued-for-bid drawing controls estimating.",
+    reviewerName: "Estimator",
+    reviewedAt: 1,
+  }]);
+  const roles = planSheetAuthorityByPage(conflicts);
+  assert.equal(conflicts[0].status, "resolved");
+  assert.equal(roles.get("bid-page"), "current_bid");
+  assert.equal(roles.get("permit-page"), "permit_reference");
+  assert.equal(pages[1].titleBlockText, "FINAL");
+});
+
+test("requires a page when manually selecting the current drawing", () => {
+  assert.throws(
+    () => normalizePlanReviewInput({
+      action: "resolve_sheet_conflict",
+      sheetNumber: "EXB-1",
+      decision: "use_as_current",
+    }),
+    /Select the current bid drawing/,
+  );
+  assert.deepEqual(normalizePlanReviewInput({
+    action: "resolve_sheet_conflict",
+    sheetNumber: "EXB-1",
+    decision: "use_as_current",
+    primaryPageId: "page-1",
+  }), {
+    action: "resolve_sheet_conflict",
+    sheetNumber: "EXB-1",
+    decision: "use_as_current",
+    primaryPageId: "page-1",
+  });
 });

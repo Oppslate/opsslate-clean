@@ -23,6 +23,8 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PlanSheetConflictReview } from "./plan-sheet-conflict-review";
+
 function readable(value: string) {
   return value.replaceAll("_", " ");
 }
@@ -44,6 +46,7 @@ export function PlanIntelligencePanel({
   const router = useRouter();
   const { toast } = useToast();
   const [saving, setSaving] = useState<string>();
+  const [openConflictId, setOpenConflictId] = useState<string>();
   const planBasis = bidBasis.categories.find((category) => category.category === "plans");
   const hasPlans = planBasis?.state === "received" && (planBasis.fileCount || 0) > 0;
   const processing = planSet && ["queued", "processing"].includes(planSet.status);
@@ -61,8 +64,10 @@ export function PlanIntelligencePanel({
       if (!response.ok) throw new Error(payload.error || "Plan-intelligence action failed.");
       toast(success, "success");
       router.refresh();
+      return true;
     } catch (error) {
       toast(error instanceof Error ? error.message : "Plan-intelligence action failed.", "error");
+      return false;
     } finally {
       setSaving(undefined);
     }
@@ -113,6 +118,9 @@ export function PlanIntelligencePanel({
   }
 
   const visiblePages = planSet.pages.slice(0, 40);
+  const unresolvedSheetConflicts = planSet.sheetConflicts.filter((conflict) => conflict.status !== "resolved");
+  const selectedConflict = planSet.sheetConflicts.find((conflict) => conflict.id === openConflictId);
+  const nonConflictIssues = planSet.issues.filter((issue) => !/(?:drawing (?:version|authority) conflict|duplicate sheet identifier)/i.test(issue));
   const unresolvedReferences = planSet.references.filter((reference) => reference.status === "unresolved").slice(0, 20);
   const proposedCalibrations = planSet.calibrations.filter((calibration) => ["proposed", "conflicted"].includes(calibration.status)).slice(0, 30);
 
@@ -154,15 +162,60 @@ export function PlanIntelligencePanel({
           ))}
         </div>
 
-        {planSet.issues.length > 0 && (
-          <div className="m-4 flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-100">
-            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <div>{planSet.issues.join(" ")}</div>
+        {(unresolvedSheetConflicts.length > 0 || nonConflictIssues.length > 0) && (
+          <div className="m-4 flex flex-col gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <div>
+                {unresolvedSheetConflicts.length > 0 && (
+                  <div className="font-semibold">
+                    {unresolvedSheetConflicts.length} drawing authority conflict{unresolvedSheetConflicts.length === 1 ? "" : "s"} require review.
+                  </div>
+                )}
+                {nonConflictIssues.length > 0 && <div className="mt-1 text-xs text-muted-foreground">{nonConflictIssues.join(" ")}</div>}
+              </div>
+            </div>
+            {unresolvedSheetConflicts[0] && (
+              <Button size="sm" variant="outline" onClick={() => setOpenConflictId(unresolvedSheetConflicts[0].id)}>
+                Review conflicts
+              </Button>
+            )}
           </div>
         )}
 
         {!processing && planSet.status !== "not_applicable_to_current_basis" && (
           <div className="divide-y divide-border">
+            {planSet.sheetConflicts.length > 0 && (
+              <details open={unresolvedSheetConflicts.length > 0} className="group">
+                <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 font-semibold hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+                  <span className="flex items-center gap-2"><AlertTriangle className="size-4 text-orange-300" aria-hidden="true" />Drawing authority</span>
+                  <span className="flex items-center gap-2 text-xs font-normal text-muted-foreground">{unresolvedSheetConflicts.length} open · {planSet.sheetConflicts.length - unresolvedSheetConflicts.length} resolved<ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" /></span>
+                </summary>
+                <div className="grid gap-2 border-t border-border p-4 md:grid-cols-2 xl:grid-cols-3">
+                  {planSet.sheetConflicts.map((conflict) => {
+                    const suggested = planSet.pages.find((page) => page.id === conflict.suggestedPrimaryPageId);
+                    const selected = planSet.pages.find((page) => page.id === conflict.primaryPageId);
+                    return (
+                      <article key={conflict.normalizedSheetNumber} className={`rounded-lg border p-3 ${conflict.status === "resolved" ? "border-emerald-500/25 bg-emerald-500/5" : "border-amber-500/25 bg-amber-500/5"}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-mono font-semibold text-orange-200">{conflict.sheetNumber}</div>
+                            <div className="mt-1 text-xs capitalize text-muted-foreground">{readable(conflict.conflictType)} · {conflict.pageIds.length} sources</div>
+                          </div>
+                          <Badge variant={conflict.status === "resolved" ? "secondary" : "destructive"} className="capitalize">{readable(conflict.status)}</Badge>
+                        </div>
+                        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                          {selected ? `Current: ${selected.documentName}` : suggested ? `Recommended: ${suggested.documentName}` : conflict.reason}
+                        </p>
+                        <Button size="sm" variant="outline" className="mt-3" onClick={() => setOpenConflictId(conflict.id)}>
+                          Review sources
+                        </Button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </details>
+            )}
             <details open className="group">
               <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 font-semibold hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                 <span className="flex items-center gap-2"><Map className="size-4 text-orange-300" aria-hidden="true" />Sheet inventory</span>
@@ -171,13 +224,14 @@ export function PlanIntelligencePanel({
               <div className="overflow-x-auto border-t border-border">
                 <table className="w-full min-w-[860px] text-left text-sm">
                   <thead className="bg-muted/25 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                    <tr><th className="px-4 py-2.5">Sheet</th><th className="px-4 py-2.5">Title</th><th className="px-4 py-2.5">Discipline</th><th className="px-4 py-2.5">Source</th><th className="px-4 py-2.5">Modality</th><th className="px-4 py-2.5">Views</th><th className="px-4 py-2.5">Confidence</th></tr>
+                    <tr><th className="px-4 py-2.5">Sheet</th><th className="px-4 py-2.5">Title</th><th className="px-4 py-2.5">Authority</th><th className="px-4 py-2.5">Discipline</th><th className="px-4 py-2.5">Source</th><th className="px-4 py-2.5">Modality</th><th className="px-4 py-2.5">Views</th><th className="px-4 py-2.5">Confidence</th></tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {visiblePages.map((page) => (
                       <tr key={page.id} className="hover:bg-muted/15">
                         <td className="px-4 py-3 font-mono font-semibold text-orange-200">{page.sheetNumber || `PDF ${page.physicalPageNumber}`}</td>
                         <td className="px-4 py-3"><div className="font-medium">{page.title || readable(page.pageKind)}</div>{page.unresolvedIssues.length > 0 && <div className="mt-1 text-xs text-amber-200">{page.unresolvedIssues[0]}</div>}</td>
+                        <td className="px-4 py-3"><Badge variant={page.authorityRole === "current_bid" ? "secondary" : "outline"} className="capitalize">{readable(page.authorityRole || "current_bid")}</Badge></td>
                         <td className="px-4 py-3 text-muted-foreground">{page.discipline || "—"}</td>
                         <td className="max-w-48 truncate px-4 py-3 text-muted-foreground" title={page.documentName}>{page.documentName} · p.{page.physicalPageNumber}</td>
                         <td className="px-4 py-3"><Badge variant="outline" className="capitalize">{page.modality}</Badge></td>
@@ -239,6 +293,15 @@ export function PlanIntelligencePanel({
           </div>
         )}
       </CardContent>
+      <PlanSheetConflictReview
+        projectId={projectId}
+        conflict={selectedConflict}
+        pages={planSet.pages}
+        open={Boolean(selectedConflict)}
+        saving={Boolean(saving)}
+        onOpenChange={(open) => { if (!open) setOpenConflictId(undefined); }}
+        onDecision={act}
+      />
     </Card>
   );
 }

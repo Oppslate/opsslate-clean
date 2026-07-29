@@ -50,6 +50,23 @@ export const HELIOS_PLAN_REVIEW_ACTIONS = [
   "request_reconstruction",
   "approve_calibration",
   "block_calibration",
+  "resolve_sheet_conflict",
+] as const;
+export const HELIOS_PLAN_SHEET_ROLES = [
+  "current_bid",
+  "permit_reference",
+  "superseded",
+  "unresolved",
+] as const;
+export const HELIOS_PLAN_SHEET_CONFLICT_TYPES = [
+  "version_conflict",
+  "identifier_collision",
+] as const;
+export const HELIOS_PLAN_SHEET_DECISIONS = [
+  "apply_recommended",
+  "use_as_current",
+  "keep_both",
+  "escalate",
 ] as const;
 
 export type HeliosPlanRunStatus = (typeof HELIOS_PLAN_RUN_STATUSES)[number];
@@ -60,6 +77,9 @@ export type HeliosPlanReferenceType = (typeof HELIOS_PLAN_REFERENCE_TYPES)[numbe
 export type HeliosPlanCalibrationSource = (typeof HELIOS_PLAN_CALIBRATION_SOURCES)[number];
 export type HeliosPlanCalibrationStatus = (typeof HELIOS_PLAN_CALIBRATION_STATUSES)[number];
 export type HeliosPlanReviewAction = (typeof HELIOS_PLAN_REVIEW_ACTIONS)[number];
+export type HeliosPlanSheetRole = (typeof HELIOS_PLAN_SHEET_ROLES)[number];
+export type HeliosPlanSheetConflictType = (typeof HELIOS_PLAN_SHEET_CONFLICT_TYPES)[number];
+export type HeliosPlanSheetDecisionAction = (typeof HELIOS_PLAN_SHEET_DECISIONS)[number];
 
 export type HeliosPlanBoundary = {
   x: number;
@@ -107,6 +127,36 @@ export type HeliosPlanPage = {
   confidence: number;
   unresolvedIssues: string[];
   views: HeliosPlanView[];
+  authorityRole?: HeliosPlanSheetRole;
+};
+
+export type HeliosPlanSheetDecision = {
+  id: string;
+  normalizedSheetNumber: string;
+  sheetNumber: string;
+  decision: HeliosPlanSheetDecisionAction;
+  status: "resolved" | "review_required" | "escalated";
+  primaryPageId?: string;
+  referencePageIds: string[];
+  reason: string;
+  reviewerName: string;
+  reviewedAt: number;
+};
+
+export type HeliosPlanSheetConflict = {
+  id: string;
+  normalizedSheetNumber: string;
+  sheetNumber: string;
+  conflictType: HeliosPlanSheetConflictType;
+  status: "unresolved" | "resolved" | "review_required" | "escalated";
+  pageIds: string[];
+  suggestedPrimaryPageId?: string;
+  primaryPageId?: string;
+  referencePageIds: string[];
+  reason: string;
+  decision?: HeliosPlanSheetDecisionAction;
+  reviewerName?: string;
+  reviewedAt?: number;
 };
 
 export type HeliosPlanReference = {
@@ -160,6 +210,7 @@ export type HeliosPlanSetIntelligence = {
   unresolvedReferenceCount: number;
   issues: string[];
   pages: HeliosPlanPage[];
+  sheetConflicts: HeliosPlanSheetConflict[];
   references: HeliosPlanReference[];
   calibrations: HeliosPlanCalibration[];
   createdAt: number;
@@ -170,7 +221,98 @@ export type HeliosPlanSetIntelligence = {
 export type HeliosPlanReviewInput = {
   action: HeliosPlanReviewAction;
   calibrationId?: string;
+  sheetNumber?: string;
+  decision?: HeliosPlanSheetDecisionAction;
+  primaryPageId?: string;
 };
+
+function normalizedSheetNumber(value: string) {
+  return value.trim().toUpperCase();
+}
+
+function normalizedTitle(value: string) {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+}
+
+function issueDateRank(value: string) {
+  const text = value.trim();
+  const iso = /^(\d{4})[-/](\d{1,2})(?:[-/]\d{1,2})?$/.exec(text);
+  if (iso) return Number(iso[1]) * 100 + Number(iso[2]);
+  const month = /^(JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUN(?:E)?|JUL(?:Y)?|AUG(?:UST)?|SEP(?:TEMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\s+(\d{4})$/i.exec(text);
+  if (!month) return 0;
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  return Number(month[2]) * 100 + months.indexOf(month[1].slice(0, 3).toUpperCase()) + 1;
+}
+
+function authorityScore(page: HeliosPlanPage) {
+  const source = `${page.documentName}\n${page.titleBlockText}\n${page.revisionMarker}`;
+  let score = issueDateRank(page.issueDate);
+  if (/\b(?:ISSUED[ -]FOR[ -]BID|BID[ -]PHASE|PHASE:\s*BID|BID)\b/i.test(source)) score += 1_000_000;
+  if (/PERMIT/i.test(page.documentName)) score -= 500_000;
+  if (/\b(?:SUPERSEDED|VOID|NOT FOR BIDDING)\b/i.test(source)) score -= 2_000_000;
+  return score;
+}
+
+function suggestedPrimary(pages: HeliosPlanPage[]) {
+  return [...pages].sort((left, right) =>
+    authorityScore(right) - authorityScore(left) ||
+    right.confidence - left.confidence ||
+    left.documentName.localeCompare(right.documentName),
+  )[0];
+}
+
+export function derivePlanSheetConflicts(
+  pages: HeliosPlanPage[],
+  decisions: HeliosPlanSheetDecision[] = [],
+): HeliosPlanSheetConflict[] {
+  const pagesBySheet = new Map<string, HeliosPlanPage[]>();
+  for (const page of pages) {
+    if (page.pageKind !== "sheet" || !page.sheetNumber.trim()) continue;
+    const key = normalizedSheetNumber(page.sheetNumber);
+    pagesBySheet.set(key, [...(pagesBySheet.get(key) || []), page]);
+  }
+  const decisionBySheet = new Map(decisions.map((decision) => [decision.normalizedSheetNumber, decision]));
+  return [...pagesBySheet.entries()].flatMap(([key, candidates]) => {
+    if (candidates.length < 2) return [];
+    const decision = decisionBySheet.get(key);
+    const suggestion = suggestedPrimary(candidates);
+    const titles = new Set(candidates.map((page) => normalizedTitle(page.title)).filter(Boolean));
+    const dates = new Set(candidates.map((page) => page.issueDate.trim().toUpperCase()).filter(Boolean));
+    const versionConflict = titles.size <= 1 && dates.size > 1;
+    const defaultReason = versionConflict
+      ? "The same drawing identifier and title occur in sources with different issue dates."
+      : "The same drawing identifier occurs on multiple source pages and requires an authority decision.";
+    const status = decision?.status === "resolved"
+      ? "resolved" as const
+      : decision?.status || "unresolved" as const;
+    return [{
+      id: decision?.id || `sheet-conflict:${key}`,
+      normalizedSheetNumber: key,
+      sheetNumber: candidates[0].sheetNumber,
+      conflictType: versionConflict ? "version_conflict" as const : "identifier_collision" as const,
+      status,
+      pageIds: candidates.map((page) => page.id),
+      suggestedPrimaryPageId: suggestion?.id,
+      primaryPageId: decision?.primaryPageId,
+      referencePageIds: decision?.referencePageIds || [],
+      reason: decision?.reason || defaultReason,
+      decision: decision?.decision,
+      reviewerName: decision?.reviewerName,
+      reviewedAt: decision?.reviewedAt,
+    }];
+  }).sort((left, right) => left.sheetNumber.localeCompare(right.sheetNumber));
+}
+
+export function planSheetAuthorityByPage(conflicts: HeliosPlanSheetConflict[]) {
+  const roles = new Map<string, HeliosPlanSheetRole>();
+  for (const conflict of conflicts) {
+    for (const pageId of conflict.pageIds) roles.set(pageId, "unresolved");
+    if (conflict.status !== "resolved" || !conflict.primaryPageId) continue;
+    roles.set(conflict.primaryPageId, "current_bid");
+    for (const pageId of conflict.referencePageIds) roles.set(pageId, "permit_reference");
+  }
+  return roles;
+}
 
 type RawPlanDocument = {
   sourcePageCount: number;
@@ -350,8 +492,16 @@ export function normalizePlanReviewInput(value: unknown): HeliosPlanReviewInput 
   const action = enumValue(value.action, HELIOS_PLAN_REVIEW_ACTIONS, "" as HeliosPlanReviewAction);
   if (!action) throw new Error("Select a valid plan-intelligence action.");
   const calibrationId = stringValue(value.calibrationId, 128) || undefined;
+  const sheetNumber = stringValue(value.sheetNumber, 120) || undefined;
+  const decision = enumValue(value.decision, HELIOS_PLAN_SHEET_DECISIONS, "" as HeliosPlanSheetDecisionAction) || undefined;
+  const primaryPageId = stringValue(value.primaryPageId, 128) || undefined;
   if (["approve_calibration", "block_calibration"].includes(action) && !calibrationId) {
     throw new Error("Select a view calibration.");
+  }
+  if (action === "resolve_sheet_conflict") {
+    if (!sheetNumber || !decision) throw new Error("Select a drawing conflict and decision.");
+    if (decision === "use_as_current" && !primaryPageId) throw new Error("Select the current bid drawing.");
+    return { action, sheetNumber, decision, primaryPageId };
   }
   return { action, calibrationId };
 }

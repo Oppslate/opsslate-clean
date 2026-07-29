@@ -1556,7 +1556,14 @@ export default defineSchema({
     packageId: v.id("heliosBidPackages"),
     runId: v.id("heliosPlanRuns"),
     calibrationId: v.optional(v.id("heliosPlanCalibrations")),
-    action: v.union(v.literal("request_reconstruction"), v.literal("approve_calibration"), v.literal("block_calibration")),
+    action: v.union(
+      v.literal("request_reconstruction"),
+      v.literal("approve_calibration"),
+      v.literal("block_calibration"),
+      v.literal("resolve_sheet_conflict"),
+    ),
+    sheetNumber: v.optional(v.string()),
+    primaryPageId: v.optional(v.id("heliosPlanPages")),
     reviewerUserId: v.id("users"),
     reviewerName: v.string(),
     previousValue: v.optional(v.string()),
@@ -1564,6 +1571,36 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_run_created", ["runId", "createdAt"]),
+
+  heliosPlanSheetDecisions: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    runId: v.id("heliosPlanRuns"),
+    normalizedSheetNumber: v.string(),
+    sheetNumber: v.string(),
+    decision: v.union(
+      v.literal("apply_recommended"),
+      v.literal("use_as_current"),
+      v.literal("keep_both"),
+      v.literal("escalate"),
+    ),
+    status: v.union(
+      v.literal("resolved"),
+      v.literal("review_required"),
+      v.literal("escalated"),
+    ),
+    primaryPageId: v.optional(v.id("heliosPlanPages")),
+    referencePageIds: v.array(v.id("heliosPlanPages")),
+    reason: v.string(),
+    reviewerUserId: v.id("users"),
+    reviewerName: v.string(),
+    isCurrent: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_run_current", ["runId", "isCurrent"])
+    .index("by_run_sheet_current", ["runId", "normalizedSheetNumber", "isCurrent"]),
 
   heliosCivilGeometryRuns: defineTable({
     companyId: v.id("companies"),

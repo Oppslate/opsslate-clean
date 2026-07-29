@@ -126,7 +126,7 @@ export function QuantityIntelligencePanel({
     }, "Governed measurement recorded for review.");
   }
 
-  const sourceViews = planSet.pages.flatMap((page) => page.views
+  const sourceViews = planSet.pages.filter((page) => page.authorityRole !== "permit_reference").flatMap((page) => page.views
     .filter((view) => view.measurable)
     .map((view) => ({
       page,

@@ -40,6 +40,17 @@ async function currentBasis(ctx: QueryCtx | MutationCtx, companyId: Id<"companie
   return { project, packageRecord, planRun, estimate };
 }
 
+async function referencePageIdsForPlanRun(ctx: QueryCtx | MutationCtx, runId: Id<"heliosPlanRuns">) {
+  const decisions = await ctx.db.query("heliosPlanSheetDecisions")
+    .withIndex("by_run_current", (query) => query.eq("runId", runId).eq("isCurrent", true))
+    .collect();
+  return new Set(
+    decisions
+      .filter((decision) => decision.status === "resolved")
+      .flatMap((decision) => decision.referencePageIds.map(String)),
+  );
+}
+
 async function ensureRun(
   ctx: MutationCtx,
   companyId: Id<"companies">,
@@ -158,9 +169,11 @@ export const getWorkspace = internalQuery({
       ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", basis.planRun._id)).collect(),
       ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", basis.planRun._id)).collect(),
     ]);
+    const referencePageIds = await referencePageIdsForPlanRun(ctx, basis.planRun._id);
     const geometryRecords = geometryRun
       ? await ctx.db.query("heliosCivilGeometryRecords").withIndex("by_run_created", (query) => query.eq("geometryRunId", geometryRun._id)).collect()
       : [];
+    const activeGeometryRecords = geometryRecords.filter((record) => !referencePageIds.has(String(record.pageId)));
     const sections = new Map(sectionRows.map((row) => [row._id, row]));
     const payItems = new Map(payItemRows.map((row) => [row._id, row]));
     const pageMap = new Map(pages.map((row) => [row._id, row]));
@@ -214,9 +227,10 @@ export const getWorkspace = internalQuery({
       })),
       geometry: geometryRun ? {
         id: String(geometryRun._id), planRunId: String(geometryRun.planRunId), packageRevision: geometryRun.packageRevision,
-        status: geometryRun.status, sourceDocumentCount: geometryRun.sourceDocumentCount, recordCount: geometryRun.recordCount,
-        acceptedRecordCount: geometryRun.acceptedRecordCount, unresolvedIssueCount: geometryRun.unresolvedIssueCount,
-        records: geometryRecords.map((row) => {
+        status: geometryRun.status, sourceDocumentCount: geometryRun.sourceDocumentCount, recordCount: activeGeometryRecords.length,
+        acceptedRecordCount: activeGeometryRecords.filter((record) => record.status === "accepted").length,
+        unresolvedIssueCount: activeGeometryRecords.reduce((sum, record) => sum + record.unresolvedIssues.length, 0),
+        records: activeGeometryRecords.map((row) => {
           const page = pageMap.get(row.pageId); const view = page?.views.find((candidate) => candidate.viewKey === row.viewKey);
           return {
             id: String(row._id), geometryRunId: String(row.geometryRunId), pageId: String(row.pageId), viewKey: row.viewKey,
@@ -254,6 +268,10 @@ export const mutateTakeoff = internalMutation({
       const pageId = ctx.db.normalizeId("heliosPlanPages", draft.pageId);
       const page = pageId ? await ctx.db.get(pageId) : null;
       if (!page || page.companyId !== companyId || page.runId !== basis.planRun._id) throw new Error("Current plan page not found.");
+      const referencePageIds = await referencePageIdsForPlanRun(ctx, basis.planRun._id);
+      if (referencePageIds.has(String(page._id))) {
+        throw new Error("This drawing is retained as reference evidence and cannot control a new takeoff measurement.");
+      }
       const view = page.views.find((candidate) => candidate.viewKey === draft.viewKey);
       if (!view) throw new Error("Current plan view not found.");
       let calibrationId: Id<"heliosPlanCalibrations"> | undefined;

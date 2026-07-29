@@ -319,8 +319,18 @@ export const loadAnswerContext = internalQuery({
     const pages = planRun
       ? await ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", planRun._id)).collect()
       : [];
+    const planSheetDecisions = planRun
+      ? await ctx.db.query("heliosPlanSheetDecisions")
+          .withIndex("by_run_current", (query) => query.eq("runId", planRun._id).eq("isCurrent", true))
+          .collect()
+      : [];
+    const referencePageIds = new Set(
+      planSheetDecisions
+        .filter((decision) => decision.status === "resolved")
+        .flatMap((decision) => decision.referencePageIds.map(String)),
+    );
     const pageMap = new Map(pages.map((page) => [page._id, page]));
-    for (const page of pages
+    for (const page of pages.filter((row) => !referencePageIds.has(String(row._id)))
       .map((row) => ({ row, score: relevance(`${row.sheetNumber} ${row.title} ${row.discipline} ${row.titleBlockText}`, terms) }))
       .filter((item) => item.score > 0).sort((left, right) => right.score - left.score).slice(0, 12)) {
       addSource({
@@ -338,7 +348,9 @@ export const loadAnswerContext = internalQuery({
     const geometryRecords = geometryRun
       ? await ctx.db.query("heliosCivilGeometryRecords").withIndex("by_run_created", (query) => query.eq("geometryRunId", geometryRun._id)).collect()
       : [];
-    for (const record of geometryRecords.filter((row) => row.status !== "rejected" && row.status !== "superseded")) {
+    for (const record of geometryRecords.filter((row) =>
+      row.status !== "rejected" && row.status !== "superseded" && !referencePageIds.has(String(row.pageId)),
+    )) {
       const page = pageMap.get(record.pageId);
       if (station !== undefined) {
         const profile = interpolateVerticalElevation(record.verticalPoints, station);

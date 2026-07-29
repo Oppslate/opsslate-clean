@@ -1,12 +1,17 @@
 import {
+  derivePlanSheetConflicts,
   normalizePlanReviewInput,
   parsePlanDocumentIntelligence,
+  planSheetAuthorityByPage,
+  type HeliosPlanPage,
   type HeliosPlanReviewInput,
+  type HeliosPlanSheetDecision,
+  type HeliosPlanViewType,
 } from "@opsslate/helios-domain";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
 
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
   internalMutation,
   internalQuery,
@@ -18,7 +23,7 @@ import {
   type HeliosPrincipalArgs,
 } from "./heliosAuthorization";
 import { deriveProjectBidBasis } from "./heliosBidBasis";
-import { schedulePlanRunShadow } from "./heliosEngineeringShadowSchedule";
+import { scheduleGeometryRunShadow, schedulePlanRunShadow } from "./heliosEngineeringShadowSchedule";
 
 const PROCESSING_VERSION = 1;
 
@@ -27,6 +32,49 @@ const startPlanDocumentReference = makeFunctionReference<
   { jobId: Id<"heliosPlanJobs"> },
   null
 >("heliosPlanActions:startPlanDocument");
+
+function domainPlanPage(page: Doc<"heliosPlanPages">): HeliosPlanPage {
+  return {
+    id: String(page._id),
+    documentId: String(page.documentId),
+    documentName: page.documentName,
+    physicalPageNumber: page.physicalPageNumber,
+    pageKind: page.pageKind,
+    printedPageNumber: page.printedPageNumber,
+    sheetNumber: page.sheetNumber,
+    title: page.title,
+    discipline: page.discipline,
+    subdiscipline: page.subdiscipline,
+    issueDate: page.issueDate,
+    revisionMarker: page.revisionMarker,
+    addendumAssociation: page.addendumAssociation,
+    modality: page.modality,
+    titleBlockBoundary: page.titleBlockBoundary,
+    titleBlockText: page.titleBlockText,
+    confidence: page.confidence,
+    unresolvedIssues: page.unresolvedIssues,
+    views: page.views.map((view) => ({
+      ...view,
+      viewType: view.viewType as HeliosPlanViewType,
+      scaleCandidates: [],
+    })),
+  };
+}
+
+function domainSheetDecision(decision: Doc<"heliosPlanSheetDecisions">): HeliosPlanSheetDecision {
+  return {
+    id: String(decision._id),
+    normalizedSheetNumber: decision.normalizedSheetNumber,
+    sheetNumber: decision.sheetNumber,
+    decision: decision.decision,
+    status: decision.status,
+    primaryPageId: decision.primaryPageId ? String(decision.primaryPageId) : undefined,
+    referencePageIds: decision.referencePageIds.map(String),
+    reason: decision.reason,
+    reviewerName: decision.reviewerName,
+    reviewedAt: decision.updatedAt,
+  };
+}
 
 async function ownedProject(
   ctx: MutationCtx,
@@ -137,9 +185,18 @@ async function finalizeRun(ctx: MutationCtx, runId: Id<"heliosPlanRuns">) {
   const pages = await ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", runId)).collect();
   const references = await ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
   const calibrations = await ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", runId)).collect();
+  const sheetDecisions = await ctx.db.query("heliosPlanSheetDecisions")
+    .withIndex("by_run_current", (query) => query.eq("runId", runId).eq("isCurrent", true))
+    .collect();
+  const sheetConflicts = derivePlanSheetConflicts(
+    pages.map(domainPlanPage),
+    sheetDecisions.map(domainSheetDecision),
+  );
+  const authorityByPage = planSheetAuthorityByPage(sheetConflicts);
   const pagesBySheet = new Map<string, typeof pages>();
   for (const page of pages.filter((candidate) => candidate.sheetNumber)) {
     const key = page.sheetNumber.trim().toUpperCase();
+    if (authorityByPage.get(String(page._id)) === "permit_reference") continue;
     pagesBySheet.set(key, [...(pagesBySheet.get(key) || []), page]);
   }
   for (const reference of references) {
@@ -162,14 +219,17 @@ async function finalizeRun(ctx: MutationCtx, runId: Id<"heliosPlanRuns">) {
   const approvedViewKeys = new Set(
     calibrations.filter((calibration) => calibration.status === "approved").map((calibration) => `${calibration.pageId}:${calibration.viewKey}`),
   );
-  const duplicateSheets = [...pagesBySheet.entries()].filter(([, rows]) => rows.length > 1).map(([sheet]) => sheet);
   const failedJobs = jobs.filter((job) => job.status === "failed");
   const unresolvedReferenceCount = references.filter((reference) => {
     if (!reference.targetSheetNumber) return false;
     return (pagesBySheet.get(reference.targetSheetNumber.trim().toUpperCase()) || []).length !== 1;
   }).length;
   const issues = [
-    ...duplicateSheets.map((sheet) => `Duplicate sheet identifier requires review: ${sheet}.`),
+    ...sheetConflicts.filter((conflict) => conflict.status !== "resolved").map((conflict) =>
+      conflict.status === "escalated"
+        ? `Drawing authority conflict escalated: ${conflict.sheetNumber}.`
+        : `Drawing version conflict requires review: ${conflict.sheetNumber}.`,
+    ),
     ...failedJobs.map((job) => `Plan document failed: ${job.error || "analysis unavailable"}`),
   ];
   const now = Date.now();
@@ -199,6 +259,93 @@ export const reviewPlanIntelligence = internalMutation({
     const input = normalizePlanReviewInput(args.input) as HeliosPlanReviewInput;
     if (input.action === "request_reconstruction") return createPlanRun(ctx, args.principal, args.projectId);
     const { user, companyId, project } = await ownedProject(ctx, args.principal, args.projectId);
+    if (input.action === "resolve_sheet_conflict") {
+      if (!project.activePackageId) throw new Error("Current bid package not found.");
+      const run = await ctx.db.query("heliosPlanRuns")
+        .withIndex("by_package_current", (query) => query.eq("packageId", project.activePackageId!).eq("isCurrent", true))
+        .first();
+      if (!run) throw new Error("Current plan reconstruction not found.");
+      const [pages, decisions] = await Promise.all([
+        ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", run._id)).collect(),
+        ctx.db.query("heliosPlanSheetDecisions")
+          .withIndex("by_run_current", (query) => query.eq("runId", run._id).eq("isCurrent", true))
+          .collect(),
+      ]);
+      const normalizedSheet = input.sheetNumber!.trim().toUpperCase();
+      const conflicts = derivePlanSheetConflicts(pages.map(domainPlanPage), decisions.map(domainSheetDecision));
+      const conflict = conflicts.find((candidate) => candidate.normalizedSheetNumber === normalizedSheet);
+      if (!conflict) throw new Error("Drawing conflict not found in the current plan revision.");
+      const candidatePageIds = conflict.pageIds
+        .map((value) => ctx.db.normalizeId("heliosPlanPages", value))
+        .filter((value): value is Id<"heliosPlanPages"> => Boolean(value));
+      const requestedPrimary = input.decision === "apply_recommended"
+        ? conflict.suggestedPrimaryPageId
+        : input.primaryPageId;
+      const primaryPageId = requestedPrimary
+        ? ctx.db.normalizeId("heliosPlanPages", requestedPrimary) || undefined
+        : undefined;
+      if (primaryPageId && !candidatePageIds.some((pageId) => pageId === primaryPageId)) {
+        throw new Error("The selected drawing is not part of this conflict.");
+      }
+      if (["apply_recommended", "use_as_current"].includes(input.decision!) && !primaryPageId) {
+        throw new Error("A current bid drawing could not be established.");
+      }
+      const status = ["apply_recommended", "use_as_current"].includes(input.decision!)
+        ? "resolved" as const
+        : input.decision === "escalate" ? "escalated" as const : "review_required" as const;
+      const referencePageIds = primaryPageId
+        ? candidatePageIds.filter((pageId) => pageId !== primaryPageId)
+        : [];
+      const primaryPage = primaryPageId ? pages.find((page) => page._id === primaryPageId) : undefined;
+      const reason = input.decision === "apply_recommended"
+        ? `Estimator accepted the recommended current bid drawing: ${primaryPage?.documentName || conflict.sheetNumber}.`
+        : input.decision === "use_as_current"
+          ? `Estimator classified ${primaryPage?.documentName || conflict.sheetNumber} as the current bid drawing.`
+          : input.decision === "keep_both"
+            ? "Estimator retained both drawings for further comparison; downstream authority remains unresolved."
+            : "Estimator escalated the drawing authority conflict for project-team resolution.";
+      const existing = decisions.find((decision) => decision.normalizedSheetNumber === normalizedSheet);
+      const now = Date.now();
+      if (existing) await ctx.db.patch(existing._id, { isCurrent: false, updatedAt: now });
+      const decisionId = await ctx.db.insert("heliosPlanSheetDecisions", {
+        companyId,
+        projectId: project._id,
+        packageId: run.packageId,
+        runId: run._id,
+        normalizedSheetNumber: normalizedSheet,
+        sheetNumber: conflict.sheetNumber,
+        decision: input.decision!,
+        status,
+        primaryPageId,
+        referencePageIds,
+        reason,
+        reviewerUserId: user._id,
+        reviewerName: user.name,
+        isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("heliosPlanReviewEvents", {
+        companyId,
+        projectId: project._id,
+        packageId: run.packageId,
+        runId: run._id,
+        action: "resolve_sheet_conflict",
+        sheetNumber: conflict.sheetNumber,
+        primaryPageId,
+        reviewerUserId: user._id,
+        reviewerName: user.name,
+        previousValue: existing?.decision,
+        decisionValue: input.decision!,
+        createdAt: now,
+      });
+      const geometryRun = await ctx.db.query("heliosCivilGeometryRuns")
+        .withIndex("by_plan_current", (query) => query.eq("planRunId", run._id).eq("isCurrent", true))
+        .first();
+      if (geometryRun) await scheduleGeometryRunShadow(ctx, geometryRun._id);
+      await finalizeRun(ctx, run._id);
+      return { runId: String(run._id), decisionId: String(decisionId), status };
+    }
     const calibrationId = ctx.db.normalizeId("heliosPlanCalibrations", input.calibrationId!);
     if (!calibrationId) throw new Error("Calibration not found.");
     const calibration = await ctx.db.get(calibrationId);

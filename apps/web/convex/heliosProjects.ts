@@ -5,13 +5,18 @@ import {
   HELIOS_BID_BASIS_CATEGORIES,
   HELIOS_BID_BASIS_PROFILES,
   canonicalPdfFileName,
+  derivePlanSheetConflicts,
   deriveHeliosBidBasis,
   normalizeProjectInput,
+  planSheetAuthorityByPage,
   sha256MatchesStorageDigest,
   type HeliosBidBasisAvailabilityState,
   type HeliosBidBasisCategory,
   type HeliosBidBasisProfileType,
   type HeliosFindingReviewStatus,
+  type HeliosPlanPage,
+  type HeliosPlanSheetDecision,
+  type HeliosPlanViewType,
 } from "@opsslate/helios-domain";
 import { makeFunctionReference } from "convex/server";
 import { v } from "convex/values";
@@ -522,7 +527,7 @@ export const getProject = internalQuery({
           )
           .first()
       : null;
-    const [planPages, planReferences, planCalibrations] = planRun
+    const [planPages, planReferences, planCalibrations, planSheetDecisionRows] = planRun
       ? await Promise.all([
           ctx.db
             .query("heliosPlanPages")
@@ -536,8 +541,51 @@ export const getProject = internalQuery({
             .query("heliosPlanCalibrations")
             .withIndex("by_run", (query) => query.eq("runId", planRun._id))
             .take(500),
+          ctx.db
+            .query("heliosPlanSheetDecisions")
+            .withIndex("by_run_current", (query) => query.eq("runId", planRun._id).eq("isCurrent", true))
+            .collect(),
         ])
-      : [[], [], []];
+      : [[], [], [], []];
+    const serializedPlanPages: HeliosPlanPage[] = planPages.map((page) => ({
+      id: String(page._id),
+      documentId: String(page.documentId),
+      documentName: page.documentName,
+      physicalPageNumber: page.physicalPageNumber,
+      pageKind: page.pageKind,
+      printedPageNumber: page.printedPageNumber,
+      sheetNumber: page.sheetNumber,
+      title: page.title,
+      discipline: page.discipline,
+      subdiscipline: page.subdiscipline,
+      issueDate: page.issueDate,
+      revisionMarker: page.revisionMarker,
+      addendumAssociation: page.addendumAssociation,
+      modality: page.modality,
+      titleBlockBoundary: page.titleBlockBoundary,
+      titleBlockText: page.titleBlockText,
+      confidence: page.confidence,
+      unresolvedIssues: page.unresolvedIssues,
+      views: page.views.map((view) => ({
+        ...view,
+        viewType: view.viewType as HeliosPlanViewType,
+        scaleCandidates: [],
+      })),
+    }));
+    const serializedSheetDecisions: HeliosPlanSheetDecision[] = planSheetDecisionRows.map((decision) => ({
+      id: String(decision._id),
+      normalizedSheetNumber: decision.normalizedSheetNumber,
+      sheetNumber: decision.sheetNumber,
+      decision: decision.decision,
+      status: decision.status,
+      primaryPageId: decision.primaryPageId ? String(decision.primaryPageId) : undefined,
+      referencePageIds: decision.referencePageIds.map(String),
+      reason: decision.reason,
+      reviewerName: decision.reviewerName,
+      reviewedAt: decision.updatedAt,
+    }));
+    const planSheetConflicts = derivePlanSheetConflicts(serializedPlanPages, serializedSheetDecisions);
+    const planAuthorityByPage = planSheetAuthorityByPage(planSheetConflicts);
     const planSet = planRun
       ? {
           id: String(planRun._id),
@@ -558,27 +606,11 @@ export const getProject = internalQuery({
           blockedMeasurementCount: planRun.blockedMeasurementCount,
           unresolvedReferenceCount: planRun.unresolvedReferenceCount,
           issues: planRun.issues,
-          pages: planPages.map((page) => ({
-            id: String(page._id),
-            documentId: String(page.documentId),
-            documentName: page.documentName,
-            physicalPageNumber: page.physicalPageNumber,
-            pageKind: page.pageKind,
-            printedPageNumber: page.printedPageNumber,
-            sheetNumber: page.sheetNumber,
-            title: page.title,
-            discipline: page.discipline,
-            subdiscipline: page.subdiscipline,
-            issueDate: page.issueDate,
-            revisionMarker: page.revisionMarker,
-            addendumAssociation: page.addendumAssociation,
-            modality: page.modality,
-            titleBlockBoundary: page.titleBlockBoundary,
-            titleBlockText: page.titleBlockText,
-            confidence: page.confidence,
-            unresolvedIssues: page.unresolvedIssues,
-            views: page.views.map((view) => ({ ...view, scaleCandidates: [] })),
+          pages: serializedPlanPages.map((page) => ({
+            ...page,
+            authorityRole: planAuthorityByPage.get(page.id) || "current_bid" as const,
           })),
+          sheetConflicts: planSheetConflicts,
           references: planReferences.map((reference) => ({
             id: String(reference._id),
             sourcePageId: String(reference.sourcePageId),
