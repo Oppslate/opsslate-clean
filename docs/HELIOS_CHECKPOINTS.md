@@ -1266,3 +1266,46 @@ points.
   legacy upload-path removal: Not performed
 - Approval gate: stop before Civil Geometry canonical parity and any staged
   canonical-reader cutover
+
+### Canonical-record cutover - Civil Geometry golden parity
+
+- Application checkpoint: `638854a`
+- Scope: complete the Titus authoritative Civil Geometry baseline, mirror it
+  into immutable canonical provenance, and prove exact record parity before
+  changing any application reader
+- Golden authoritative run: 21/21 plan-source jobs completed, 50 reviewable
+  Civil Geometry records produced, and zero failed jobs; 88 unresolved
+  engineering issues remain visible for governed estimator review
+- Canonical parity: 50 authoritative records equal 50 canonical records with
+  zero missing, unexpected, or fingerprint-mismatched identities; all source,
+  Document Intelligence, evidence, plan-page, view, calibration, reference,
+  and Civil Geometry parity areas pass
+- Cutover audit: `shadow_ready`, eight of eight downstream workflows eligible,
+  zero parity or coverage blockers, 179/179 usable plan pages text-ready, and
+  377/377 expected view crops current
+- Drawing authority: Cutover and Euclid now share one authority adapter and the
+  deterministic issued-for-bid-over-permit rule. ABT-1, EXB-1, and EXB-2 use
+  the June 2026 bid sheets while the February 2024 permit-package sheets remain
+  immutable references.
+- Euclid result: 47 current-bid geometry records produce a contract-valid
+  shadow model with 179 entities, 47 provenance links, and 11 bounded chunks;
+  the three permit-reference geometry records are excluded
+- Engineering state: the Euclid model is valid but conflicted. Horizontal,
+  vertical, and integration checks retain blocking/review findings; nothing
+  was auto-accepted, promoted, published, priced, or used to overwrite an
+  estimate.
+- Validation note: this golden baseline used the current legacy Civil Geometry
+  path one final time. The two duplicate PDF/API workflows remain present until
+  a separately approved canonical-reader cutover removes them.
+- Automated domain tests: 125 passed
+- Automated Helios security and boundary tests: 130 passed
+- Shared OpsSlate and Helios production builds, independent web TypeScript,
+  Convex function deployment, and stored cutover audit: Passed
+- Existing Document Intelligence, Plan Intelligence, Civil Geometry, WBS,
+  Estimate Builder, Cockpit 2.0, Ask Helios, takeoff, pricing, procurement,
+  evidence, risk, schedule, and LandXML readers: Unchanged
+- Original PDFs, accepted estimate decisions, owner quantities, fixed amounts,
+  pricing, procurement, production data, and current domains: Unchanged
+- Vercel deployment, production promotion, reader cutover, duplicate-path
+  removal, geometry acceptance, canonical promotion, and LandXML: Not performed
+- Approval gate: stop before the first staged canonical-reader cutover
