@@ -37,7 +37,7 @@ test("Euclid Stage 4G adds governed review without publishing quantities or Land
     read("../../web/convex/heliosEuclidReviews.ts"),
   ]);
   assert.match(component, /Governed review/);
-  assert.match(component, /append-only overlays/);
+  assert.match(component, /remain separate from the immutable source model/);
   assert.match(component, /euclid\/reviews/);
   assert.match(component, /Accept trusted controls in one click/);
   assert.match(route, /isSameOrigin/);
@@ -53,15 +53,17 @@ test("Euclid Stage 4G adds governed review without publishing quantities or Land
   assert.doesNotMatch(navigation, /label: "Civil Geometry"[\s\S]{0,120}disabled: true/);
 });
 
-test("Euclid Stage 4H exposes candidate status without changing the three-panel workflow", async () => {
+test("Euclid Stage 4I exposes candidate validation without changing the three-panel workflow", async () => {
   const [component, cockpit] = await Promise.all([
     read("../src/components/euclid-cockpit.tsx"),
     read("../../../packages/helios-domain/src/euclid-cockpit.ts"),
   ]);
   assert.match(component, /ReviewedCandidateControl/);
-  assert.match(component, /Stage 4H/);
+  assert.match(component, /Stage 4I/);
+  assert.match(component, /Validate candidate/);
   assert.match(cockpit, /candidateRecord/);
   assert.match(cockpit, /reviewSetFingerprint/);
+  assert.match(cockpit, /validationPassed/);
 });
 
 test("Euclid Stage 4F uses the approved three-panel OpsSlate workflow", async () => {

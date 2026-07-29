@@ -29,7 +29,7 @@ test("Stage 4H never promotes source geometry or publishes downstream records", 
   assert.doesNotMatch(mutation, /ctx\.db\.patch|ctx\.db\.delete/);
   assert.doesNotMatch(mutation, /heliosQuantity|heliosEstimate|LandXML|schedule/i);
   assert.match(component, /Build reviewed candidate/);
-  assert.match(component, /never promotes this candidate or publishes quantities, estimates, or exchange files/);
+  assert.match(component, /never promotes geometry or publishes downstream records/);
 });
 
 test("Stage 4H endpoints remain same-origin, authenticated, and gateway protected", async () => {

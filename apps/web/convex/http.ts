@@ -11,6 +11,7 @@ import {
   getHeliosEstimate,
   getHeliosEuclidCockpit,
   buildHeliosEuclidCandidate,
+  validateHeliosEuclidCandidate,
   recordHeliosEuclidReview,
   getHeliosTakeoff,
   finalizeHeliosPackage,
@@ -157,6 +158,11 @@ http.route({
   path: "/helios/v1/euclid/candidates",
   method: "POST",
   handler: buildHeliosEuclidCandidate,
+});
+http.route({
+  path: "/helios/v1/euclid/candidate-validations",
+  method: "POST",
+  handler: validateHeliosEuclidCandidate,
 });
 http.route({
   path: "/helios/v1/estimates/get",

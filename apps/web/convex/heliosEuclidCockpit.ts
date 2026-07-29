@@ -7,6 +7,7 @@ import {
   type HeliosEuclidEngineeringGraphNode,
   type HeliosEuclidIntegrationCheck,
   type HeliosEuclidIntegrationSolution,
+  type HeliosEuclidValidationDelta,
   type HeliosEuclidQuantityReadiness,
   type HeliosEuclidCockpitWorkspace,
   type HeliosEuclidReviewDecision,
@@ -153,6 +154,36 @@ export const getWorkspace = internalQuery({
       )
     ) throw new Error("Euclid reviewed candidate identity is invalid.");
     const model = await reconstructEuclidModel(ctx, modelRecord);
+    const validationRecord = candidateRecord
+      ? await ctx.db
+        .query("heliosEuclidCandidateValidations")
+        .withIndex("by_candidate_created", (query) => query.eq("candidateId", candidateRecord._id))
+        .order("desc")
+        .first()
+      : undefined;
+    let validationDeltas: HeliosEuclidValidationDelta[] = [];
+    if (validationRecord) {
+      if (
+        validationRecord.companyId !== companyId ||
+        validationRecord.projectId !== project._id ||
+        validationRecord.candidateId !== candidateRecord?._id ||
+        validationRecord.promotionEligible !== false ||
+        validationRecord.downstreamEligible !== false
+      ) throw new Error("Euclid candidate validation identity is invalid.");
+      const chunks = await ctx.db
+        .query("heliosEuclidCandidateValidationChunks")
+        .withIndex("by_validation", (query) => query.eq("validationId", validationRecord._id))
+        .collect();
+      if (chunks.length !== validationRecord.chunkCount) throw new Error("Euclid candidate validation chunks are incomplete.");
+      for (const chunk of chunks) {
+        const payload = JSON.parse(chunk.payloadJson) as unknown;
+        if (!Array.isArray(payload) || payload.length !== chunk.itemCount) throw new Error("Euclid candidate validation chunk count is invalid.");
+        if (buildHeliosEngineeringParityFingerprint(payload) !== chunk.payloadFingerprint) throw new Error("Euclid candidate validation chunk fingerprint is invalid.");
+        if (chunk.resultType === "delta") validationDeltas.push(...payload as HeliosEuclidValidationDelta[]);
+      }
+      if (validationDeltas.length !== validationRecord.changedCount) throw new Error("Euclid candidate validation delta total is inconsistent.");
+      validationDeltas = validationDeltas.sort((left, right) => left.domain.localeCompare(right.domain) || left.scopeId.localeCompare(right.scopeId) || left.code.localeCompare(right.code));
+    }
     const reviewDecisions: HeliosEuclidReviewDecision[] = reviewRecords.map((row) => ({
       id: String(row._id),
       version: 1,
@@ -201,6 +232,28 @@ export const getWorkspace = internalQuery({
         unreviewedCount: candidateRecord.unreviewedCount,
         blockingReasons: candidateRecord.blockingReasons,
         createdAt: candidateRecord.createdAt,
+        validation: validationRecord ? {
+          id: String(validationRecord._id),
+          status: validationRecord.status,
+          validationPassed: validationRecord.validationPassed,
+          promotionEligible: false,
+          downstreamEligible: false,
+          candidateFingerprint: validationRecord.candidateFingerprint,
+          reviewSetFingerprint: validationRecord.reviewSetFingerprint,
+          changedCount: validationRecord.changedCount,
+          improvedCount: validationRecord.improvedCount,
+          degradedCount: validationRecord.degradedCount,
+          horizontalStatus: validationRecord.horizontalStatus,
+          verticalStatus: validationRecord.verticalStatus,
+          integrationStatus: validationRecord.integrationStatus,
+          readyCount: validationRecord.readyCount,
+          reviewCount: validationRecord.reviewCount,
+          blockedCount: validationRecord.blockedCount,
+          unavailableCount: validationRecord.unavailableCount,
+          blockingReasons: validationRecord.blockingReasons,
+          deltas: validationDeltas,
+          createdAt: validationRecord.createdAt,
+        } : undefined,
       } : undefined,
       solution,
       solutionRecord: solutionRecord ? {

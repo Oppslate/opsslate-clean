@@ -26,6 +26,10 @@ import {
   heliosEuclidReviewSetFingerprint,
   type HeliosEuclidCandidateStatus,
 } from "./euclid-candidate.ts";
+import type {
+  HeliosEuclidCandidateValidationStatus,
+  HeliosEuclidValidationDelta,
+} from "./euclid-candidate-validation.ts";
 import {
   HELIOS_EUCLID_REVIEW_ENTITY_TYPES,
   heliosEuclidReviewTargetFingerprint,
@@ -219,6 +223,27 @@ export type HeliosEuclidCockpitWorkspace = {
     unreviewedCount: number;
     blockingReasons: string[];
     createdAt: number;
+    validation?: {
+      id: string;
+      status: HeliosEuclidCandidateValidationStatus;
+      validationPassed: boolean;
+      promotionEligible: false;
+      downstreamEligible: false;
+      current: boolean;
+      changedCount: number;
+      improvedCount: number;
+      degradedCount: number;
+      horizontalStatus: string;
+      verticalStatus: string;
+      integrationStatus: string;
+      readyCount: number;
+      reviewCount: number;
+      blockedCount: number;
+      unavailableCount: number;
+      blockingReasons: string[];
+      deltas: HeliosEuclidValidationDelta[];
+      createdAt: number;
+    };
   };
   solution?: {
     id: string;
@@ -267,6 +292,28 @@ export type HeliosEuclidCockpitSource = {
     unreviewedCount: number;
     blockingReasons: string[];
     createdAt: number;
+    validation?: {
+      id: string;
+      status: HeliosEuclidCandidateValidationStatus;
+      validationPassed: boolean;
+      promotionEligible: false;
+      downstreamEligible: false;
+      candidateFingerprint: string;
+      reviewSetFingerprint: string;
+      changedCount: number;
+      improvedCount: number;
+      degradedCount: number;
+      horizontalStatus: string;
+      verticalStatus: string;
+      integrationStatus: string;
+      readyCount: number;
+      reviewCount: number;
+      blockedCount: number;
+      unavailableCount: number;
+      blockingReasons: string[];
+      deltas: HeliosEuclidValidationDelta[];
+      createdAt: number;
+    };
   };
   solution?: HeliosEuclidIntegrationSolution;
   solutionRecord?: {
@@ -424,6 +471,12 @@ export function buildHeliosEuclidCockpitWorkspace(
     candidate: input.candidateRecord ? {
       ...input.candidateRecord,
       current: input.candidateRecord.reviewSetFingerprint === reviewSetFingerprint,
+      validation: input.candidateRecord.validation ? {
+        ...input.candidateRecord.validation,
+        current:
+          input.candidateRecord.validation.candidateFingerprint === input.candidateRecord.candidateFingerprint &&
+          input.candidateRecord.validation.reviewSetFingerprint === reviewSetFingerprint,
+      } : undefined,
     } : undefined,
     solution: solutionRecord ? {
       ...solutionRecord,

@@ -9,6 +9,7 @@ import type {
 } from "@opsslate/helios-domain";
 import {
   HELIOS_EUCLID_CANDIDATE_VERSION,
+  HELIOS_EUCLID_CANDIDATE_VALIDATION_VERSION,
   HELIOS_EUCLID_REVIEW_VERSION,
   heliosEuclidCorrectableFields,
   type HeliosEuclidReviewAction,
@@ -270,13 +271,13 @@ function EntityReviewControls({ workspace, target }: {
 
 function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpitWorkspace }) {
   const router = useRouter();
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState<"build" | "validate" | null>(null);
   const [error, setError] = useState("");
   const candidate = workspace.candidate;
 
   async function buildCandidate() {
     if (!workspace.model) return;
-    setPending(true);
+    setPending("build");
     setError("");
     try {
       const response = await fetch(`/api/projects/${workspace.project.id}/euclid/candidates`, {
@@ -296,7 +297,33 @@ function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpi
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Reviewed candidate could not be built.");
     } finally {
-      setPending(false);
+      setPending(null);
+    }
+  }
+
+  async function validateCandidate() {
+    if (!candidate?.current || !candidate.validationEligible) return;
+    setPending("validate");
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${workspace.project.id}/euclid/candidate-validations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: HELIOS_EUCLID_CANDIDATE_VALIDATION_VERSION,
+          requestId: crypto.randomUUID(),
+          candidateId: candidate.id,
+          candidateFingerprint: candidate.candidateFingerprint,
+          reviewSetFingerprint: candidate.reviewSetFingerprint,
+        }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Reviewed candidate could not be validated.");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Reviewed candidate could not be validated.");
+    } finally {
+      setPending(null);
     }
   }
 
@@ -326,20 +353,60 @@ function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpi
               {candidate.current ? candidate.blockingReasons[0] : "Review decisions changed after this candidate was built."}
             </p>
           )}
+          {candidate.validation && (
+            <div className="mt-3 rounded-md border border-border bg-background/35 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold">Deterministic validation</span>
+                <StateBadge value={candidate.validation.current ? candidate.validation.status : "stale"} />
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+                <Metric label="Horizontal" value={humanizeStatus(candidate.validation.horizontalStatus)} />
+                <Metric label="Vertical" value={humanizeStatus(candidate.validation.verticalStatus)} />
+                <Metric label="Graph" value={humanizeStatus(candidate.validation.integrationStatus)} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <Badge variant="outline" className="text-[9px]">{candidate.validation.changedCount} changes</Badge>
+                <Badge variant="outline" className="text-[9px] text-success-foreground">{candidate.validation.improvedCount} improved</Badge>
+                <Badge variant="outline" className="text-[9px] text-danger-foreground">{candidate.validation.degradedCount} degraded</Badge>
+              </div>
+              {candidate.validation.deltas.slice(0, 3).map((row) => (
+                <div key={row.id} className="mt-2 border-l-2 border-border pl-2 text-[9px] leading-4 text-muted-foreground">
+                  <span className="font-semibold text-foreground">{humanizeStatus(row.code)}</span>
+                  {` · ${humanizeStatus(row.beforeStatus)} → ${humanizeStatus(row.afterStatus)}`}
+                  {row.beforeValue !== undefined || row.afterValue !== undefined ? ` · ${row.beforeValue ?? "—"} → ${row.afterValue ?? "—"} ${row.unit || ""}` : ""}
+                </div>
+              ))}
+              {candidate.validation.blockingReasons[0] && <p className="mt-2 text-[9px] leading-4 text-muted-foreground">{candidate.validation.blockingReasons[0]}</p>}
+            </div>
+          )}
         </>
       )}
-      <Button
-        size="sm"
-        className="mt-3 h-8 text-[10px]"
-        disabled={pending || !workspace.model || candidate?.current}
-        onClick={buildCandidate}
-      >
-        <Layers3 aria-hidden="true" />
-        {pending ? "Building candidate…" : candidate?.current ? "Candidate current" : candidate ? "Refresh candidate" : "Build reviewed candidate"}
-      </Button>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          className="h-8 text-[10px]"
+          disabled={pending !== null || !workspace.model || candidate?.current}
+          onClick={buildCandidate}
+        >
+          <Layers3 aria-hidden="true" />
+          {pending === "build" ? "Building candidate…" : candidate?.current ? "Candidate current" : candidate ? "Refresh candidate" : "Build reviewed candidate"}
+        </Button>
+        {candidate?.current && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-[10px]"
+            disabled={pending !== null || !candidate.validationEligible || candidate.validation?.current}
+            onClick={validateCandidate}
+          >
+            <ShieldCheck aria-hidden="true" />
+            {pending === "validate" ? "Validating…" : candidate.validation?.current ? "Validation current" : "Validate candidate"}
+          </Button>
+        )}
+      </div>
       {error && <p role="alert" className="mt-2 text-[10px] text-danger-foreground">{error}</p>}
       <p className="mt-2 text-[9px] leading-4 text-muted-foreground">
-        Stage 4H never promotes this candidate or publishes quantities, estimates, or exchange files.
+        Stage 4I reruns horizontal, vertical, and relationship validation but never promotes geometry or publishes downstream records.
       </p>
     </div>
   );
@@ -347,7 +414,7 @@ function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpi
 
 function GovernedIntelligenceRail({ projectId, detail, workspace }: { projectId: string; detail: HeliosEuclidCockpitAlignmentDetail; workspace: HeliosEuclidCockpitWorkspace }) {
   return <div className="flex min-h-0 flex-col border-t border-border xl:border-t-0">
-    <section aria-label="Governed Euclid review" className="max-h-[46%] shrink-0 overflow-y-auto border-b border-border p-3">
+    <section aria-label="Governed Euclid review" className="max-h-[58%] shrink-0 overflow-y-auto border-b border-border p-3">
       <ReviewedCandidateControl workspace={workspace} />
       <div className="mb-3 rounded-lg border border-border bg-background/25 p-3"><div className="text-xs font-semibold">Governed estimator review</div><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Accept trusted controls in one click. Corrections, deferrals, and rejections require a reason and remain separate from the immutable source model.</p><div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="outline">{workspace.review.accepted} accepted</Badge><Badge variant="outline">{workspace.review.corrected} corrected</Badge><Badge variant="outline">{workspace.review.deferred} deferred</Badge><Badge variant="outline">{workspace.review.rejected} rejected</Badge></div></div>
       <div className="space-y-2">{detail.reviewTargets.map((target) => <article key={`${target.entityType}:${target.entityId}`} className="rounded-lg border border-border bg-background/30 p-3"><div className="min-w-0"><div className="text-[9px] uppercase tracking-wider text-info-foreground">{humanizeStatus(target.entityType)}</div><h3 className="mt-0.5 truncate text-xs font-semibold">{target.label}</h3><p className="mt-1 truncate text-[10px] text-muted-foreground">{target.context}</p></div><div className="mt-2"><EntityReviewControls workspace={workspace} target={target} /></div></article>)}</div>
@@ -378,7 +445,7 @@ export function EuclidCockpit({ workspace }: { workspace: HeliosEuclidCockpitWor
         <EngineeringWorkspace detail={selectedAlignment} />
         <GovernedIntelligenceRail projectId={workspace.project.id} detail={selectedAlignment} workspace={workspace} />
       </section>
-      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Review decisions are append-only overlays; candidates are immutable derivatives. Helios does not change source geometry or publish estimate quantities.</span><span className="shrink-0 font-mono">Model revision {workspace.model?.packageRevision} · Stage 4H</span></footer>
+      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Review decisions, candidates, and validation results are traceable derivatives. Helios does not change source geometry or publish estimate quantities.</span><span className="shrink-0 font-mono">Model revision {workspace.model?.packageRevision} · Stage 4I</span></footer>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   normalizeTakeoffReviewInput,
   normalizeCivilGeometryReviewInput,
   normalizeHeliosEuclidCandidateBuildInput,
+  normalizeHeliosEuclidCandidateValidationInput,
   normalizeHeliosEuclidReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
@@ -20,6 +21,7 @@ import {
   type HeliosCivilGeometryReviewInput,
   type HeliosEuclidCockpitWorkspace,
   type HeliosEuclidCandidateBuildInput,
+  type HeliosEuclidCandidateValidationInput,
   type HeliosEuclidReviewInput,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
@@ -249,6 +251,11 @@ const buildEuclidCandidateReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidCandidateBuildInput },
   { candidateId: string; status: string; validationEligible: boolean; downstreamEligible: boolean }
 >("heliosEuclidCandidates:buildCandidate");
+const validateEuclidCandidateReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidCandidateValidationInput },
+  { validationId: string; status: string; validationPassed: boolean; promotionEligible: false; downstreamEligible: false; reused: boolean }
+>("heliosEuclidCandidateValidations:validateCandidate");
 const getEstimateWorkspaceReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal; projectId: string },
@@ -1150,6 +1157,25 @@ export const buildHeliosEuclidCandidate = httpAction(async (ctx, request) => {
     return json({ data }, 201);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Euclid reviewed candidate could not be built." }, 400);
+  }
+});
+
+export const validateHeliosEuclidCandidate = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid candidate validation request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(validateEuclidCandidateReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeHeliosEuclidCandidateValidationInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid candidate validation could not be completed." }, 400);
   }
 });
 

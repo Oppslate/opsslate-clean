@@ -1221,6 +1221,82 @@ export default defineSchema({
     .index("by_candidate", ["candidateId", "createdAt"])
     .index("by_decision", ["decisionId", "createdAt"]),
 
+  // Euclid Stage 4I: immutable deterministic validation results for reviewed
+  // candidates. They remain non-promotable and cannot drive downstream work.
+  heliosEuclidCandidateValidations: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    sourceEuclidModelId: v.id("heliosEuclidModels"),
+    candidateId: v.id("heliosEuclidReviewCandidates"),
+    requestId: v.string(),
+    validationKey: v.string(),
+    sourceModelFingerprint: v.string(),
+    candidateFingerprint: v.string(),
+    sourceFingerprint: v.string(),
+    reviewSetFingerprint: v.string(),
+    validator: v.string(),
+    validatorVersion: v.number(),
+    status: v.union(
+      v.literal("passed"),
+      v.literal("review"),
+      v.literal("blocked"),
+      v.literal("not_applicable"),
+    ),
+    validationPassed: v.boolean(),
+    promotionEligible: v.boolean(),
+    downstreamEligible: v.boolean(),
+    sourceHorizontalFingerprint: v.string(),
+    candidateHorizontalFingerprint: v.string(),
+    sourceVerticalFingerprint: v.string(),
+    candidateVerticalFingerprint: v.string(),
+    sourceIntegrationFingerprint: v.string(),
+    candidateIntegrationFingerprint: v.string(),
+    validationFingerprint: v.string(),
+    horizontalStatus: v.string(),
+    verticalStatus: v.string(),
+    integrationStatus: v.string(),
+    changedCount: v.number(),
+    improvedCount: v.number(),
+    degradedCount: v.number(),
+    horizontalCheckCount: v.number(),
+    verticalCheckCount: v.number(),
+    integrationCheckCount: v.number(),
+    readinessCount: v.number(),
+    readyCount: v.number(),
+    reviewCount: v.number(),
+    blockedCount: v.number(),
+    unavailableCount: v.number(),
+    blockingReasons: v.array(v.string()),
+    chunkCount: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+  })
+    .index("by_candidate_created", ["candidateId", "createdAt"])
+    .index("by_candidate_request", ["candidateId", "requestId"])
+    .index("by_validation_key", ["validationKey"])
+    .index("by_project_created", ["projectId", "createdAt"]),
+
+  heliosEuclidCandidateValidationChunks: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    validationId: v.id("heliosEuclidCandidateValidations"),
+    resultType: v.union(
+      v.literal("horizontal_check"),
+      v.literal("vertical_check"),
+      v.literal("integration_check"),
+      v.literal("readiness"),
+      v.literal("delta"),
+    ),
+    chunkIndex: v.number(),
+    itemCount: v.number(),
+    payloadJson: v.string(),
+    payloadFingerprint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_validation", ["validationId", "resultType", "chunkIndex"]),
+
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),
