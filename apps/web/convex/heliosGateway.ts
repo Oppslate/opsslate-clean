@@ -8,6 +8,7 @@ import {
   normalizeHeliosEuclidCandidateBuildInput,
   normalizeHeliosEuclidCandidateValidationInput,
   normalizeHeliosEuclidPromotionInput,
+  normalizeHeliosEuclidQuantityPublicationInput,
   normalizeHeliosEuclidReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
@@ -24,6 +25,7 @@ import {
   type HeliosEuclidCandidateBuildInput,
   type HeliosEuclidCandidateValidationInput,
   type HeliosEuclidPromotionInput,
+  type HeliosEuclidQuantityPublicationInput,
   type HeliosEuclidReviewInput,
   type HeliosCockpitData,
   type HeliosDocumentSummary,
@@ -263,6 +265,11 @@ const promoteEuclidCandidateReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidPromotionInput },
   { promotionId: string; promotedEuclidModelId: string; canonicalVersion: number; status: "promoted"; downstreamEligible: false; reused: boolean }
 >("heliosEuclidPromotions:promoteCandidate");
+const publishEuclidQuantityReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidQuantityPublicationInput },
+  { publicationId: string; estimateQuantityId: string; status: "published"; reviewStatus: "proposed"; reused: boolean }
+>("heliosEuclidQuantityPublications:publishCandidate");
 const getEstimateWorkspaceReference = makeFunctionReference<
   "query",
   { principal: GatewayPrincipal; projectId: string },
@@ -1202,6 +1209,25 @@ export const promoteHeliosEuclidCandidate = httpAction(async (ctx, request) => {
     return json({ data }, 201);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Euclid candidate could not be promoted." }, 400);
+  }
+});
+
+export const publishHeliosEuclidQuantity = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid quantity publication request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(publishEuclidQuantityReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeHeliosEuclidQuantityPublicationInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid quantity could not be published." }, 400);
   }
 });
 

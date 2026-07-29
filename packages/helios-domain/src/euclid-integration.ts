@@ -122,6 +122,22 @@ export type HeliosEuclidIntegrationSolution = {
   unavailableCount: number;
 };
 
+export function heliosEuclidIntegrationModelFingerprint(model: HeliosEuclidModel) {
+  return buildHeliosEngineeringParityFingerprint({
+    modelId: model.id,
+    sourceFingerprint: model.sourceFingerprint,
+    alignments: model.alignments,
+    profiles: model.profiles,
+    typicalSections: model.typicalSections,
+    crossSectionPoints: model.crossSectionPoints,
+    structures: model.structures,
+    inverts: model.inverts,
+    materialLayers: model.materialLayers,
+    relationships: model.relationships,
+    issues: model.issues,
+  });
+}
+
 const accepted = (state: HeliosEuclidReviewState) => state === "accepted" || state === "corrected";
 const unique = (values: Array<string | undefined>) => [...new Set(values.filter((value): value is string => Boolean(value)))].sort();
 
@@ -385,7 +401,7 @@ export function solveHeliosEuclidEngineeringGraph(input: {
     : checks.some((row) => row.status === "review") || reviewCount
       ? "review" as const
       : model.alignments.length ? "passed" as const : "not_applicable" as const;
-  const modelFingerprint = buildHeliosEngineeringParityFingerprint({ modelId: model.id, sourceFingerprint: model.sourceFingerprint, alignments: model.alignments, profiles: model.profiles, typicalSections: model.typicalSections, crossSectionPoints: model.crossSectionPoints, structures: model.structures, inverts: model.inverts, materialLayers: model.materialLayers, relationships: model.relationships, issues: model.issues });
+  const modelFingerprint = heliosEuclidIntegrationModelFingerprint(model);
   const fingerprintBasis = { modelFingerprint, horizontal: horizontal.solutionFingerprint, vertical: vertical.solutionFingerprint, solver: HELIOS_EUCLID_INTEGRATION_SOLVER };
   return {
     id: `integration-solution:${buildHeliosEngineeringParityFingerprint(fingerprintBasis).split(":")[1]!.slice(0, 32)}`,

@@ -22,6 +22,7 @@ import type {
   HeliosEuclidQuantityReadiness,
   HeliosEuclidReadinessStatus,
 } from "./euclid-integration.ts";
+import type { HeliosEuclidQuantityCandidate, HeliosEuclidQuantityPublicationUse } from "./euclid-quantity-publication.ts";
 import {
   heliosEuclidReviewSetFingerprint,
   type HeliosEuclidCandidateStatus,
@@ -272,6 +273,34 @@ export type HeliosEuclidCockpitWorkspace = {
     completedAt?: number;
     lastError?: string;
   };
+  quantityPublication?: {
+    status: "ready" | "not_eligible" | "blocked";
+    reason?: string;
+    euclidModelId: string;
+    integrationSolutionId?: string;
+    integrationSolutionFingerprint?: string;
+    estimateId?: string;
+    publishedCount: number;
+    candidates: Array<HeliosEuclidQuantityCandidate & {
+      publication?: {
+        id: string;
+        estimateQuantityId: string;
+        costCodeId: string;
+        use: HeliosEuclidQuantityPublicationUse;
+        publishedByName: string;
+        createdAt: number;
+      };
+    }>;
+    targets: Array<{
+      costCodeId: string;
+      code: string;
+      description: string;
+      payItemNumber: string;
+      payItemDescription: string;
+      productionUnit: string;
+      reviewStatus: "proposed" | "deferred" | "accepted" | "corrected";
+    }>;
+  };
   alignments: HeliosEuclidCockpitAlignmentSummary[];
   selectedAlignment?: HeliosEuclidCockpitAlignmentDetail;
 };
@@ -351,6 +380,7 @@ export type HeliosEuclidCockpitSource = {
     completedAt?: number;
     lastError?: string;
   };
+  quantityPublication?: HeliosEuclidCockpitWorkspace["quantityPublication"];
   selectedAlignmentId?: string;
 };
 
@@ -518,6 +548,7 @@ export function buildHeliosEuclidCockpitWorkspace(
       blockedCount: input.solution?.blockedCount || (solutionRecord.status === "failed" ? 1 : 0),
       unavailableCount: input.solution?.unavailableCount || 0,
     } : undefined,
+    quantityPublication: input.quantityPublication,
     alignments: alignmentRows,
   };
   if (!selectedSummary) return base;

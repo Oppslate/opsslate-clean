@@ -3,11 +3,14 @@ import test from "node:test";
 
 import {
   HELIOS_EUCLID_SCHEMA_VERSION,
+  HELIOS_EUCLID_QUANTITY_PUBLICATION_VERSION,
+  buildHeliosEuclidQuantityCandidates,
   buildHeliosEuclidIntegrationSolutionChunks,
   heliosEuclidIntegrationSolutionFingerprint,
   solveHeliosEuclidEngineeringGraph,
   solveHeliosEuclidHorizontalControl,
   solveHeliosEuclidVerticalProfiles,
+  normalizeHeliosEuclidQuantityPublicationInput,
   type HeliosEuclidControlGate,
   type HeliosEuclidModel,
   type HeliosEuclidStation,
@@ -150,4 +153,61 @@ test("Stage 4E fingerprints and bounded chunks are deterministic", () => {
   const chunks = buildHeliosEuclidIntegrationSolutionChunks(first, 5);
   assert.equal(chunks.reduce((sum, row) => sum + row.itemCount, 0), first.nodes.length + first.edges.length + first.readiness.length + first.checks.length);
   assert.ok(chunks.every((row) => row.payloadFingerprint.startsWith("helios-parity-v1:")));
+});
+
+test("Stage 4K derives deterministic, evidence-backed quantities only from ready Euclid capabilities", () => {
+  const model = integratedModel();
+  const solution = solveHeliosEuclidEngineeringGraph({ model, ...gates(model) });
+  const first = buildHeliosEuclidQuantityCandidates({ model, solution });
+  const second = buildHeliosEuclidQuantityCandidates({ model, solution });
+  assert.deepEqual(first, second);
+
+  const byType = new Map(first.map((row) => [row.calculationType, row]));
+  assert.equal(byType.get("horizontal_length")?.value, 100);
+  assert.equal(byType.get("horizontal_length")?.unit, "FT");
+  assert.equal(byType.get("material_area")?.value, 2_000);
+  assert.equal(byType.get("material_area")?.unit, "SF");
+  assert.equal(byType.get("material_volume")?.value, 74.074074);
+  assert.equal(byType.get("material_volume")?.unit, "CY");
+  assert.equal(byType.get("earthwork_excavation_volume")?.value, 88.888889);
+  assert.equal(byType.get("structure_count")?.value, 1);
+  assert.ok(first.every((row) => row.fingerprint.startsWith("helios-parity-v1:") && row.confidence === 100));
+  assert.ok(!first.some((row) => row.capability === "profile_elevation" || row.capability === "drainage_3d_length"));
+});
+
+test("Stage 4K separates excavation and embankment at cross-section sign changes", () => {
+  const model = integratedModel();
+  for (const row of model.crossSectionPoints.filter((candidate) => candidate.surface === "existing" && candidate.offset.value === 10)) {
+    row.elevation.value = row.station.chainage === 20 ? 98 : 99;
+  }
+  const solution = solveHeliosEuclidEngineeringGraph({ model, ...gates(model) });
+  const candidates = buildHeliosEuclidQuantityCandidates({ model, solution });
+  assert.equal(candidates.find((row) => row.calculationType === "earthwork_excavation_volume")?.value, 22.222222);
+  assert.equal(candidates.find((row) => row.calculationType === "earthwork_embankment_volume")?.value, 22.222222);
+});
+
+test("Stage 4K refuses non-passing solutions and validates the publication boundary", () => {
+  const model = integratedModel();
+  const solution = solveHeliosEuclidEngineeringGraph({ model, ...gates(model) });
+  solution.status = "review";
+  assert.throws(
+    () => buildHeliosEuclidQuantityCandidates({ model, solution }),
+    /Only a passing solution/,
+  );
+  assert.deepEqual(normalizeHeliosEuclidQuantityPublicationInput({
+    version: HELIOS_EUCLID_QUANTITY_PUBLICATION_VERSION,
+    requestId: "request-1",
+    euclidModelId: "model-1",
+    modelFingerprint: "model-fingerprint",
+    integrationSolutionId: "solution-1",
+    integrationSolutionFingerprint: "solution-fingerprint",
+    candidateId: "candidate-1",
+    candidateFingerprint: "candidate-fingerprint",
+    costCodeId: "cost-code-1",
+    use: "comparative",
+  }).use, "comparative");
+  assert.throws(
+    () => normalizeHeliosEuclidQuantityPublicationInput({ version: 1, use: "authoritative" }),
+    /comparative or production/,
+  );
 });

@@ -1334,6 +1334,56 @@ export default defineSchema({
     .index("by_promotion_key", ["promotionKey"])
     .index("by_promoted_model", ["promotedEuclidModelId"]),
 
+  // Euclid Stage 4K: append-only lineage from a deterministic quantity
+  // candidate into a new proposed estimate quantity. Owner quantities,
+  // accepted estimator decisions, resources, and pricing remain untouched.
+  heliosEuclidQuantityPublications: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    euclidModelId: v.id("heliosEuclidModels"),
+    canonicalVersion: v.number(),
+    integrationSolutionId: v.id("heliosEuclidIntegrationSolutions"),
+    estimateId: v.id("heliosEstimates"),
+    costCodeId: v.id("heliosEstimateCostCodes"),
+    estimateQuantityId: v.id("heliosEstimateQuantities"),
+    requestId: v.string(),
+    publicationKey: v.string(),
+    candidateId: v.string(),
+    candidateFingerprint: v.string(),
+    sourceFingerprint: v.string(),
+    modelFingerprint: v.string(),
+    integrationSolutionFingerprint: v.string(),
+    readinessId: v.string(),
+    capability: v.string(),
+    calculationType: v.string(),
+    alignmentId: v.string(),
+    label: v.string(),
+    value: v.number(),
+    unit: v.string(),
+    formula: v.string(),
+    method: v.string(),
+    inputEntityIds: v.array(v.string()),
+    provenanceKeys: v.array(v.string()),
+    confidence: v.number(),
+    use: v.union(v.literal("comparative"), v.literal("production")),
+    status: v.literal("published"),
+    reviewStatus: v.literal("proposed"),
+    publisher: v.string(),
+    publisherVersion: v.number(),
+    adapterVersion: v.string(),
+    createdBy: v.id("users"),
+    publishedByName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_model_created", ["euclidModelId", "createdAt"])
+    .index("by_model_request", ["euclidModelId", "requestId"])
+    .index("by_model_candidate", ["euclidModelId", "candidateId"])
+    .index("by_estimate_created", ["estimateId", "createdAt"])
+    .index("by_estimate_quantity", ["estimateQuantityId"])
+    .index("by_publication_key", ["publicationKey"]),
+
   heliosBidBasisEvents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

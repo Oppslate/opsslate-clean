@@ -2,6 +2,7 @@ import {
   HELIOS_EUCLID_INTEGRATION_SOLVER,
   buildHeliosEngineeringParityFingerprint,
   buildHeliosEuclidCockpitWorkspace,
+  buildHeliosEuclidQuantityCandidates,
   heliosEuclidIntegrationSolutionFingerprint,
   type HeliosEuclidEngineeringGraphEdge,
   type HeliosEuclidEngineeringGraphNode,
@@ -15,7 +16,7 @@ import {
 import { v } from "convex/values";
 
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalQuery, type QueryCtx } from "./_generated/server";
+import { internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { heliosPrincipalValidator, requireHeliosPrincipal } from "./heliosAuthorization";
 import { reconstructEuclidModel } from "./heliosEuclidHorizontal";
 
@@ -42,8 +43,8 @@ function projectSummary(project: Doc<"heliosProjects">) {
   };
 }
 
-async function reconstructIntegrationSolution(
-  ctx: QueryCtx,
+export async function reconstructIntegrationSolution(
+  ctx: QueryCtx | MutationCtx,
   record: Doc<"heliosEuclidIntegrationSolutions">,
 ): Promise<HeliosEuclidIntegrationSolution> {
   if (record.status === "failed" || record.status === "superseded") {
@@ -209,6 +210,69 @@ export const getWorkspace = internalQuery({
     const solution = solutionRecord && solutionRecord.status !== "failed"
       ? await reconstructIntegrationSolution(ctx, solutionRecord)
       : undefined;
+    const estimates = await ctx.db
+      .query("heliosEstimates")
+      .withIndex("by_project_version", (query) => query.eq("projectId", project._id))
+      .collect();
+    const estimate = estimates
+      .filter((row) => row.companyId === companyId && (row.status === "ready_for_review" || row.status === "accepted"))
+      .sort((left, right) => right.version - left.version)[0];
+    const [costCodes, publications] = await Promise.all([
+      estimate
+        ? ctx.db.query("heliosEstimateCostCodes").withIndex("by_estimate", (query) => query.eq("estimateId", estimate._id)).collect()
+        : Promise.resolve([]),
+      ctx.db.query("heliosEuclidQuantityPublications").withIndex("by_model_created", (query) => query.eq("euclidModelId", modelRecord._id)).collect(),
+    ]);
+    const targets = [];
+    for (const costCode of costCodes) {
+      if (costCode.companyId !== companyId || costCode.reviewStatus === "rejected") continue;
+      const payItem = await ctx.db.get(costCode.payItemId);
+      const section = payItem ? await ctx.db.get(payItem.sectionId) : null;
+      if (
+        !payItem || !section || payItem.companyId !== companyId || section.companyId !== companyId ||
+        payItem.estimateId !== estimate?._id || section.estimateId !== estimate?._id ||
+        payItem.reviewStatus === "rejected" || section.reviewStatus === "rejected"
+      ) continue;
+      targets.push({
+        costCodeId: String(costCode._id), code: costCode.code, description: costCode.description,
+        payItemNumber: payItem.officialItemNumber, payItemDescription: payItem.estimatorDescription || payItem.description,
+        productionUnit: costCode.productionUnit,
+        reviewStatus: costCode.reviewStatus as "proposed" | "deferred" | "accepted" | "corrected",
+      });
+    }
+    const quantityEligible = Boolean(
+      promotionRecord && !modelRecord.shadowMode && modelRecord.canonicalOrigin === "reviewed_candidate" &&
+      modelRecord.status === "accepted" && solution && solutionRecord?.status === "passed",
+    );
+    const rawCandidates = quantityEligible && solution
+      ? buildHeliosEuclidQuantityCandidates({ model, solution })
+      : [];
+    const publicationByCandidate = new Map(publications.map((row) => [row.candidateId, row]));
+    const quantityCandidates = rawCandidates.map((row) => {
+      const publication = publicationByCandidate.get(row.id);
+      return {
+        ...row,
+        publication: publication ? {
+          id: String(publication._id), estimateQuantityId: String(publication.estimateQuantityId),
+          costCodeId: String(publication.costCodeId), use: publication.use,
+          publishedByName: publication.publishedByName, createdAt: publication.createdAt,
+        } : undefined,
+      };
+    });
+    const quantityStatus = !quantityEligible
+      ? "not_eligible" as const
+      : !estimate || !targets.length || !quantityCandidates.length
+        ? "blocked" as const
+        : "ready" as const;
+    const quantityReason = !quantityEligible
+      ? "Promote the reviewed Euclid candidate and wait for its passing engineering graph before publishing quantities."
+      : !estimate
+        ? "Build a reviewable estimate before publishing Euclid quantities."
+        : !targets.length
+          ? "The current estimate has no reviewable cost codes."
+          : !quantityCandidates.length
+            ? "No quantity capability is ready on the current canonical model."
+            : undefined;
     return buildHeliosEuclidCockpitWorkspace({
       project: projectSummary(project),
       model,
@@ -284,6 +348,17 @@ export const getWorkspace = internalQuery({
         completedAt: solutionRecord.completedAt,
         lastError: solutionRecord.lastError,
       } : undefined,
+      quantityPublication: {
+        status: quantityStatus,
+        reason: quantityReason,
+        euclidModelId: String(modelRecord._id),
+        integrationSolutionId: solutionRecord ? String(solutionRecord._id) : undefined,
+        integrationSolutionFingerprint: solutionRecord?.solutionFingerprint,
+        estimateId: estimate ? String(estimate._id) : undefined,
+        publishedCount: publications.length,
+        candidates: quantityCandidates,
+        targets: targets.sort((left, right) => left.code.localeCompare(right.code)),
+      },
       selectedAlignmentId: args.alignmentId,
     });
   },

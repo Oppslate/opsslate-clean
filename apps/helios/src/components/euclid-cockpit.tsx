@@ -11,6 +11,7 @@ import {
   HELIOS_EUCLID_CANDIDATE_VERSION,
   HELIOS_EUCLID_CANDIDATE_VALIDATION_VERSION,
   HELIOS_EUCLID_PROMOTION_VERSION,
+  HELIOS_EUCLID_QUANTITY_PUBLICATION_VERSION,
   HELIOS_EUCLID_REVIEW_VERSION,
   heliosEuclidCorrectableFields,
   type HeliosEuclidReviewAction,
@@ -30,6 +31,7 @@ import {
   Check,
   Clock3,
   CircleDot,
+  Calculator,
   DraftingCompass,
   FileSearch,
   GitBranch,
@@ -270,6 +272,93 @@ function EntityReviewControls({ workspace, target }: {
   </>;
 }
 
+function QuantityPublicationControl({ workspace, alignmentId }: { workspace: HeliosEuclidCockpitWorkspace; alignmentId: string }) {
+  const router = useRouter();
+  const boundary = workspace.quantityPublication;
+  const candidates = boundary?.candidates.filter((row) => row.alignmentId === alignmentId) || [];
+  const [selectedId, setSelectedId] = useState("");
+  const [costCodeId, setCostCodeId] = useState("");
+  const [quantityUse, setQuantityUse] = useState<"comparative" | "production">("comparative");
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const selected = candidates.find((row) => row.id === selectedId);
+  const target = boundary?.targets.find((row) => row.costCodeId === costCodeId);
+
+  function begin(candidateId: string) {
+    setSelectedId(candidateId);
+    setCostCodeId("");
+    setQuantityUse("comparative");
+    setError("");
+    setOpen(true);
+  }
+
+  async function publish() {
+    if (!boundary || !workspace.model || !selected || !costCodeId || !boundary.integrationSolutionId || !boundary.integrationSolutionFingerprint) return;
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${workspace.project.id}/euclid/quantity-publications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: HELIOS_EUCLID_QUANTITY_PUBLICATION_VERSION,
+          requestId: crypto.randomUUID(),
+          euclidModelId: boundary.euclidModelId,
+          modelFingerprint: workspace.model.modelFingerprint,
+          integrationSolutionId: boundary.integrationSolutionId,
+          integrationSolutionFingerprint: boundary.integrationSolutionFingerprint,
+          candidateId: selected.id,
+          candidateFingerprint: selected.fingerprint,
+          costCodeId,
+          use: quantityUse,
+        }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Euclid quantity could not be sent to the estimate.");
+      setOpen(false);
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Euclid quantity could not be sent to the estimate.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <>
+    <div className="mb-3 rounded-lg border border-border bg-background/25 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div><div className="flex items-center gap-2 text-xs font-semibold"><Calculator className="size-4 text-orange-300" aria-hidden="true" />Estimate quantities</div><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Send a verified Euclid result to one existing cost code as a proposed quantity. Owner quantities and pricing do not change.</p></div>
+        <StateBadge value={boundary?.status || "not_eligible"} />
+      </div>
+      {boundary?.reason && <p className="mt-2 text-[10px] leading-4 text-muted-foreground">{boundary.reason}</p>}
+      {candidates.length > 0 && <div className="mt-3 space-y-2">{candidates.map((row) => {
+        const publicationTarget = row.publication ? boundary?.targets.find((candidate) => candidate.costCodeId === row.publication?.costCodeId) : undefined;
+        return <article key={row.id} className="rounded-md border border-border bg-card/35 p-2.5">
+          <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="truncate text-[10px] font-semibold">{row.label}</div><div className="mt-1 font-mono text-sm font-semibold">{number(row.value, 4)} {row.unit}</div></div><Badge variant="outline" className="text-[9px]">{row.confidence}%</Badge></div>
+          <p className="mt-1 line-clamp-2 text-[9px] leading-4 text-muted-foreground">{row.method}</p>
+          <div className="mt-2 flex items-center justify-between gap-2">{row.publication ? <div className="min-w-0 text-[9px] text-success-foreground"><Check aria-hidden="true" className="mr-1 inline size-3" />Proposed to {publicationTarget ? `${publicationTarget.code} · ${publicationTarget.description}` : "estimate"}</div> : <span className="text-[9px] text-muted-foreground">{row.inputEntityIds.length} controls · {row.provenanceIds.length} citations</span>}<Button size="sm" variant="outline" className="h-7 shrink-0 px-2 text-[10px]" disabled={boundary?.status !== "ready" || Boolean(row.publication)} onClick={() => begin(row.id)}>{row.publication ? "Sent" : "Send to estimate"}</Button></div>
+        </article>;
+      })}</div>}
+      {!candidates.length && !boundary?.reason && <InlineEmpty text="No publishable quantities are ready for this alignment." />}
+      {boundary && <p className="mt-2 text-[9px] text-muted-foreground">{boundary.publishedCount} published from canonical v{workspace.model?.canonicalVersion || 1}. Every result remains proposed until estimate review.</p>}
+    </div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader><DialogTitle>Send proposed quantity to estimate</DialogTitle><DialogDescription>Map this deterministic Euclid result to one current estimate cost code. This creates a new proposed quantity and does not overwrite the owner bid quantity or pricing.</DialogDescription></DialogHeader>
+        {selected && <div className="rounded-lg border border-border bg-muted/15 p-3"><div className="text-sm font-semibold">{selected.label}</div><div className="mt-1 font-mono text-lg font-semibold">{number(selected.value, 4)} {selected.unit}</div><p className="mt-2 text-xs text-muted-foreground">{selected.formula}</p></div>}
+        <div className="space-y-3">
+          <div><label className="mb-1 block text-xs font-semibold" htmlFor="euclid-quantity-cost-code">Estimate cost code</label><Select value={costCodeId} onValueChange={setCostCodeId}><SelectTrigger id="euclid-quantity-cost-code"><SelectValue placeholder="Select the receiving cost code" /></SelectTrigger><SelectContent>{boundary?.targets.map((row) => <SelectItem key={row.costCodeId} value={row.costCodeId}>{row.code} · {row.description} · {row.productionUnit}</SelectItem>)}</SelectContent></Select></div>
+          <div><label className="mb-1 block text-xs font-semibold" htmlFor="euclid-quantity-use">Quantity use</label><Select value={quantityUse} onValueChange={(value) => setQuantityUse(value as "comparative" | "production")}><SelectTrigger id="euclid-quantity-use"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="comparative">Comparative — check against the estimate</SelectItem><SelectItem value="production">Production — drive resource calculations after approval</SelectItem></SelectContent></Select></div>
+          {quantityUse === "production" && selected && target && target.productionUnit.trim().toUpperCase() !== selected.unit && <p role="alert" className="text-xs text-danger-foreground">Production unit mismatch: this result is {selected.unit}, while the cost code uses {target.productionUnit}. Choose a matching cost code or publish it as comparative.</p>}
+          {error && <p role="alert" className="text-xs text-danger-foreground">{error}</p>}
+        </div>
+        <DialogFooter><Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button><Button onClick={publish} disabled={pending || !selected || !costCodeId || (quantityUse === "production" && Boolean(target) && target?.productionUnit.trim().toUpperCase() !== selected?.unit)}>{pending ? "Sending…" : "Create proposed quantity"}</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </>;
+}
+
 function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpitWorkspace }) {
   const router = useRouter();
   const [pending, setPending] = useState<"build" | "validate" | "promote" | null>(null);
@@ -458,6 +547,7 @@ function ReviewedCandidateControl({ workspace }: { workspace: HeliosEuclidCockpi
 function GovernedIntelligenceRail({ projectId, detail, workspace }: { projectId: string; detail: HeliosEuclidCockpitAlignmentDetail; workspace: HeliosEuclidCockpitWorkspace }) {
   return <div className="flex min-h-0 flex-col border-t border-border xl:border-t-0">
     <section aria-label="Governed Euclid review" className="max-h-[58%] shrink-0 overflow-y-auto border-b border-border p-3">
+      <QuantityPublicationControl workspace={workspace} alignmentId={detail.summary.id} />
       <ReviewedCandidateControl workspace={workspace} />
       <div className="mb-3 rounded-lg border border-border bg-background/25 p-3"><div className="text-xs font-semibold">Governed estimator review</div><p className="mt-1 text-[10px] leading-4 text-muted-foreground">Accept trusted controls in one click. Corrections, deferrals, and rejections require a reason and remain separate from the immutable source model.</p><div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="outline">{workspace.review.accepted} accepted</Badge><Badge variant="outline">{workspace.review.corrected} corrected</Badge><Badge variant="outline">{workspace.review.deferred} deferred</Badge><Badge variant="outline">{workspace.review.rejected} rejected</Badge></div></div>
       <div className="space-y-2">{detail.reviewTargets.map((target) => <article key={`${target.entityType}:${target.entityId}`} className="rounded-lg border border-border bg-background/30 p-3"><div className="min-w-0"><div className="text-[9px] uppercase tracking-wider text-info-foreground">{humanizeStatus(target.entityType)}</div><h3 className="mt-0.5 truncate text-xs font-semibold">{target.label}</h3><p className="mt-1 truncate text-[10px] text-muted-foreground">{target.context}</p></div><div className="mt-2"><EntityReviewControls workspace={workspace} target={target} /></div></article>)}</div>
@@ -488,7 +578,7 @@ export function EuclidCockpit({ workspace }: { workspace: HeliosEuclidCockpitWor
         <EngineeringWorkspace detail={selectedAlignment} />
         <GovernedIntelligenceRail projectId={workspace.project.id} detail={selectedAlignment} workspace={workspace} />
       </section>
-      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Canonical promotion preserves every prior version and full review lineage. Quantity, estimate, schedule, and LandXML publication remain disabled.</span><span className="shrink-0 font-mono">Canonical v{workspace.model?.canonicalVersion || 1} · Stage 4J</span></footer>
+      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Euclid publication adds a proposed, traceable estimate quantity only. Owner bid quantities, accepted decisions, pricing, schedule, and LandXML remain unchanged.</span><span className="shrink-0 font-mono">Canonical v{workspace.model?.canonicalVersion || 1} · Stage 4K</span></footer>
     </div>
   );
 }

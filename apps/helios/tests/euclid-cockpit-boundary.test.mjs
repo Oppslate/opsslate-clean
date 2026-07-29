@@ -46,7 +46,7 @@ test("Euclid Stage 4G adds governed review without publishing quantities or Land
   assert.match(mutation, /targetFingerprint !== input\.targetFingerprint/);
   assert.match(mutation, /ctx\.db\.insert\("heliosEuclidReviewDecisions"/);
   assert.doesNotMatch(mutation, /ctx\.db\.patch|ctx\.db\.replace|ctx\.db\.delete|openai|ctx\.storage/i);
-  assert.match(component, /LandXML publication remain disabled/);
+  assert.match(component, /LandXML remain unchanged/);
   assert.doesNotMatch(component, /download/i);
   assert.match(component, /remain separate from the immutable source model/);
   assert.doesNotMatch(page, /POST|PATCH|DELETE|PUT/);

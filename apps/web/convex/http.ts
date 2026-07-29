@@ -13,6 +13,7 @@ import {
   buildHeliosEuclidCandidate,
   validateHeliosEuclidCandidate,
   promoteHeliosEuclidCandidate,
+  publishHeliosEuclidQuantity,
   recordHeliosEuclidReview,
   getHeliosTakeoff,
   finalizeHeliosPackage,
@@ -169,6 +170,11 @@ http.route({
   path: "/helios/v1/euclid/promotions",
   method: "POST",
   handler: promoteHeliosEuclidCandidate,
+});
+http.route({
+  path: "/helios/v1/euclid/quantity-publications",
+  method: "POST",
+  handler: publishHeliosEuclidQuantity,
 });
 http.route({
   path: "/helios/v1/estimates/get",

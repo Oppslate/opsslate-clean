@@ -56,6 +56,6 @@ test("Euclid Stage 4J remains isolated from downstream estimating and export rec
   assert.match(mutation, /downstreamEligible: false/);
   assert.match(component, /Promote canonical/);
   assert.match(component, /validation\.canPromote/);
-  assert.match(component, /Quantity, estimate, schedule, and LandXML publication remain disabled/);
+  assert.match(component, /Euclid publication adds a proposed, traceable estimate quantity only/);
   assert.doesNotMatch(mutation, /ctx\.db\.insert\("(?:heliosEstimate|estimate|procurement|schedule|landXml)/i);
 });
