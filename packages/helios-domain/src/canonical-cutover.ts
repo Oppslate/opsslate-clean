@@ -195,8 +195,13 @@ export type HeliosCanonicalCutoverInput = {
   sourceCount: number;
   immutableSourceCount: number;
   canonicalPageCount: number;
+  usableCanonicalPageCount: number;
   canonicalTextSpanCount: number;
+  canonicalTextReadyPageCount: number;
   canonicalAssetCount: number;
+  canonicalPageRenderCount: number;
+  canonicalExpectedViewCount: number;
+  canonicalViewCropCount: number;
   unresolvedDrawingAuthorityCount: number;
   coverage: Record<"documentIntelligence" | "planReconstruction" | "civilGeometry", HeliosEngineeringCoverageStatus>;
   parityStatus?: Exclude<HeliosEngineeringParityStatus, "not_applicable">;
@@ -257,8 +262,15 @@ export function evaluateHeliosCanonicalCutover(
           : [`${contract.label} requires ${area.replace(/([A-Z])/g, " $1").toLowerCase()} coverage to be ready or not applicable.`],
       ),
       ...(contract.requiresCanonicalPages && input.canonicalPageCount < 1 ? [`${contract.label} requires canonical pages.`] : []),
-      ...(contract.requiresCanonicalText && input.canonicalTextSpanCount < 1 ? [`${contract.label} requires native or OCR text spans.`] : []),
-      ...(contract.requiresCanonicalAssets && input.canonicalAssetCount < 1 ? [`${contract.label} requires canonical page or view assets.`] : []),
+      ...(contract.requiresCanonicalText && input.canonicalTextReadyPageCount < input.usableCanonicalPageCount
+        ? [`${contract.label} requires complete native/OCR text coverage (${input.canonicalTextReadyPageCount}/${input.usableCanonicalPageCount} usable pages ready).`]
+        : []),
+      ...(contract.requiresCanonicalAssets && input.canonicalPageRenderCount < input.usableCanonicalPageCount
+        ? [`${contract.label} requires a canonical render for every usable page (${input.canonicalPageRenderCount}/${input.usableCanonicalPageCount} ready).`]
+        : []),
+      ...(contract.requiresCanonicalAssets && input.canonicalViewCropCount < input.canonicalExpectedViewCount
+        ? [`${contract.label} requires every registered plan view asset (${input.canonicalViewCropCount}/${input.canonicalExpectedViewCount} ready).`]
+        : []),
       ...(contract.requiresResolvedDrawingAuthority && input.unresolvedDrawingAuthorityCount > 0
         ? [`${contract.label} is blocked by ${input.unresolvedDrawingAuthorityCount} unresolved drawing authority conflict${input.unresolvedDrawingAuthorityCount === 1 ? "" : "s"}.`]
         : []),

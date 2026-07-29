@@ -1,8 +1,12 @@
 import {
+  derivePlanSheetConflicts,
   evaluateHeliosCanonicalCutover,
   type HeliosCanonicalCutoverInput,
   type HeliosEngineeringParityArea,
   type HeliosEngineeringParityStatus,
+  type HeliosPlanPage,
+  type HeliosPlanSheetDecision,
+  type HeliosPlanViewType,
 } from "@opsslate/helios-domain";
 import { v } from "convex/values";
 
@@ -24,6 +28,88 @@ type CutoverContext = {
   sourceFingerprint?: string;
   input: HeliosCanonicalCutoverInput;
 };
+
+function cutoverPlanPage(page: {
+  _id: Id<"heliosPlanPages">;
+  documentId: Id<"heliosDocuments">;
+  documentName: string;
+  physicalPageNumber: number;
+  pageKind: "sheet" | "non_sheet" | "exception";
+  printedPageNumber: string;
+  sheetNumber: string;
+  title: string;
+  discipline: string;
+  subdiscipline: string;
+  issueDate: string;
+  revisionMarker: string;
+  addendumAssociation: string;
+  modality: "vector" | "scanned" | "hybrid" | "unusable";
+  titleBlockBoundary?: { x: number; y: number; width: number; height: number };
+  titleBlockText: string;
+  confidence: number;
+  unresolvedIssues: string[];
+  views: Array<{
+    viewKey: string;
+    viewType: string;
+    label: string;
+    boundary: { x: number; y: number; width: number; height: number };
+    northOrientation: string;
+    measurable: boolean;
+    unresolvedIssues: string[];
+  }>;
+}): HeliosPlanPage {
+  return {
+    id: String(page._id),
+    documentId: String(page.documentId),
+    documentName: page.documentName,
+    physicalPageNumber: page.physicalPageNumber,
+    pageKind: page.pageKind,
+    printedPageNumber: page.printedPageNumber,
+    sheetNumber: page.sheetNumber,
+    title: page.title,
+    discipline: page.discipline,
+    subdiscipline: page.subdiscipline,
+    issueDate: page.issueDate,
+    revisionMarker: page.revisionMarker,
+    addendumAssociation: page.addendumAssociation,
+    modality: page.modality,
+    titleBlockBoundary: page.titleBlockBoundary,
+    titleBlockText: page.titleBlockText,
+    confidence: page.confidence,
+    unresolvedIssues: page.unresolvedIssues,
+    views: page.views.map((view) => ({
+      ...view,
+      viewType: view.viewType as HeliosPlanViewType,
+      scaleCandidates: [],
+    })),
+  };
+}
+
+function cutoverSheetDecision(decision: {
+  _id: Id<"heliosPlanSheetDecisions">;
+  normalizedSheetNumber: string;
+  sheetNumber: string;
+  decision: "apply_recommended" | "use_as_current" | "keep_both" | "escalate";
+  status: "resolved" | "review_required" | "escalated";
+  primaryPageId?: Id<"heliosPlanPages">;
+  referencePageIds: Id<"heliosPlanPages">[];
+  reason: string;
+  reviewerName: string;
+  updatedAt: number;
+}): HeliosPlanSheetDecision {
+  return {
+    id: String(decision._id),
+    normalizedSheetNumber: decision.normalizedSheetNumber,
+    sheetNumber: decision.sheetNumber,
+    decision: decision.decision,
+    status: decision.status,
+    primaryPageId: decision.primaryPageId ? String(decision.primaryPageId) : undefined,
+    referencePageIds: decision.referencePageIds.map(String),
+    reason: decision.reason,
+    reviewerName: decision.reviewerName,
+    reviewedAt: decision.updatedAt,
+  };
+}
 
 function summarizeEvaluation(
   context: CutoverContext,
@@ -82,11 +168,11 @@ async function loadCutoverContext(
   if (!bidPackage || bidPackage.projectId !== project._id) return null;
 
   const validParity = record && parityRun?.engineeringRecordId === record._id ? parityRun : null;
-  const [sources, pages, textRows, assets, planRun] = record
+  const [sources, pages, materializations, assets, planRun] = record
     ? await Promise.all([
         ctx.db.query("heliosEngineeringSources").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
         ctx.db.query("heliosEngineeringPages").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
-        ctx.db.query("heliosEngineeringTextSpans").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
+        ctx.db.query("heliosEngineeringMaterializations").withIndex("by_record_status", (query) => query.eq("engineeringRecordId", record._id)).collect(),
         ctx.db.query("heliosEngineeringAssets").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
         ctx.db.query("heliosPlanRuns").withIndex("by_package_current", (query) => query.eq("packageId", project.activePackageId!).eq("isCurrent", true)).first(),
       ])
@@ -97,19 +183,48 @@ async function loadCutoverContext(
         ctx.db.query("heliosPlanSheetDecisions").withIndex("by_run_current", (query) => query.eq("runId", planRun._id).eq("isCurrent", true)).collect(),
       ])
     : [[], []];
-  const sheetCounts = new Map<string, number>();
-  for (const page of planPages.filter((page) => page.pageKind === "sheet" && page.sheetNumber.trim())) {
-    const sheet = page.sheetNumber.trim().toUpperCase();
-    sheetCounts.set(sheet, (sheetCounts.get(sheet) || 0) + 1);
-  }
-  const resolvedSheets = new Set(
-    sheetDecisions
-      .filter((decision) => decision.status === "resolved")
-      .map((decision) => decision.normalizedSheetNumber),
+  const drawingAuthority = derivePlanSheetConflicts(
+    planPages.map(cutoverPlanPage),
+    sheetDecisions.map(cutoverSheetDecision),
   );
-  const unresolvedDrawingAuthorityCount = [...sheetCounts.entries()]
-    .filter(([sheet, count]) => count > 1 && !resolvedSheets.has(sheet))
-    .length;
+  const unresolvedDrawingAuthorityCount = drawingAuthority.filter(
+    (authority) => authority.status !== "resolved",
+  ).length;
+  const currentAssets = assets.filter((row) => row.isCurrent !== false);
+  const canonicalTextSpanCount = materializations.reduce(
+    (sum, materialization) => sum + materialization.textSpanCount,
+    0,
+  );
+  const planCanonicalPages = pages.filter((page) => page.sourcePlanPageId);
+  const usablePlanPages = planCanonicalPages.filter((page) => page.modality !== "unusable");
+  const canonicalTextReadyPageCount = usablePlanPages.filter((page) => {
+    if (page.modality === "vector") return page.nativeTextStatus === "ready";
+    if (page.modality === "scanned") return page.ocrStatus === "ready";
+    return page.nativeTextStatus === "ready" && page.ocrStatus === "ready";
+  }).length;
+  const currentPageRenderIds = new Set(
+    currentAssets
+      .filter((asset) => asset.kind === "page_render" && !asset.viewKey)
+      .map((asset) => String(asset.pageId)),
+  );
+  const canonicalPageRenderCount = usablePlanPages.filter((page) =>
+    currentPageRenderIds.has(String(page._id)),
+  ).length;
+  const planPageById = new Map(planCanonicalPages.map((page) => [String(page.sourcePlanPageId), page]));
+  const expectedViewKeys = new Set(
+    planPages.flatMap((page) => {
+      const canonical = planPageById.get(String(page._id));
+      return canonical
+        ? page.views.map((view) => `${String(canonical._id)}:${view.viewKey}`)
+        : [];
+    }),
+  );
+  const currentViewKeys = new Set(
+    currentAssets
+      .filter((asset) => asset.kind === "view_crop" && asset.viewKey)
+      .map((asset) => `${String(asset.pageId)}:${asset.viewKey}`),
+  );
+  const canonicalViewCropCount = [...expectedViewKeys].filter((key) => currentViewKeys.has(key)).length;
 
   return {
     companyId: project.companyId,
@@ -125,8 +240,13 @@ async function loadCutoverContext(
       sourceCount: sources.length,
       immutableSourceCount: sources.filter((source) => source.immutable).length,
       canonicalPageCount: pages.length,
-      canonicalTextSpanCount: textRows.length,
-      canonicalAssetCount: assets.length,
+      usableCanonicalPageCount: usablePlanPages.length,
+      canonicalTextSpanCount,
+      canonicalTextReadyPageCount,
+      canonicalAssetCount: currentAssets.length,
+      canonicalPageRenderCount,
+      canonicalExpectedViewCount: expectedViewKeys.size,
+      canonicalViewCropCount,
       unresolvedDrawingAuthorityCount,
       coverage: record?.coverage || {
         documentIntelligence: "pending",
@@ -169,8 +289,13 @@ export const auditCanonicalCutover = internalMutation({
       sourceCount: context.input.sourceCount,
       immutableSourceCount: context.input.immutableSourceCount,
       canonicalPageCount: context.input.canonicalPageCount,
+      usableCanonicalPageCount: context.input.usableCanonicalPageCount,
       canonicalTextSpanCount: context.input.canonicalTextSpanCount,
+      canonicalTextReadyPageCount: context.input.canonicalTextReadyPageCount,
       canonicalAssetCount: context.input.canonicalAssetCount,
+      canonicalPageRenderCount: context.input.canonicalPageRenderCount,
+      canonicalExpectedViewCount: context.input.canonicalExpectedViewCount,
+      canonicalViewCropCount: context.input.canonicalViewCropCount,
       unresolvedDrawingAuthorityCount: context.input.unresolvedDrawingAuthorityCount,
       workflows: evaluation.workflows,
       blockers: evaluation.blockers,

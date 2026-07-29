@@ -204,3 +204,40 @@ test("Cutover Stage 1 records immutable readiness audits without switching reade
   assert.match(planActions, /openai\.files\.create/);
   assert.match(geometryActions, /openai\.files\.create/);
 });
+
+test("Cutover Stage 2 materializes reusable page text and images without OpenAI", async () => {
+  const [schema, materialization, actions, shadow] = await Promise.all([
+    source("web/convex/schema.ts"),
+    source("web/convex/heliosEngineeringMaterialization.ts"),
+    source("web/convex/heliosEngineeringMaterializationActions.ts"),
+    source("web/convex/heliosEngineeringShadow.ts"),
+  ]);
+  assert.match(schema, /heliosEngineeringMaterializations: defineTable/);
+  assert.match(schema, /materializationVersion/);
+  assert.match(materialization, /backfillProjectMaterialization = internalMutation/);
+  assert.match(actions, /initializePdfium/);
+  assert.match(actions, /FPDF_LoadMemDocument/);
+  assert.match(actions, /PNG\.sync\.write/);
+  assert.match(actions, /buildHeliosCanonicalTextSpans/);
+  assert.match(actions, /ctx\.storage\.store/);
+  assert.doesNotMatch(actions, /from "openai"|files\.create|responses\.create/);
+  assert.match(shadow, /queueSourceMaterialization/);
+  assert.match(shadow, /materializePageViews/);
+});
+
+test("Cutover Stage 2 keeps materialized channels shadow-only and coverage-complete", async () => {
+  const [cutover, gateway, estimates, takeoff, assistant] = await Promise.all([
+    source("web/convex/heliosCanonicalCutover.ts"),
+    source("web/convex/heliosGateway.ts"),
+    source("web/convex/heliosEstimates.ts"),
+    source("web/convex/heliosTakeoffIntelligence.ts"),
+    source("web/convex/heliosAssistant.ts"),
+  ]);
+  assert.match(cutover, /canonicalTextReadyPageCount/);
+  assert.match(cutover, /canonicalPageRenderCount/);
+  assert.match(cutover, /canonicalExpectedViewCount/);
+  assert.match(cutover, /canonicalViewCropCount/);
+  for (const consumer of [gateway, estimates, takeoff, assistant]) {
+    assert.doesNotMatch(consumer, /heliosEngineeringTextSpans|heliosEngineeringAssets/);
+  }
+});

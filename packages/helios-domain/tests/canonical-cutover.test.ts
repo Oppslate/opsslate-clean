@@ -24,8 +24,13 @@ function completeInput(): Parameters<typeof evaluateHeliosCanonicalCutover>[0] {
     sourceCount: 2,
     immutableSourceCount: 2,
     canonicalPageCount: 20,
+    usableCanonicalPageCount: 20,
     canonicalTextSpanCount: 100,
+    canonicalTextReadyPageCount: 20,
     canonicalAssetCount: 40,
+    canonicalPageRenderCount: 20,
+    canonicalExpectedViewCount: 20,
+    canonicalViewCropCount: 20,
     unresolvedDrawingAuthorityCount: 0,
     coverage: {
       documentIntelligence: "ready",
@@ -55,11 +60,14 @@ test("blocks plan and civil cutover when canonical visual channels are missing",
   const result = evaluateHeliosCanonicalCutover({
     ...completeInput(),
     canonicalTextSpanCount: 0,
+    canonicalTextReadyPageCount: 0,
     canonicalAssetCount: 0,
+    canonicalPageRenderCount: 0,
+    canonicalViewCropCount: 0,
   });
   assert.equal(result.status, "blocked");
-  assert.match(result.workflows.find((row) => row.id === "plan_reconstruction")!.blockers.join(" "), /text spans/);
-  assert.match(result.workflows.find((row) => row.id === "civil_geometry")!.blockers.join(" "), /canonical page or view assets/);
+  assert.match(result.workflows.find((row) => row.id === "plan_reconstruction")!.blockers.join(" "), /text coverage/);
+  assert.match(result.workflows.find((row) => row.id === "civil_geometry")!.blockers.join(" "), /canonical render/);
   assert.equal(result.workflows.find((row) => row.id === "estimate")!.status, "shadow_ready");
 });
 

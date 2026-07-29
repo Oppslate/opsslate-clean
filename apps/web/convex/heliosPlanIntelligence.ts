@@ -111,7 +111,13 @@ async function createPlanRun(
     current.sourceFingerprint === basis.sourceFingerprint &&
     ["queued", "processing", "ready_for_review", "partially_ready", "not_applicable_to_current_basis"].includes(current.status)
   ) {
-    return { runId: String(current._id), status: current.status, reused: true };
+    await finalizeRun(ctx, current._id);
+    const refreshed = await ctx.db.get(current._id);
+    return {
+      runId: String(current._id),
+      status: refreshed?.status || current.status,
+      reused: true,
+    };
   }
   if (current) await ctx.db.patch(current._id, { isCurrent: false, updatedAt: Date.now() });
 

@@ -406,6 +406,14 @@ export default defineSchema({
       v.literal("not_applicable"), v.literal("pending"),
       v.literal("ready"), v.literal("failed"),
     ),
+    materializationVersion: v.optional(v.number()),
+    materializationStatus: v.optional(v.union(
+      v.literal("pending"), v.literal("processing"), v.literal("ready"),
+      v.literal("partially_ready"), v.literal("failed"),
+    )),
+    nativeTextSpanCount: v.optional(v.number()),
+    materializationError: v.optional(v.string()),
+    materializedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -426,9 +434,14 @@ export default defineSchema({
       x: v.number(), y: v.number(), width: v.number(), height: v.number(),
     }),
     confidence: v.number(),
+    spanKey: v.optional(v.string()),
+    sourceLocator: v.optional(v.string()),
+    materializationVersion: v.optional(v.number()),
+    isCurrent: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_page_channel", ["pageId", "channel", "readingOrder"])
+    .index("by_page_span_key", ["pageId", "channel", "spanKey"])
     .index("by_record", ["engineeringRecordId", "createdAt"])
     .index("by_source", ["engineeringSourceId", "createdAt"]),
 
@@ -453,11 +466,48 @@ export default defineSchema({
     pixelWidth: v.number(),
     pixelHeight: v.number(),
     dpi: v.optional(v.number()),
+    materializationVersion: v.optional(v.number()),
+    isCurrent: v.optional(v.boolean()),
     createdAt: v.number(),
   })
     .index("by_page_kind", ["pageId", "kind"])
     .index("by_record", ["engineeringRecordId", "createdAt"])
     .index("by_source", ["engineeringSourceId", "createdAt"]),
+
+  // Canonical source materialization is a one-time local extraction/rendering
+  // stage. It never calls a reasoning provider and remains shadow-only until
+  // the canonical-reader acceptance gate passes.
+  heliosEngineeringMaterializations: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    engineeringSourceId: v.id("heliosEngineeringSources"),
+    materializationVersion: v.number(),
+    sourceFingerprint: v.string(),
+    status: v.union(
+      v.literal("queued"), v.literal("processing"), v.literal("ready"),
+      v.literal("partially_ready"), v.literal("failed"),
+    ),
+    attemptCount: v.number(),
+    sourcePageCount: v.number(),
+    completedPageCount: v.number(),
+    failedPageCount: v.number(),
+    nativeTextPageCount: v.number(),
+    ocrPendingPageCount: v.number(),
+    textSpanCount: v.number(),
+    pageRenderCount: v.number(),
+    viewCropCount: v.number(),
+    lastError: v.optional(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_source_version", ["engineeringSourceId", "materializationVersion"])
+    .index("by_record_status", ["engineeringRecordId", "status", "updatedAt"])
+    .index("by_project_updated", ["projectId", "updatedAt"]),
 
   heliosEngineeringArtifacts: defineTable({
     companyId: v.id("companies"),
@@ -617,8 +667,13 @@ export default defineSchema({
     sourceCount: v.number(),
     immutableSourceCount: v.number(),
     canonicalPageCount: v.number(),
+    usableCanonicalPageCount: v.optional(v.number()),
     canonicalTextSpanCount: v.number(),
+    canonicalTextReadyPageCount: v.optional(v.number()),
     canonicalAssetCount: v.number(),
+    canonicalPageRenderCount: v.optional(v.number()),
+    canonicalExpectedViewCount: v.optional(v.number()),
+    canonicalViewCropCount: v.optional(v.number()),
     unresolvedDrawingAuthorityCount: v.number(),
     workflows: v.array(v.object({
       id: v.union(

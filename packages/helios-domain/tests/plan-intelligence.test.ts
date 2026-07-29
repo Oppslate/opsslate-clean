@@ -113,7 +113,7 @@ test("requires calibration identity for calibration decisions", () => {
   );
 });
 
-test("distinguishes a newer bid sheet from an older permit reference", () => {
+test("establishes deterministic authority for a newer bid sheet and older permit reference", () => {
   const base = {
     physicalPageNumber: 1,
     pageKind: "sheet" as const,
@@ -153,7 +153,38 @@ test("distinguishes a newer bid sheet from an older permit reference", () => {
   assert.equal(conflicts.length, 1);
   assert.equal(conflicts[0].conflictType, "version_conflict");
   assert.equal(conflicts[0].suggestedPrimaryPageId, "bid-page");
+  assert.equal(conflicts[0].status, "resolved");
+  assert.equal(conflicts[0].primaryPageId, "bid-page");
+  assert.deepEqual(conflicts[0].referencePageIds, ["permit-page"]);
+  const roles = planSheetAuthorityByPage(conflicts);
+  assert.equal(roles.get("bid-page"), "current_bid");
+  assert.equal(roles.get("permit-page"), "permit_reference");
+});
+
+test("keeps drawing authority unresolved when version signals are ambiguous", () => {
+  const pages = ["generation-a", "generation-b"].map((id, index) => ({
+    id,
+    documentId: `${id}-document`,
+    documentName: `${id}.pdf`,
+    physicalPageNumber: index + 1,
+    pageKind: "sheet" as const,
+    printedPageNumber: "",
+    sheetNumber: "C-101",
+    title: "General Plan",
+    discipline: "Civil",
+    subdiscipline: "",
+    issueDate: index ? "February 2024" : "June 2026",
+    revisionMarker: "",
+    addendumAssociation: "",
+    modality: "vector" as const,
+    titleBlockText: "FINAL",
+    confidence: 98,
+    unresolvedIssues: [],
+    views: [],
+  }));
+  const conflicts = derivePlanSheetConflicts(pages);
   assert.equal(conflicts[0].status, "unresolved");
+  assert.equal(conflicts[0].primaryPageId, undefined);
 });
 
 test("applies an audited drawing decision without changing source pages", () => {

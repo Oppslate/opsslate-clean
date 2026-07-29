@@ -83,6 +83,8 @@ import type * as heliosCanonicalCutover from "../heliosCanonicalCutover.js";
 import type * as heliosCivilGeometry from "../heliosCivilGeometry.js";
 import type * as heliosCivilGeometryActions from "../heliosCivilGeometryActions.js";
 import type * as heliosCivilGeometryOpenAIContracts from "../heliosCivilGeometryOpenAIContracts.js";
+import type * as heliosEngineeringMaterialization from "../heliosEngineeringMaterialization.js";
+import type * as heliosEngineeringMaterializationActions from "../heliosEngineeringMaterializationActions.js";
 import type * as heliosEngineeringParity from "../heliosEngineeringParity.js";
 import type * as heliosEngineeringParityPayloads from "../heliosEngineeringParityPayloads.js";
 import type * as heliosEngineeringShadow from "../heliosEngineeringShadow.js";
@@ -245,6 +247,8 @@ declare const fullApi: ApiFromModules<{
   heliosCivilGeometry: typeof heliosCivilGeometry;
   heliosCivilGeometryActions: typeof heliosCivilGeometryActions;
   heliosCivilGeometryOpenAIContracts: typeof heliosCivilGeometryOpenAIContracts;
+  heliosEngineeringMaterialization: typeof heliosEngineeringMaterialization;
+  heliosEngineeringMaterializationActions: typeof heliosEngineeringMaterializationActions;
   heliosEngineeringParity: typeof heliosEngineeringParity;
   heliosEngineeringParityPayloads: typeof heliosEngineeringParityPayloads;
   heliosEngineeringShadow: typeof heliosEngineeringShadow;

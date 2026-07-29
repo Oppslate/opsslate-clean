@@ -72,6 +72,28 @@ const syncGeometryDocumentReference = makeFunctionReference<
   null
 >("heliosEngineeringShadow:syncGeometryDocumentShadow");
 
+const queueSourceMaterializationReference = makeFunctionReference<
+  "mutation",
+  { sourceId: Id<"heliosEngineeringSources">; force?: boolean },
+  Id<"heliosEngineeringMaterializations"> | null
+>("heliosEngineeringMaterialization:queueSourceMaterialization");
+
+const materializePageViewsReference = makeFunctionReference<
+  "action",
+  { pageId: Id<"heliosEngineeringPages"> },
+  null
+>("heliosEngineeringMaterializationActions:materializePageViews");
+
+async function scheduleSourceMaterialization(
+  ctx: MutationCtx,
+  source: Doc<"heliosEngineeringSources">,
+) {
+  if (source.sourceKind !== "pdf" || !source.originalStorageId) return;
+  await ctx.scheduler.runAfter(0, queueSourceMaterializationReference, {
+    sourceId: source._id,
+  });
+}
+
 function sourceKey(documentId?: Id<"heliosDocuments">, writtenScopeId?: Id<"heliosWrittenScopes">) {
   return documentId ? `document:${documentId}` : `written-scope:${writtenScopeId}`;
 }
@@ -370,7 +392,7 @@ async function refreshRecord(ctx: MutationCtx, shadow: ShadowContext) {
     status: deriveHeliosEngineeringShadowRecordStatus(coverage),
     sourceCount: sources.filter((source) => source.status !== "superseded").length,
     pageCount: pages.length,
-    assetCount: assets.length,
+    assetCount: assets.filter((asset) => asset.isCurrent !== false).length,
     unresolvedIssueCount: activeArtifacts.reduce(
       (sum, artifact) => sum + artifact.unresolvedIssueCount,
       0,
@@ -605,6 +627,7 @@ export const syncProjectShadow = internalMutation({
             documentId: source.documentId,
           });
         }
+        await scheduleSourceMaterialization(ctx, source);
       }
       await refreshRecord(ctx, shadow);
       await ctx.scheduler.runAfter(15_000, refreshProjectReference, {
@@ -632,6 +655,7 @@ export const syncActiveProjectShadow = internalMutation({
           documentId: source.documentId,
         });
       }
+      await scheduleSourceMaterialization(ctx, source);
     }
     const downstreamDelay = 15_000;
     const planRun = await ctx.db
@@ -682,6 +706,7 @@ export const syncDocumentShadow = internalMutation({
       const source = shadow?.sources.get(sourceKey(job.documentId));
       if (!shadow || !source) continue;
       await mirrorDocumentSource(ctx, shadow, source, job.documentId);
+      await scheduleSourceMaterialization(ctx, source);
       await refreshRecord(ctx, shadow);
     }
     return null;
@@ -701,6 +726,7 @@ export const syncDocumentSourceShadow = internalMutation({
     const source = shadow?.sources.get(sourceKey(args.documentId));
     if (!shadow || !source) return null;
     await mirrorDocumentSource(ctx, shadow, source, args.documentId);
+    await scheduleSourceMaterialization(ctx, source);
     return null;
   },
 });
@@ -805,8 +831,12 @@ export const syncPlanDocumentShadow = internalMutation({
         title: page.title,
         confidence: page.confidence,
         modality: page.modality,
-        nativeTextStatus: page.modality === "scanned" ? "not_applicable" as const : channelState,
-        ocrStatus: page.modality === "vector" ? "not_applicable" as const : channelState,
+        nativeTextStatus: canonical?.materializationVersion
+          ? canonical.nativeTextStatus
+          : page.modality === "scanned" ? "not_applicable" as const : channelState,
+        ocrStatus: canonical?.materializationVersion
+          ? canonical.ocrStatus
+          : page.modality === "vector" ? "not_applicable" as const : channelState,
         updatedAt: Date.now(),
       };
       if (!canonical) {
@@ -826,6 +856,9 @@ export const syncPlanDocumentShadow = internalMutation({
       }
       if (!canonical) continue;
       pageMap.set(String(page._id), canonical._id);
+      await ctx.scheduler.runAfter(0, materializePageViewsReference, {
+        pageId: canonical._id,
+      });
       await ensureProvenance(ctx, shadow, {
         source,
         artifact,

@@ -253,6 +253,42 @@ function authorityScore(page: HeliosPlanPage) {
   return score;
 }
 
+function drawingAuthoritySignals(page: HeliosPlanPage) {
+  const source = `${page.documentName}\n${page.titleBlockText}\n${page.revisionMarker}`;
+  return {
+    issueDateRank: issueDateRank(page.issueDate),
+    issuedForBid: /\b(?:ISSUED[ -]FOR[ -]BID|BID[ -]PHASE|PHASE:\s*BID|BID)\b/i.test(source),
+    permitPackage: /PERMIT/i.test(page.documentName),
+    disqualified: /\b(?:SUPERSEDED|VOID|NOT FOR BIDDING)\b/i.test(source),
+  };
+}
+
+function deterministicDrawingAuthority(pages: HeliosPlanPage[]) {
+  const candidates = pages.map((page) => ({ page, ...drawingAuthoritySignals(page) }));
+  const bidCandidates = candidates.filter((candidate) =>
+    candidate.issuedForBid && !candidate.disqualified,
+  );
+  if (bidCandidates.length !== 1) return null;
+  const primary = bidCandidates[0];
+  const references = candidates.filter((candidate) => candidate.page.id !== primary.page.id);
+  if (
+    references.length === 0 ||
+    references.some((candidate) =>
+      !candidate.permitPackage ||
+      candidate.issuedForBid ||
+      candidate.issueDateRank <= 0 ||
+      primary.issueDateRank <= candidate.issueDateRank,
+    )
+  ) {
+    return null;
+  }
+  return {
+    primaryPageId: primary.page.id,
+    referencePageIds: references.map((candidate) => candidate.page.id),
+    reason: "The issued-for-bid drawing is newer than the embedded permit-package generation; the bid drawing governs estimating and the permit drawing remains a historical reference.",
+  };
+}
+
 function suggestedPrimary(pages: HeliosPlanPage[]) {
   return [...pages].sort((left, right) =>
     authorityScore(right) - authorityScore(left) ||
@@ -276,6 +312,7 @@ export function derivePlanSheetConflicts(
     if (candidates.length < 2) return [];
     const decision = decisionBySheet.get(key);
     const suggestion = suggestedPrimary(candidates);
+    const deterministicAuthority = decision ? null : deterministicDrawingAuthority(candidates);
     const titles = new Set(candidates.map((page) => normalizedTitle(page.title)).filter(Boolean));
     const dates = new Set(candidates.map((page) => page.issueDate.trim().toUpperCase()).filter(Boolean));
     const versionConflict = titles.size <= 1 && dates.size > 1;
@@ -284,7 +321,7 @@ export function derivePlanSheetConflicts(
       : "The same drawing identifier occurs on multiple source pages and requires an authority decision.";
     const status = decision?.status === "resolved"
       ? "resolved" as const
-      : decision?.status || "unresolved" as const;
+      : decision?.status || (deterministicAuthority ? "resolved" as const : "unresolved" as const);
     return [{
       id: decision?.id || `sheet-conflict:${key}`,
       normalizedSheetNumber: key,
@@ -293,9 +330,9 @@ export function derivePlanSheetConflicts(
       status,
       pageIds: candidates.map((page) => page.id),
       suggestedPrimaryPageId: suggestion?.id,
-      primaryPageId: decision?.primaryPageId,
-      referencePageIds: decision?.referencePageIds || [],
-      reason: decision?.reason || defaultReason,
+      primaryPageId: decision?.primaryPageId || deterministicAuthority?.primaryPageId,
+      referencePageIds: decision?.referencePageIds || deterministicAuthority?.referencePageIds || [],
+      reason: decision?.reason || deterministicAuthority?.reason || defaultReason,
       decision: decision?.decision,
       reviewerName: decision?.reviewerName,
       reviewedAt: decision?.reviewedAt,
