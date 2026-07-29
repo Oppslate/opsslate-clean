@@ -1108,3 +1108,36 @@ points.
   Vercel deployment, production promotion, and domain changes: Not performed
 - Approval gate: stop before Stage 4I deterministic candidate validation and
   engineering-delta comparison
+
+### Civil Geometry 2.0 - Euclid Stage 4I candidate validation
+
+- Application checkpoint: `59abd96`
+- Contract: [Euclid Stage 4I candidate validation](./HELIOS_EUCLID_STAGE_4I_CANDIDATE_VALIDATION.md)
+- Scope: rerun Stage 4C horizontal control, Stage 4D vertical profiles, and
+  Stage 4E relationships/readiness against both the immutable source model and
+  the current reviewed candidate, then persist the comparison
+- Single-ingestion boundary: both solver runs reconstruct fingerprint-verified
+  canonical records; Stage 4I does not reread a PDF or call OpenAI
+- Integrity: current source, model, candidate, review-set, entity-chunk, solver,
+  result, and validation fingerprints fail closed on stale or altered data
+- Storage: immutable validation headers and deterministic bounded check,
+  readiness, and engineering-delta chunks; no patch, replace, or delete path
+- Bid-day workflow: one-click candidate validation in the existing three-panel
+  cockpit with horizontal, vertical, graph, changed, improved, degraded, and
+  blocking feedback
+- Honest live boundary: Titus has no current canonical Euclid model, so browser
+  verification remains in `awaiting_model`; no geometry or validation was
+  fabricated
+- Automated domain tests: 108 passed
+- Automated Helios security and boundary tests: 116 passed
+- Browser QA: desktop `1440 × 900`, tablet `1024 × 768`, and mobile
+  `390 × 844` passed with no horizontal overflow or application console errors
+- Domain TypeScript, Helios lint, Helios production build, shared OpsSlate
+  production build, Convex code generation, and development function/schema
+  synchronization: Passed
+- Existing Document Intelligence, Plan Intelligence, WBS, Estimate Builder,
+  Cockpit 2.0, Ask Helios, quantity, pricing, procurement, evidence, risk,
+  schedule, and LandXML consumers: Unchanged
+- Canonical promotion, quantity or estimate publication, scheduling, LandXML,
+  Vercel deployment, production promotion, and domain changes: Not performed
+- Approval gate: stop before Stage 4J governed canonical promotion
