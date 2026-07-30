@@ -195,3 +195,36 @@ PDF-path removal occurred. The next stage must reconcile deterministic page
 metadata, normalize model output, deduplicate batch-local relationships, and
 perform cross-batch/global relationship resolution before another Titus parity
 run can be considered for activation.
+
+## Stage 6 governed Plan semantic reconciliation
+
+Stage 6 resolves the Stage 5 semantic drift without reopening a PDF or asking
+the reasoning provider to reinterpret the same governed records. The
+non-current shadow run is reconciled from the exact `plan_inventory` artifact,
+canonical engineering-page lineage, and immutable source Plan page records
+already stored in the canonical engineering record.
+
+- Every shadow page must resolve through its canonical engineering page to the
+  exact `sourcePlanPageId` in the governed Plan artifact. Missing, stale, or
+  cross-fingerprint lineage blocks the transaction.
+- Canonical page metadata, views, and scale-calibration records replace the
+  batch-local model variants deterministically. The model result remains a
+  diagnostic shadow, not a second source of truth.
+- Batch-local references are removed and rebuilt from the governed project
+  relationship set. Source and target page identifiers are remapped to the
+  shadow run across the complete project before resolution status is stored.
+- The strengthened activation gate compares complete page metadata, page-level
+  view signatures, reference signatures, and calibration signatures. Matching
+  counts alone can no longer qualify a writer.
+- Reconciliation is recorded as versioned canonical-artifact work with zero
+  OpenAI calls and zero original-PDF reads. It cannot make the shadow current
+  or alter the authoritative Plan run.
+
+The full Titus reconciliation retained 179 pages, 377 views, 276 references,
+and 66 calibrations with exact semantic agreement. It removed 129 excess
+batch-local views and 440 excess batch-local references, and remapped 102
+resolved relationships project-wide. All page metadata fields matched 179 of
+179, view signatures matched 179 of 179 pages, reference signatures matched
+276 of 276, and calibration signatures matched 66 of 66. The stored pilot is
+now `activationEligible: true` and `semanticReviewRequired: false`, but no
+writer activation or legacy-path removal is part of Stage 6.

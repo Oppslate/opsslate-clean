@@ -1417,3 +1417,40 @@ points.
 - Next approval gate: deterministic metadata authority, semantic normalization,
   relationship deduplication, and global reconciliation must be implemented and
   the full Titus parity run repeated before activation is reconsidered
+
+### Canonical-record cutover - Stage 6 Plan semantic reconciliation
+
+- Application checkpoint: `e5986f4`
+- Scope: governed semantic reconciliation of the existing non-current Titus
+  shadow only; no current reader, writer, geometry, or estimator workflow was
+  switched
+- Titus pilot: `kx7pn7v50jbgmqcmjvwwvsgpvx8bgcc8`; shadow run
+  `yn74y6pg0venqgys71ysrhtphh8bhp4t`; authoritative run
+  `yn77ec908jczvxfxf64863b2k98betzd`; canonical record
+  `g97swmhve755yktq1ca03rbnwh8bf7f0`
+- Governed input: exact ready `plan_inventory` artifact and canonical
+  `sourcePlanPageId` lineage on the matching source fingerprint
+- Reconciliation result: 179 pages, 377 views, 276 references, and 66
+  calibrations retained with exact semantic parity
+- Normalization result: 129 excess batch-local views and 440 excess
+  batch-local references removed; 102 target relationships remapped and
+  resolved across the complete project
+- Exact gate: metadata 179/179, view signatures 179/179 pages, reference
+  signatures 276/276, and calibration signatures 66/66
+- Single-ingestion boundary: Stage 6 made zero OpenAI calls, zero original-PDF
+  reads, and zero original-PDF uploads
+- Safety result: `activationEligible: true` and
+  `semanticReviewRequired: false` are stored for review, but the shadow remains
+  non-current and no activation capability was invoked
+- Automated Helios security and boundary tests: 133 passed
+- Targeted Convex lint, independent web TypeScript, shared UI boundary check,
+  Convex development deployment, and stored Titus re-evaluation: Passed
+- Existing Document Intelligence, authoritative Plan writer and run, Civil
+  Geometry, Euclid model, WBS, Estimate Builder, Cockpit 2.0, Ask Helios,
+  takeoff, pricing, procurement, evidence, risk, schedule, LandXML, and current
+  domains: Unchanged
+- Vercel deployment, production promotion, writer activation, legacy PDF-path
+  removal, geometry cutover, estimate mutation, and LandXML: Not performed
+- Next approval gate: design and implement the explicit canonical Plan writer
+  activation/cutover transaction, with automatic rollback to legacy on stale
+  lineage or a new package revision
