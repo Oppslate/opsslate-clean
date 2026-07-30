@@ -228,3 +228,41 @@ resolved relationships project-wide. All page metadata fields matched 179 of
 276 of 276, and calibration signatures matched 66 of 66. The stored pilot is
 now `activationEligible: true` and `semanticReviewRequired: false`, but no
 writer activation or legacy-path removal is part of Stage 6.
+
+## Stage 7 canonical Plan writer activation
+
+Stage 7 adds an explicit, versioned activation transaction for a fully
+reconciled canonical Plan writer pilot. The activation is intentionally a
+reversible Plan Intelligence overlay: estimators read the exact canonical
+writer output, while the existing legacy Plan run remains current for Civil
+Geometry and other workflows that have not completed their own canonical
+cutovers. This prevents a Plan cutover from silently invalidating Euclid,
+takeoff, or estimate records.
+
+- Activation requires the current package and revision, ready canonical
+  engineering record, exact governed `plan_inventory` artifact, eligible
+  current pilot, completed semantic reconciliation, matching source and input
+  fingerprints, and exact live page, view, reference, and calibration counts.
+- The complete canonical output is fingerprinted at activation. Every Plan
+  read recomputes and compares the package, record, artifact, pilot, run,
+  input, output, and count lineage before canonical data can be returned.
+- A stale pilot, changed record, changed artifact, changed output, or new bid
+  package automatically routes Plan Intelligence back to the retained legacy
+  run. The estimator is never shown a partially authorized canonical result.
+- A new package revision, requested Plan reconstruction, drawing-authority
+  decision, or calibration decision also records an append-only rollback and
+  retires the active writer overlay before the legacy mutation proceeds.
+- Current drawing-authority decisions are remapped by immutable
+  document/page identity when the overlay is activated, so an activation
+  cannot discard estimator review decisions.
+- The earlier canonical Plan reader pilot is retired to rollback history when
+  the writer output is activated. There is one unambiguous Plan read authority
+  at a time.
+
+The Titus activation `m17r3nc0vewzehend6ctaw7kz58bgx9n` authorizes canonical
+run `yn74y6pg0venqgys71ysrhtphh8bhp4t` over retained legacy rollback run
+`yn77ec908jczvxfxf64863b2k98betzd`. The live activation audit reports exact
+canonical-writer mode with 179 pages, 377 views, 276 references, and 66
+calibrations. Activation and verification made zero OpenAI calls and zero
+original-PDF reads. The legacy PDF writer has not been removed, and Civil
+Geometry has not been cut over in this stage.

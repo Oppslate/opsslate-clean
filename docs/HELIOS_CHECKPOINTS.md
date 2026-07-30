@@ -1454,3 +1454,41 @@ points.
 - Next approval gate: design and implement the explicit canonical Plan writer
   activation/cutover transaction, with automatic rollback to legacy on stale
   lineage or a new package revision
+
+### Canonical-record cutover - Stage 7 Plan writer activation
+
+- Application checkpoint: `17ed9e6`
+- Scope: explicit, versioned activation of the exact canonical Plan writer
+  output as a reversible Plan Intelligence overlay
+- Titus activation: `m17r3nc0vewzehend6ctaw7kz58bgx9n`; canonical run
+  `yn74y6pg0venqgys71ysrhtphh8bhp4t`; retained legacy rollback run
+  `yn77ec908jczvxfxf64863b2k98betzd`; canonical record
+  `g97swmhve755yktq1ca03rbnwh8bf7f0`
+- Live activation audit: `effectiveMode: canonical_writer`, `exact: true`,
+  zero issues, 179 pages, 377 views, 276 references, and 66 calibrations
+- Activation gate: exact package revision, current canonical record, governed
+  artifact, eligible reconciled pilot, source fingerprint, canonical input
+  fingerprint, complete output fingerprint, and live record counts
+- Automatic rollback: new package creation, Plan reconstruction, drawing
+  authority review, and calibration review retire the overlay; query-time
+  lineage drift also returns the retained legacy run without exposing partial
+  canonical data
+- Decision preservation: current sheet-authority decisions are remapped from
+  legacy pages to canonical pages by document and physical-page identity
+- Single-ingestion boundary: activation and audit made zero OpenAI calls, zero
+  original-PDF reads, and zero original-PDF uploads
+- Automated Helios security and boundary tests: 134 passed
+- Convex schema/function deployment, targeted Convex lint, shared UI boundary
+  check, and Helios production build: Passed
+- OpsSlate web production build: not required for this Helios-only checkpoint;
+  one background web build was stopped after exceeding the local verification
+  window
+- Existing Document Intelligence, legacy downstream Plan authority, Civil
+  Geometry, Euclid model, WBS, Estimate Builder, Cockpit 2.0, Ask Helios,
+  takeoff, pricing, procurement, evidence, risk, schedule, LandXML, and current
+  production domains: Unchanged
+- Vercel deployment, production promotion, legacy PDF-path removal, Civil
+  Geometry cutover, estimate mutation, and LandXML export: Not performed
+- Next approval gate: validate automatic rollback with a fresh package revision
+  test, then design the Civil Geometry canonical writer cutover without
+  bypassing its existing Euclid review and promotion controls
