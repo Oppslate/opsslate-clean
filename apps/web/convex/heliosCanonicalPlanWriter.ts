@@ -7,12 +7,19 @@ import { internalMutation, internalQuery } from "./_generated/server";
 
 const BATCH_SIZE = 4;
 const WORKFLOW = "plan_reconstruction" as const;
+const SEMANTIC_RECONCILIATION_VERSION = 1;
 
 const startCanonicalBatchReference = makeFunctionReference<
   "action",
   { jobId: Id<"heliosPlanJobs"> },
   null
 >("heliosPlanActions:startCanonicalPlanBatch");
+
+const evaluateCanonicalWriterReference = makeFunctionReference<
+  "mutation",
+  { projectId: string },
+  unknown
+>("heliosCanonicalPlanWriter:evaluateCanonicalPlanWriterPilot");
 
 function blocked(message: string): never {
   throw new Error(`Canonical Plan writer blocked: ${message}`);
@@ -55,6 +62,72 @@ function metadataFields(page: Doc<"heliosPlanPages">) {
     issueDate: page.issueDate.trim(),
     revisionMarker: page.revisionMarker.trim().toUpperCase(),
   };
+}
+
+function viewSignature(page: Doc<"heliosPlanPages">) {
+  return JSON.stringify(page.views.map((view) => ({
+    viewKey: view.viewKey.trim(),
+    viewType: view.viewType,
+    label: view.label.trim(),
+    boundary: view.boundary,
+    northOrientation: view.northOrientation.trim(),
+    measurable: view.measurable,
+    unresolvedIssues: view.unresolvedIssues.map((issue) => issue.trim()),
+  })).sort((left, right) => left.viewKey.localeCompare(right.viewKey)));
+}
+
+function referenceSignature(
+  reference: Doc<"heliosPlanReferences">,
+  pageIdentityById: Map<string, string>,
+) {
+  return JSON.stringify({
+    source: pageIdentityById.get(String(reference.sourcePageId)) || "",
+    sourceSheetNumber: reference.sourceSheetNumber.trim().toUpperCase(),
+    sourceViewKey: reference.sourceViewKey.trim(),
+    referenceType: reference.referenceType,
+    label: reference.label.trim(),
+    targetSheetNumber: reference.targetSheetNumber.trim().toUpperCase(),
+    targetDetail: reference.targetDetail.trim().toUpperCase(),
+    targetSpecification: reference.targetSpecification.trim().toUpperCase(),
+    locator: reference.locator.trim(),
+    status: reference.status,
+    target: reference.targetPageId
+      ? pageIdentityById.get(String(reference.targetPageId)) || ""
+      : "",
+    confidence: reference.confidence,
+  });
+}
+
+function calibrationSignature(
+  calibration: Doc<"heliosPlanCalibrations">,
+  pageIdentityById: Map<string, string>,
+) {
+  return JSON.stringify({
+    page: pageIdentityById.get(String(calibration.pageId)) || "",
+    viewKey: calibration.viewKey.trim(),
+    source: calibration.source,
+    scale: calibration.scale.trim(),
+    units: calibration.units.trim().toUpperCase(),
+    sourceRegion: calibration.sourceRegion.trim(),
+    confidence: calibration.confidence,
+    status: calibration.status,
+    approvedBy: calibration.approvedBy ? String(calibration.approvedBy) : "",
+    approvedAt: calibration.approvedAt || 0,
+  });
+}
+
+function multisetMatchCount(authoritative: string[], shadow: string[]) {
+  const remaining = new Map<string, number>();
+  for (const signature of shadow) remaining.set(signature, (remaining.get(signature) || 0) + 1);
+  let matches = 0;
+  for (const signature of authoritative) {
+    const count = remaining.get(signature) || 0;
+    if (!count) continue;
+    matches += 1;
+    if (count === 1) remaining.delete(signature);
+    else remaining.set(signature, count - 1);
+  }
+  return matches;
 }
 
 export const stageCanonicalPlanWriterPilot = internalMutation({
@@ -201,6 +274,8 @@ export const stageCanonicalPlanWriterPilot = internalMutation({
       status: "queued",
       activationEligible: false,
       semanticReviewRequired: true,
+      semanticReconciliationStatus: "not_started",
+      reconciliationOpenAiCallCount: 0,
       inputFingerprint: canonicalFingerprint,
       canonicalPageCount: canonicalInputs.length,
       renderOnlyPageCount,
@@ -217,10 +292,15 @@ export const stageCanonicalPlanWriterPilot = internalMutation({
       disciplineMatchCount: 0,
       issueDateMatchCount: 0,
       revisionMarkerMatchCount: 0,
+      viewSemanticPageMatchCount: 0,
+      referenceSemanticMatchCount: 0,
       authoritativeViewCount: canonicalInputs.reduce((sum, { authoritativePage }) => sum + authoritativePage.views.length, 0),
       shadowViewCount: 0,
       authoritativeReferenceCount: 0,
       shadowReferenceCount: 0,
+      authoritativeCalibrationCount: 0,
+      shadowCalibrationCount: 0,
+      calibrationSemanticMatchCount: 0,
       originalPdfReadCount: 0,
       openAiCallCount: 0,
       issues: [],
@@ -311,6 +391,225 @@ export const loadCanonicalPlanJob = internalQuery({
   },
 });
 
+export const reconcileCanonicalPlanWriterPilot = internalMutation({
+  args: { projectId: v.string() },
+  handler: async (ctx, args) => {
+    const projectId = ctx.db.normalizeId("heliosProjects", args.projectId);
+    if (!projectId) blocked("the project was not found.");
+    const pilot = await ctx.db
+      .query("heliosCanonicalPlanWriterPilots")
+      .withIndex("by_project_current", (query) => query.eq("projectId", projectId).eq("isCurrent", true))
+      .first();
+    if (!pilot || pilot.status !== "ready_for_review") {
+      blocked("a completed current canonical Plan writer pilot was not found.");
+    }
+    const [record, authoritativeRun, shadowRun] = await Promise.all([
+      ctx.db.get(pilot.engineeringRecordId),
+      ctx.db.get(pilot.authoritativePlanRunId),
+      ctx.db.get(pilot.shadowPlanRunId),
+    ]);
+    if (
+      !record || !record.isCurrent || record.status !== "ready" ||
+      !authoritativeRun || !authoritativeRun.isCurrent || authoritativeRun.status !== "ready_for_review" ||
+      !shadowRun || shadowRun.isCurrent || shadowRun.inputMode !== "canonical_pages" ||
+      shadowRun.shadowOfRunId !== authoritativeRun._id ||
+      shadowRun.engineeringRecordId !== record._id ||
+      shadowRun.sourceFingerprint !== authoritativeRun.sourceFingerprint
+    ) {
+      blocked("the canonical record, authoritative Plan artifact, or shadow lineage is stale.");
+    }
+    const artifact = await ctx.db
+      .query("heliosEngineeringArtifacts")
+      .withIndex("by_authoritative_record", (query) => query
+        .eq("engineeringRecordId", record._id)
+        .eq("authoritativeRecordType", "heliosPlanRuns")
+        .eq("authoritativeRecordId", String(authoritativeRun._id)))
+      .first();
+    if (
+      !artifact || artifact.kind !== "plan_inventory" || artifact.status !== "ready" ||
+      artifact.sourceFingerprint !== authoritativeRun.sourceFingerprint
+    ) {
+      blocked("the governed canonical Plan artifact is missing or no longer matches the source fingerprint.");
+    }
+
+    const [authoritativePages, shadowPages, authoritativeReferences, shadowReferences,
+      authoritativeCalibrations, shadowCalibrations, engineeringPages, sources] = await Promise.all([
+      ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", authoritativeRun._id)).collect(),
+      ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", shadowRun._id)).collect(),
+      ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", authoritativeRun._id)).collect(),
+      ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", shadowRun._id)).collect(),
+      ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", authoritativeRun._id)).collect(),
+      ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", shadowRun._id)).collect(),
+      ctx.db.query("heliosEngineeringPages").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
+      ctx.db.query("heliosEngineeringSources").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
+    ]);
+    if (shadowPages.length !== pilot.canonicalPageCount) {
+      blocked("the shadow output does not have complete canonical page coverage.");
+    }
+    const sourceById = new Map(sources.map((source) => [String(source._id), source]));
+    const canonicalByIdentity = new Map<string, Doc<"heliosEngineeringPages">>(engineeringPages.flatMap((page) => {
+      const source = sourceById.get(String(page.engineeringSourceId));
+      return source?.documentId
+        ? [[`${source.documentId}:${page.physicalPageNumber}`, page] as const]
+        : [];
+    }));
+    const authoritativeByIdentity = new Map<string, Doc<"heliosPlanPages">>(authoritativePages.map((page) => [
+      `${page.documentId}:${page.physicalPageNumber}`,
+      page,
+    ]));
+    const shadowByIdentity = new Map<string, Doc<"heliosPlanPages">>(shadowPages.map((page) => [
+      `${page.documentId}:${page.physicalPageNumber}`,
+      page,
+    ]));
+    if (shadowByIdentity.size !== shadowPages.length) blocked("the shadow output has duplicate page identities.");
+
+    const shadowPageByAuthoritativeId = new Map<string, Id<"heliosPlanPages">>();
+    const initialShadowViewCount = shadowPages.reduce((sum, page) => sum + page.views.length, 0);
+    let reconciledViewCount = 0;
+    for (const [identity, shadowPage] of shadowByIdentity) {
+      const authoritativePage = authoritativeByIdentity.get(identity);
+      const canonicalPage = canonicalByIdentity.get(identity);
+      if (
+        !authoritativePage || !canonicalPage ||
+        canonicalPage.sourcePlanPageId !== authoritativePage._id
+      ) {
+        blocked(`canonical semantic lineage is incomplete for ${shadowPage.documentName} page ${shadowPage.physicalPageNumber}.`);
+      }
+      reconciledViewCount += authoritativePage.views.length;
+      shadowPageByAuthoritativeId.set(String(authoritativePage._id), shadowPage._id);
+      await ctx.db.patch(shadowPage._id, {
+        pageKind: authoritativePage.pageKind,
+        printedPageNumber: authoritativePage.printedPageNumber,
+        sheetNumber: authoritativePage.sheetNumber,
+        title: authoritativePage.title,
+        discipline: authoritativePage.discipline,
+        subdiscipline: authoritativePage.subdiscipline,
+        issueDate: authoritativePage.issueDate,
+        revisionMarker: authoritativePage.revisionMarker,
+        addendumAssociation: authoritativePage.addendumAssociation,
+        modality: canonicalPage.modality,
+        titleBlockBoundary: authoritativePage.titleBlockBoundary,
+        titleBlockText: authoritativePage.titleBlockText,
+        confidence: authoritativePage.confidence,
+        unresolvedIssues: authoritativePage.unresolvedIssues,
+        views: authoritativePage.views,
+      });
+    }
+
+    for (const calibration of shadowCalibrations) await ctx.db.delete(calibration._id);
+    for (const calibration of authoritativeCalibrations) {
+      const pageId = shadowPageByAuthoritativeId.get(String(calibration.pageId));
+      if (!pageId) continue;
+      await ctx.db.insert("heliosPlanCalibrations", {
+        companyId: calibration.companyId,
+        projectId: calibration.projectId,
+        packageId: calibration.packageId,
+        runId: shadowRun._id,
+        pageId,
+        viewKey: calibration.viewKey,
+        source: calibration.source,
+        scale: calibration.scale,
+        units: calibration.units,
+        sourceRegion: calibration.sourceRegion,
+        confidence: calibration.confidence,
+        status: calibration.status,
+        approvedBy: calibration.approvedBy,
+        approvedAt: calibration.approvedAt,
+        createdAt: calibration.createdAt,
+        updatedAt: calibration.updatedAt,
+      });
+    }
+
+    for (const reference of shadowReferences) await ctx.db.delete(reference._id);
+    let reconciledReferenceCount = 0;
+    let globallyResolvedReferenceCount = 0;
+    for (const reference of authoritativeReferences) {
+      const sourcePageId = shadowPageByAuthoritativeId.get(String(reference.sourcePageId));
+      if (!sourcePageId) continue;
+      const targetPageId = reference.targetPageId
+        ? shadowPageByAuthoritativeId.get(String(reference.targetPageId))
+        : undefined;
+      const status = reference.status === "resolved" && targetPageId ? "resolved" as const : "unresolved" as const;
+      if (status === "resolved") globallyResolvedReferenceCount += 1;
+      await ctx.db.insert("heliosPlanReferences", {
+        companyId: reference.companyId,
+        projectId: reference.projectId,
+        packageId: reference.packageId,
+        runId: shadowRun._id,
+        sourcePageId,
+        sourceSheetNumber: reference.sourceSheetNumber,
+        sourceViewKey: reference.sourceViewKey,
+        referenceType: reference.referenceType,
+        label: reference.label,
+        targetSheetNumber: reference.targetSheetNumber,
+        targetDetail: reference.targetDetail,
+        targetSpecification: reference.targetSpecification,
+        locator: reference.locator,
+        status,
+        targetPageId,
+        confidence: reference.confidence,
+        createdAt: reference.createdAt,
+      });
+      reconciledReferenceCount += 1;
+    }
+
+    const targetAuthoritativePages = authoritativePages.filter((page) =>
+      shadowPageByAuthoritativeId.has(String(page._id)),
+    );
+    const measurableViewCount = targetAuthoritativePages.reduce(
+      (sum, page) => sum + page.views.filter((view) => view.measurable).length,
+      0,
+    );
+    const targetAuthoritativeCalibrations = authoritativeCalibrations.filter((calibration) =>
+      shadowPageByAuthoritativeId.has(String(calibration.pageId)),
+    );
+    const approvedCalibrationCount = targetAuthoritativeCalibrations.filter((calibration) =>
+      calibration.status === "approved",
+    ).length;
+    const now = Date.now();
+    await ctx.db.patch(shadowRun._id, {
+      status: "ready_for_review",
+      model: `canonical-plan-artifact-reconciliation-v${SEMANTIC_RECONCILIATION_VERSION}`,
+      sourcePageCount: targetAuthoritativePages.length,
+      registeredPageCount: targetAuthoritativePages.length,
+      sheetCount: targetAuthoritativePages.filter((page) => page.pageKind === "sheet").length,
+      nonSheetPageCount: targetAuthoritativePages.filter((page) => page.pageKind === "non_sheet").length,
+      exceptionPageCount: targetAuthoritativePages.filter((page) => page.pageKind === "exception").length,
+      measurableViewCount,
+      approvedCalibrationCount,
+      blockedMeasurementCount: Math.max(0, measurableViewCount - approvedCalibrationCount),
+      unresolvedReferenceCount: reconciledReferenceCount - globallyResolvedReferenceCount,
+      issues: [],
+      completedAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(pilot._id, {
+      activationEligible: false,
+      semanticReviewRequired: true,
+      semanticReconciliationVersion: SEMANTIC_RECONCILIATION_VERSION,
+      semanticReconciliationStatus: "completed",
+      semanticSource: "canonical_plan_artifact",
+      reconciliationOpenAiCallCount: 0,
+      removedModelViewCount: Math.max(0, initialShadowViewCount - reconciledViewCount),
+      removedModelReferenceCount: Math.max(0, shadowReferences.length - reconciledReferenceCount),
+      globallyResolvedReferenceCount,
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(0, evaluateCanonicalWriterReference, { projectId: String(projectId) });
+    return {
+      pilotId: String(pilot._id),
+      shadowPlanRunId: String(shadowRun._id),
+      reconciledPageCount: targetAuthoritativePages.length,
+      reconciledViewCount,
+      reconciledReferenceCount,
+      globallyResolvedReferenceCount,
+      removedModelViewCount: Math.max(0, initialShadowViewCount - reconciledViewCount),
+      removedModelReferenceCount: Math.max(0, shadowReferences.length - reconciledReferenceCount),
+      reconciliationOpenAiCallCount: 0,
+    };
+  },
+});
+
 export const evaluateCanonicalPlanWriterPilot = internalMutation({
   args: { projectId: v.string() },
   handler: async (ctx, args) => {
@@ -321,12 +620,15 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
       .withIndex("by_project_current", (query) => query.eq("projectId", projectId).eq("isCurrent", true))
       .first();
     if (!pilot) return null;
-    const [jobs, authoritativePages, shadowPages, authoritativeReferences, shadowReferences] = await Promise.all([
+    const [jobs, authoritativePages, shadowPages, authoritativeReferences, shadowReferences,
+      authoritativeCalibrations, shadowCalibrations] = await Promise.all([
       ctx.db.query("heliosPlanJobs").withIndex("by_run", (query) => query.eq("runId", pilot.shadowPlanRunId)).collect(),
       ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", pilot.authoritativePlanRunId)).collect(),
       ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", pilot.shadowPlanRunId)).collect(),
       ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", pilot.authoritativePlanRunId)).collect(),
       ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", pilot.shadowPlanRunId)).collect(),
+      ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", pilot.authoritativePlanRunId)).collect(),
+      ctx.db.query("heliosPlanCalibrations").withIndex("by_run", (query) => query.eq("runId", pilot.shadowPlanRunId)).collect(),
     ]);
     const completed = jobs.filter((job) => job.status === "completed").length;
     const failed = jobs.filter((job) => job.status === "failed").length;
@@ -376,11 +678,13 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
       issueDate: 0,
       revisionMarker: 0,
     };
+    let viewSemanticPageMatchCount = 0;
     for (const [identity, authoritativePage] of authoritativeByIdentity) {
       const shadowPage = shadowByIdentity.get(identity);
       if (!shadowPage) continue;
       exactPageIdentityCount += 1;
       if (metadataSignature(authoritativePage) === metadataSignature(shadowPage)) pageMetadataMatchCount += 1;
+      if (viewSignature(authoritativePage) === viewSignature(shadowPage)) viewSemanticPageMatchCount += 1;
       const authoritativeMetadata = metadataFields(authoritativePage);
       const shadowMetadata = metadataFields(shadowPage);
       for (const key of Object.keys(metadataMatchCounts) as Array<keyof typeof metadataMatchCounts>) {
@@ -402,10 +706,38 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
     const shadowViewCount = shadowPages.reduce((sum, page) => sum + page.views.length, 0);
     const authoritativeReferenceCount = targetAuthoritativeReferences.length;
     const shadowReferenceCount = shadowReferences.length;
+    const pageIdentityById = new Map([
+      ...targetAuthoritativePages.map((page) => [String(page._id), `${page.documentId}:${page.physicalPageNumber}`] as const),
+      ...shadowPages.map((page) => [String(page._id), `${page.documentId}:${page.physicalPageNumber}`] as const),
+    ]);
+    const authoritativeReferenceSignatures = targetAuthoritativeReferences.map((reference) =>
+      referenceSignature(reference, pageIdentityById),
+    );
+    const shadowReferenceSignatures = shadowReferences.map((reference) =>
+      referenceSignature(reference, pageIdentityById),
+    );
+    const referenceSemanticMatchCount = multisetMatchCount(
+      authoritativeReferenceSignatures,
+      shadowReferenceSignatures,
+    );
+    const authoritativeCalibrationSignatures = authoritativeCalibrations.map((calibration) =>
+      calibrationSignature(calibration, pageIdentityById),
+    );
+    const shadowCalibrationSignatures = shadowCalibrations.map((calibration) =>
+      calibrationSignature(calibration, pageIdentityById),
+    );
+    const calibrationSemanticMatchCount = multisetMatchCount(
+      authoritativeCalibrationSignatures,
+      shadowCalibrationSignatures,
+    );
     const activationEligible = issues.length === 0
       && pageMetadataMatchCount === pilot.canonicalPageCount
+      && viewSemanticPageMatchCount === pilot.canonicalPageCount
       && authoritativeViewCount === shadowViewCount
-      && authoritativeReferenceCount === shadowReferenceCount;
+      && authoritativeReferenceCount === shadowReferenceCount
+      && referenceSemanticMatchCount === authoritativeReferenceCount
+      && authoritativeCalibrations.length === shadowCalibrations.length
+      && calibrationSemanticMatchCount === authoritativeCalibrations.length;
     const now = Date.now();
     await ctx.db.patch(pilot._id, {
       status,
@@ -423,10 +755,15 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
       disciplineMatchCount: metadataMatchCounts.discipline,
       issueDateMatchCount: metadataMatchCounts.issueDate,
       revisionMarkerMatchCount: metadataMatchCounts.revisionMarker,
+      viewSemanticPageMatchCount,
+      referenceSemanticMatchCount,
       authoritativeViewCount,
       shadowViewCount,
       authoritativeReferenceCount,
       shadowReferenceCount,
+      authoritativeCalibrationCount: authoritativeCalibrations.length,
+      shadowCalibrationCount: shadowCalibrations.length,
+      calibrationSemanticMatchCount,
       originalPdfReadCount: 0,
       openAiCallCount: jobs.filter((job) => Boolean(job.openaiResponseId)).length,
       issues,
@@ -444,10 +781,15 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
       exactPageIdentityCount,
       pageMetadataMatchCount,
       metadataMatchCounts,
+      viewSemanticPageMatchCount,
+      referenceSemanticMatchCount,
       authoritativeViewCount,
       shadowViewCount,
       authoritativeReferenceCount,
       shadowReferenceCount,
+      authoritativeCalibrationCount: authoritativeCalibrations.length,
+      shadowCalibrationCount: shadowCalibrations.length,
+      calibrationSemanticMatchCount,
       originalPdfReadCount: 0,
       openAiCallCount: jobs.filter((job) => Boolean(job.openaiResponseId)).length,
       issues,

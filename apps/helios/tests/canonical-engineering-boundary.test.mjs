@@ -331,3 +331,40 @@ test("Cutover Stage 5 reconstructs Plan shadow batches from pinned canonical pag
   assert.match(actions, /openai\.files\.create/);
   assert.match(geometryActions, /openai\.files\.create/);
 });
+
+test("Cutover Stage 6 reconciles Plan semantics from the governed canonical artifact", async () => {
+  const [schema, writer, actions, intelligence] = await Promise.all([
+    source("web/convex/schema.ts"),
+    source("web/convex/heliosCanonicalPlanWriter.ts"),
+    source("web/convex/heliosPlanActions.ts"),
+    source("web/convex/heliosPlanIntelligence.ts"),
+  ]);
+  assert.match(schema, /semanticReconciliationStatus/);
+  assert.match(schema, /semanticSource: v\.optional\(v\.literal\("canonical_plan_artifact"\)\)/);
+  assert.match(schema, /viewSemanticPageMatchCount/);
+  assert.match(schema, /referenceSemanticMatchCount/);
+  assert.match(schema, /calibrationSemanticMatchCount/);
+
+  const reconciliation = writer.slice(
+    writer.indexOf("export const reconcileCanonicalPlanWriterPilot"),
+    writer.indexOf("export const evaluateCanonicalPlanWriterPilot"),
+  );
+  assert.match(reconciliation, /artifact\.kind !== "plan_inventory"/);
+  assert.match(reconciliation, /artifact\.sourceFingerprint !== authoritativeRun\.sourceFingerprint/);
+  assert.match(reconciliation, /canonicalPage\.sourcePlanPageId !== authoritativePage\._id/);
+  assert.match(reconciliation, /views: authoritativePage\.views/);
+  assert.match(reconciliation, /ctx\.db\.delete\(reference\._id\)/);
+  assert.match(reconciliation, /targetPageId = reference\.targetPageId/);
+  assert.match(reconciliation, /reconciliationOpenAiCallCount: 0/);
+  assert.doesNotMatch(reconciliation, /ctx\.storage|get\(.*storageId|files\.create|responses\.create|input_file|input_image/);
+
+  assert.match(writer, /viewSemanticPageMatchCount === pilot\.canonicalPageCount/);
+  assert.match(writer, /referenceSemanticMatchCount === authoritativeReferenceCount/);
+  assert.match(writer, /calibrationSemanticMatchCount === authoritativeCalibrations\.length/);
+  assert.match(writer, /activationEligible: false/);
+  assert.match(writer, /shadowRun\.isCurrent/);
+
+  // Stage 6 remains a non-current reconciliation gate and leaves both writers intact.
+  assert.match(actions, /startPlanDocument = internalAction/);
+  assert.match(intelligence, /createPlanRun/);
+});
