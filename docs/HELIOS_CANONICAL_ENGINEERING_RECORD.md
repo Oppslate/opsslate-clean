@@ -148,3 +148,34 @@ legacy reader.
 This stage does not replace the legacy Plan reconstruction writer. New Plan
 reconstruction still uses its existing PDF/OpenAI action until the separately
 approved canonical-input writer cutover.
+
+## Stage 5 Plan Intelligence canonical-writer shadow
+
+Stage 5 adds a non-current Plan reconstruction path that consumes only pinned
+canonical engineering pages. It supplies canonical native/OCR text and the
+immutable page-render asset to the reasoning engine in bounded page batches.
+It never loads `heliosDocuments.storageId`, never uploads an original PDF, and
+cannot become the current Plan run or feed Civil Geometry.
+
+- Every run is pinned to the current company, project, package, engineering
+  record, authoritative Plan run, source fingerprint, page identities, page
+  materialization/OCR versions, and render hashes.
+- The model returns batch-local page numbers. Helios validates complete batch
+  coverage, then remaps them to the immutable source document and original PDF
+  physical-page locator before persisting shadow Plan records.
+- Pages without machine-readable text remain usable when a current canonical
+  render exists. These render-only pages are counted explicitly instead of
+  forcing another PDF read.
+- The comparison gate records batch completion, exact document/page identity,
+  metadata agreement, view and reference counts, OpenAI calls, and original-
+  PDF reads. Activation is intentionally absent from this stage.
+- Provider failures retain their exact safe reason. Failed or partial shadow
+  runs cannot alter the current Plan reader, current Plan records, drawing-
+  authority decisions, canonical engineering record, or Civil Geometry.
+
+The Titus input preflight pinned all 179 canonical pages, including 20
+render-only pages, into 60 bounded batches with zero original-PDF reads. The
+live provider run stopped at the external `insufficient_quota` gate, so no
+shadow output was accepted and no writer cutover was activated. A passing
+one-page canary and full Titus comparison are still required before any
+authoritative writer switch or legacy PDF-path removal.

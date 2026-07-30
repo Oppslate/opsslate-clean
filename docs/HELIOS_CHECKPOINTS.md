@@ -1347,3 +1347,38 @@ points.
   Not performed
 - Approval gate: stop before replacing the Plan reconstruction writer's
   PDF/OpenAI input with pinned canonical pages, text, and rendered assets
+
+### Canonical-record cutover - Stage 5 Plan writer shadow
+
+- Application checkpoint: `390fa90`
+- Scope: additive, non-current Plan writer shadow only; no application reader,
+  current Plan run, or downstream workflow was switched
+- Stored full Titus pilot: `kx7ww521dtqctst5hfqp13bsns8bgf1f`
+  with shadow run `yn7fqdsd4tcbdbwax3q3f3m6sx8bhhw6`
+- Pinned input: canonical record `g97swmhve755yktq1ca03rbnwh8bf7f0`,
+  authoritative Plan run `yn77ec908jczvxfxf64863b2k98betzd`, 179
+  canonical pages, 20 render-only pages, and 60 bounded page batches
+- Single-ingestion boundary: each shadow batch reads only canonical text spans
+  and `page_render` storage assets; original-PDF reads and PDF uploads are zero
+- Traceability: batch-local model page identities are coverage-validated and
+  remapped to the immutable source document and original physical-page locator
+- Fail-closed result: all 60 provider calls returned `insufficient_quota`; the
+  stored pilot failed with zero accepted shadow pages and no activation
+- Diagnostic canary: pilot `kx7w5w64aaycfbhnn872p35bn98bgt3q`, shadow run
+  `yn77zw1ca5f66w3mz0j7a33n5d8bg6bd`, confirmed the same provider quota gate
+  on one pinned render-only page while retaining the exact failure reason
+- Automated Helios security and boundary tests: 132 passed
+- Targeted Convex lint, shared UI boundary check, independent web TypeScript,
+  Helios production build, shared OpsSlate production build, and Convex
+  development deployment: Passed
+- Existing Plan reader activation, authoritative Plan writer, Document
+  Intelligence, Civil Geometry, WBS, Estimate Builder, Cockpit 2.0, Ask
+  Helios, takeoff, pricing, procurement, evidence, risk, schedule, and LandXML:
+  Unchanged
+- Original PDFs, canonical engineering records, drawing-authority decisions,
+  estimates, quantities, prices, procurement, and current domains: Unchanged
+- Vercel deployment, production promotion, writer activation, legacy PDF-path
+  removal, Civil Geometry cutover, estimate mutation, and LandXML: Not performed
+- Approval gate: restore available OpenAI API quota, run one passing canonical
+  page canary, then run and review complete Titus shadow parity before enabling
+  the canonical Plan writer
