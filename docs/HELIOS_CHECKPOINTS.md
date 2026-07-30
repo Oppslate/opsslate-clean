@@ -1309,3 +1309,41 @@ points.
 - Vercel deployment, production promotion, reader cutover, duplicate-path
   removal, geometry acceptance, canonical promotion, and LandXML: Not performed
 - Approval gate: stop before the first staged canonical-reader cutover
+
+### Canonical-record cutover - Stage 4 Plan reader pilot
+
+- Application checkpoint: `adb7c75`
+- Scope: Plan Intelligence read boundary only for the approved Titus Culvert
+  Test development project; no other workflow or project was activated
+- Stored activation: `ks7mx1mtpf0p9ye81y50j0knjx8bhb11`
+- Canonical lineage: engineering record
+  `g97swmhve755yktq1ca03rbnwh8bf7f0`, plan artifact
+  `zs77wp6zp4swr8kkvbmj1gzmyx8bfqmj`, parity run
+  `gs7rgt1s39n6gm1xkjqh9yfm258bfpy0`, and cutover audit
+  `kd7m3r83kzedt5cq90txp480t18bemw2`
+- Live exact verification: 898/898 fingerprint matches across 179 Plan pages,
+  377 views, 66 calibrations, and 276 references
+- Runtime verification: the normal tenant-authorized project query returned
+  `reader.mode = canonical` and the complete 179-page Plan workspace
+- Duplicate-call result for this reader: zero original-PDF reads and zero
+  OpenAI calls
+- Fail-closed controls: current package, plan run, engineering record,
+  artifact, golden parity, cutover audit, drawing authority, provenance
+  coverage, and every record fingerprint must continue to match
+- Bid-day recovery: a Plan reconstruction, calibration, or drawing-authority
+  change automatically records a rollback and returns the project to the
+  unchanged legacy reader until fresh parity is explicitly approved
+- Automated domain tests: 125 passed
+- Automated Helios security and boundary tests: 131 passed
+- Targeted Convex lint, shared UI boundary check, independent web TypeScript,
+  Helios production build, shared OpsSlate production build, and Convex
+  development deployment: Passed
+- Existing PDF source files, Plan reconstruction writer, Civil Geometry,
+  Document Intelligence, WBS, Estimate Builder, Cockpit 2.0, Ask Helios,
+  takeoff, pricing, procurement, evidence, risk, schedule, and LandXML:
+  Unchanged
+- Vercel deployment, production promotion, Plan writer cutover, Civil Geometry
+  reader/writer cutover, geometry acceptance, estimate mutation, and LandXML:
+  Not performed
+- Approval gate: stop before replacing the Plan reconstruction writer's
+  PDF/OpenAI input with pinned canonical pages, text, and rendered assets

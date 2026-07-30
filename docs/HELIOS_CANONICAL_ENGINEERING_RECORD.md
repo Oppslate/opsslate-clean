@@ -116,3 +116,35 @@ Stage 3 does not remove any existing OpenAI call and does not activate remote-
 file reuse. Consumer cutover and duplicate-call removal remain prohibited until
 a separate stage is approved and a development project with completed plan and
 civil-geometry runs proves exact parity for those areas.
+
+## Stage 4 Plan Intelligence canonical-reader pilot
+
+Stage 4 cuts over one approved development project and one read workflow. The
+Titus Culvert Test Plan Intelligence workspace now resolves its plan pages,
+views, calibrations, and references through the current canonical engineering
+record, plan artifact, provenance fingerprints, golden-parity run, and cutover
+audit. Projects without an explicit activation continue to use the unchanged
+legacy reader.
+
+- Activation is stored per company, project, package, engineering record,
+  workflow, artifact, parity run, cutover run, plan run, and source
+  fingerprint.
+- The reader fails closed if any activation identity is stale, any required
+  parity area is not passed, drawing authority is unresolved, canonical
+  coverage differs, or a current record fingerprint no longer matches its
+  canonical provenance.
+- The live Titus pilot verified 898 of 898 authorized Plan records: 179 pages,
+  377 views, 66 calibrations, and 276 references.
+- Reader execution performs zero original-PDF reads and zero OpenAI calls.
+- Current estimator sheet-authority decisions remain live governance records;
+  they are applied after the canonical Plan payload is authorized.
+- A new reconstruction request, calibration decision, or drawing-authority
+  decision automatically returns that project to the legacy reader. Fresh
+  parity and a new explicit activation are required before canonical reading
+  resumes.
+- Civil Geometry, Document Intelligence, Ask Helios, takeoff, estimates,
+  procurement, Euclid, and every non-pilot project remain unchanged.
+
+This stage does not replace the legacy Plan reconstruction writer. New Plan
+reconstruction still uses its existing PDF/OpenAI action until the separately
+approved canonical-input writer cutover.
