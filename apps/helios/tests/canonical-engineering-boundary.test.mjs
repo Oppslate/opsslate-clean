@@ -60,12 +60,16 @@ test("Stage 1 models one reusable OpenAI file lifecycle without activating it", 
   assert.doesNotMatch(estimateActions, /files\.create/);
   for (const activeWorkflow of [
     documentActions,
-    planActions,
     geometryActions,
     estimateActions,
   ]) {
     assert.doesNotMatch(activeWorkflow, /heliosEngineering/);
   }
+  const legacyPlanAction = planActions.slice(
+    planActions.indexOf("export const startPlanDocument"),
+    planActions.indexOf("export const startCanonicalPlanBatch"),
+  );
+  assert.doesNotMatch(legacyPlanAction, /heliosEngineering/);
 });
 
 test("Stage 1 keeps all three downstream coverage decisions explicit", async () => {
@@ -260,7 +264,7 @@ test("Cutover Stage 3 OCR consumes only pinned canonical page renders", async ()
   // Stage 3 remains shadow-only. Reader cutover is a separate approval gate.
   assert.match(planActions, /openai\.files\.create/);
   assert.match(geometryActions, /openai\.files\.create/);
-  assert.doesNotMatch(planActions, /heliosEngineeringTextSpans/);
+  assert.match(planActions, /startPlanDocument = internalAction/);
   assert.doesNotMatch(geometryActions, /heliosEngineeringTextSpans/);
 });
 
@@ -283,7 +287,42 @@ test("Cutover Stage 4 gates the Plan reader through exact canonical provenance",
   assert.match(projects, /readPlanRows/);
   assert.doesNotMatch(reader, /storage\.get|originalStorageId|from "openai"|files\.create|responses\.create/);
 
-  // This reader stage does not yet replace either reconstruction writer.
+  // The authoritative writer remains available while canonical writing is
+  // proven in a separate non-current shadow run.
   assert.match(planActions, /openai\.files\.create/);
+  assert.match(geometryActions, /openai\.files\.create/);
+});
+
+test("Cutover Stage 5 reconstructs Plan shadow batches from pinned canonical pages", async () => {
+  const [schema, writer, actions, intelligence, geometryActions] = await Promise.all([
+    source("web/convex/schema.ts"),
+    source("web/convex/heliosCanonicalPlanWriter.ts"),
+    source("web/convex/heliosPlanActions.ts"),
+    source("web/convex/heliosPlanIntelligence.ts"),
+    source("web/convex/heliosCivilGeometryActions.ts"),
+  ]);
+  assert.match(schema, /heliosCanonicalPlanWriterPilots: defineTable/);
+  assert.match(schema, /inputMode: v\.optional/);
+  assert.match(writer, /stageCanonicalPlanWriterPilot = internalMutation/);
+  assert.match(writer, /loadCanonicalPlanJob = internalQuery/);
+  assert.match(writer, /evaluateCanonicalPlanWriterPilot = internalMutation/);
+  assert.match(writer, /inputFingerprint/);
+  assert.match(writer, /isCurrent: false/);
+  assert.match(writer, /originalPdfReadCount: 0/);
+  assert.doesNotMatch(writer, /originalStorageId|files\.create|responses\.create/);
+
+  const canonicalAction = actions.slice(
+    actions.indexOf("export const startCanonicalPlanBatch"),
+    actions.indexOf("export const pollPlanDocument"),
+  );
+  assert.match(canonicalAction, /ctx\.storage\.get\(item\.render\.storageId\)/);
+  assert.match(canonicalAction, /type: "input_image"/);
+  assert.match(canonicalAction, /HELIOS_CANONICAL_PLAN_BATCH_PROMPT/);
+  assert.doesNotMatch(canonicalAction, /document\.storageId|files\.create|input_file|application\/pdf/);
+  assert.match(intelligence, /run\.inputMode === "canonical_pages"/);
+
+  // Stage 5 is shadow-only: legacy Plan and Civil Geometry writers remain.
+  assert.match(actions, /startPlanDocument = internalAction/);
+  assert.match(actions, /openai\.files\.create/);
   assert.match(geometryActions, /openai\.files\.create/);
 });

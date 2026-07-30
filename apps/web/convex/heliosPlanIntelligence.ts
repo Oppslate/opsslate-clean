@@ -34,6 +34,12 @@ const startPlanDocumentReference = makeFunctionReference<
   null
 >("heliosPlanActions:startPlanDocument");
 
+const evaluateCanonicalWriterReference = makeFunctionReference<
+  "mutation",
+  { projectId: string },
+  unknown
+>("heliosCanonicalPlanWriter:evaluateCanonicalPlanWriterPilot");
+
 function domainPlanPage(page: Doc<"heliosPlanPages">): HeliosPlanPage {
   return {
     id: String(page._id),
@@ -262,6 +268,11 @@ async function finalizeRun(ctx: MutationCtx, runId: Id<"heliosPlanRuns">) {
     completedAt: now,
   });
   await schedulePlanRunShadow(ctx, runId);
+  if (run.inputMode === "canonical_pages" && run.shadowOfRunId) {
+    await ctx.scheduler.runAfter(0, evaluateCanonicalWriterReference, {
+      projectId: String(run.projectId),
+    });
+  }
   return true;
 }
 
@@ -418,7 +429,12 @@ export const loadPlanJob = internalQuery({
     const [run, project, document] = await Promise.all([
       ctx.db.get(job.runId), ctx.db.get(job.projectId), ctx.db.get(job.documentId),
     ]);
-    if (!run || !run.isCurrent || !project || !document) return null;
+    const isCanonicalShadow = Boolean(
+      run?.inputMode === "canonical_pages" &&
+      run.shadowOfRunId &&
+      job.inputMode === "canonical_pages",
+    );
+    if (!run || (!run.isCurrent && !isCanonicalShadow) || !project || !document) return null;
     return { job, run, project, document };
   },
 });
@@ -436,7 +452,7 @@ export const markPlanUploading = internalMutation({
 });
 
 export const markPlanAnalyzing = internalMutation({
-  args: { jobId: v.id("heliosPlanJobs"), openaiFileId: v.string(), openaiResponseId: v.string(), model: v.string() },
+  args: { jobId: v.id("heliosPlanJobs"), openaiFileId: v.optional(v.string()), openaiResponseId: v.string(), model: v.string() },
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job || job.status !== "uploading") return false;
@@ -450,9 +466,34 @@ export const completePlanJob = internalMutation({
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job || job.status !== "analyzing") return null;
-    const document = await ctx.db.get(job.documentId);
-    if (!document) throw new Error("Plan document not found.");
-    const parsed = parsePlanDocumentIntelligence(args.result);
+    const [document, run] = await Promise.all([ctx.db.get(job.documentId), ctx.db.get(job.runId)]);
+    if (!document || !run) throw new Error("Plan document or run not found.");
+    const parsedLocal = parsePlanDocumentIntelligence(args.result);
+    let parsed = parsedLocal;
+    if (job.inputMode === "canonical_pages") {
+      if (!job.engineeringPageIds?.length || parsedLocal.sourcePageCount !== job.engineeringPageIds.length) {
+        throw new Error("Canonical Plan batch page coverage does not match its pinned input.");
+      }
+      const physicalPageByBatchPage = new Map<number, number>();
+      for (const [index, engineeringPageId] of job.engineeringPageIds.entries()) {
+        const engineeringPage = await ctx.db.get(engineeringPageId);
+        if (!engineeringPage || engineeringPage.engineeringRecordId !== run.engineeringRecordId) {
+          throw new Error("Canonical Plan batch lineage changed before completion.");
+        }
+        physicalPageByBatchPage.set(index + 1, engineeringPage.physicalPageNumber);
+      }
+      parsed = {
+        ...parsedLocal,
+        pages: parsedLocal.pages.map((page) => ({
+          ...page,
+          physicalPageNumber: physicalPageByBatchPage.get(page.physicalPageNumber) || page.physicalPageNumber,
+        })),
+        references: parsedLocal.references.map((reference) => ({
+          ...reference,
+          sourcePageNumber: physicalPageByBatchPage.get(reference.sourcePageNumber) || reference.sourcePageNumber,
+        })),
+      };
+    }
     const now = Date.now();
     const pageIds = new Map<number, Id<"heliosPlanPages">>();
     for (const page of parsed.pages) {

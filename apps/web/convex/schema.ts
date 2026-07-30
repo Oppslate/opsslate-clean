@@ -1626,6 +1626,13 @@ export default defineSchema({
       v.literal("failed"),
     ),
     processingVersion: v.number(),
+    inputMode: v.optional(v.union(
+      v.literal("legacy_pdf"),
+      v.literal("canonical_pages"),
+    )),
+    shadowOfRunId: v.optional(v.id("heliosPlanRuns")),
+    engineeringRecordId: v.optional(v.id("heliosEngineeringRecords")),
+    canonicalInputFingerprint: v.optional(v.string()),
     sourceFingerprint: v.string(),
     model: v.optional(v.string()),
     sourceDocumentCount: v.number(),
@@ -1661,6 +1668,12 @@ export default defineSchema({
       v.literal("failed"),
     ),
     attempt: v.number(),
+    inputMode: v.optional(v.union(
+      v.literal("legacy_pdf"),
+      v.literal("canonical_pages"),
+    )),
+    engineeringPageIds: v.optional(v.array(v.id("heliosEngineeringPages"))),
+    canonicalInputFingerprint: v.optional(v.string()),
     openaiFileId: v.optional(v.string()),
     openaiResponseId: v.optional(v.string()),
     model: v.optional(v.string()),
@@ -1672,6 +1685,44 @@ export default defineSchema({
   })
     .index("by_run", ["runId", "createdAt"])
     .index("by_document", ["documentId", "createdAt"]),
+
+  heliosCanonicalPlanWriterPilots: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    authoritativePlanRunId: v.id("heliosPlanRuns"),
+    shadowPlanRunId: v.id("heliosPlanRuns"),
+    isCurrent: v.boolean(),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("processing"),
+      v.literal("ready_for_review"),
+      v.literal("failed"),
+    ),
+    inputFingerprint: v.string(),
+    canonicalPageCount: v.number(),
+    renderOnlyPageCount: v.number(),
+    batchCount: v.number(),
+    completedBatchCount: v.number(),
+    failedBatchCount: v.number(),
+    outputPageCount: v.number(),
+    exactPageIdentityCount: v.number(),
+    pageMetadataMatchCount: v.number(),
+    authoritativeViewCount: v.number(),
+    shadowViewCount: v.number(),
+    authoritativeReferenceCount: v.number(),
+    shadowReferenceCount: v.number(),
+    originalPdfReadCount: v.number(),
+    openAiCallCount: v.number(),
+    issues: v.array(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_shadow_run", ["shadowPlanRunId"]),
 
   heliosPlanPages: defineTable({
     companyId: v.id("companies"),

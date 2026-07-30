@@ -81,6 +81,7 @@ import type * as heliosAuthorization from "../heliosAuthorization.js";
 import type * as heliosBidBasis from "../heliosBidBasis.js";
 import type * as heliosCanonicalCutover from "../heliosCanonicalCutover.js";
 import type * as heliosCanonicalPlanReader from "../heliosCanonicalPlanReader.js";
+import type * as heliosCanonicalPlanWriter from "../heliosCanonicalPlanWriter.js";
 import type * as heliosCivilGeometry from "../heliosCivilGeometry.js";
 import type * as heliosCivilGeometryActions from "../heliosCivilGeometryActions.js";
 import type * as heliosCivilGeometryOpenAIContracts from "../heliosCivilGeometryOpenAIContracts.js";
@@ -249,6 +250,7 @@ declare const fullApi: ApiFromModules<{
   heliosBidBasis: typeof heliosBidBasis;
   heliosCanonicalCutover: typeof heliosCanonicalCutover;
   heliosCanonicalPlanReader: typeof heliosCanonicalPlanReader;
+  heliosCanonicalPlanWriter: typeof heliosCanonicalPlanWriter;
   heliosCivilGeometry: typeof heliosCivilGeometry;
   heliosCivilGeometryActions: typeof heliosCivilGeometryActions;
   heliosCivilGeometryOpenAIContracts: typeof heliosCivilGeometryOpenAIContracts;
