@@ -46,6 +46,7 @@ function projectSummary(project: Doc<"heliosProjects">) {
 export async function reconstructIntegrationSolution(
   ctx: QueryCtx | MutationCtx,
   record: Doc<"heliosEuclidIntegrationSolutions">,
+  canonicalModelId: string,
 ): Promise<HeliosEuclidIntegrationSolution> {
   if (record.status === "failed" || record.status === "superseded") {
     throw new Error("The current Euclid relationship graph is not readable.");
@@ -88,7 +89,7 @@ export async function reconstructIntegrationSolution(
   };
   const solution: HeliosEuclidIntegrationSolution = {
     id: `integration-solution:${buildHeliosEngineeringParityFingerprint(idBasis).split(":")[1]!.slice(0, 32)}`,
-    euclidModelId: String(record.euclidModelId),
+    euclidModelId: canonicalModelId,
     sourceFingerprint: record.sourceFingerprint,
     modelFingerprint: record.modelFingerprint,
     horizontalSolutionFingerprint: record.horizontalSolutionFingerprint,
@@ -208,7 +209,7 @@ export const getWorkspace = internalQuery({
       createdAt: row.createdAt,
     }));
     const solution = solutionRecord && solutionRecord.status !== "failed"
-      ? await reconstructIntegrationSolution(ctx, solutionRecord)
+      ? await reconstructIntegrationSolution(ctx, solutionRecord, modelRecord.modelKey)
       : undefined;
     const estimates = await ctx.db
       .query("heliosEstimates")
