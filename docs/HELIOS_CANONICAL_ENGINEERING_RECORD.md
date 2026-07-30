@@ -174,8 +174,24 @@ cannot become the current Plan run or feed Civil Geometry.
   authority decisions, canonical engineering record, or Civil Geometry.
 
 The Titus input preflight pinned all 179 canonical pages, including 20
-render-only pages, into 60 bounded batches with zero original-PDF reads. The
-live provider run stopped at the external `insufficient_quota` gate, so no
-shadow output was accepted and no writer cutover was activated. A passing
-one-page canary and full Titus comparison are still required before any
-authoritative writer switch or legacy PDF-path removal.
+render-only pages, into 60 bounded batches with zero original-PDF reads. After
+provider quota was restored, a one-page canary and the complete Titus shadow
+run both completed from canonical text and page renders. The full run preserved
+all 179 immutable document/page identities, made 60 model calls, and performed
+zero original-PDF reads.
+
+The technical single-ingestion boundary therefore passed, but semantic parity
+did not. Field agreement was 179/179 for page kind, 177/179 for sheet number,
+126/179 for printed page number, 93/179 for discipline, 92/179 for issue date,
+34/179 for title, and 6/179 for revision marker. Exact full metadata agreement
+was 0/179. The authoritative run contained 377 views and 276 references; the
+canonical shadow produced 506 views and 716 references. Reference inflation
+was concentrated in specification and continuation relationships, while view
+segmentation shifted among notes, other regions, legends, and title blocks.
+
+The stored activation gate is consequently `activationEligible: false` and
+`semanticReviewRequired: true`. No authoritative writer switch or legacy
+PDF-path removal occurred. The next stage must reconcile deterministic page
+metadata, normalize model output, deduplicate batch-local relationships, and
+perform cross-batch/global relationship resolution before another Titus parity
+run can be considered for activation.

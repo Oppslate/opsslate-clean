@@ -1382,3 +1382,38 @@ points.
 - Approval gate: restore available OpenAI API quota, run one passing canonical
   page canary, then run and review complete Titus shadow parity before enabling
   the canonical Plan writer
+
+### Canonical-record cutover - Stage 5A Titus semantic comparison
+
+- Application checkpoint: `3b9a9d6`
+- Passing canary: pilot `kx7rxtfft3rz4rvxsdaq8v1gch8bh0te`, shadow run
+  `yn76b92z5c88meytcerf6h8vk18bh2yt`; one canonical page completed with exact
+  page identity and zero original-PDF reads
+- Full Titus comparison: pilot `kx7pn7v50jbgmqcmjvwwvsgpvx8bgcc8`, shadow run
+  `yn74y6pg0venqgys71ysrhtphh8bhp4t`, authoritative run
+  `yn77ec908jczvxfxf64863b2k98betzd`, canonical record
+  `g97swmhve755yktq1ca03rbnwh8bf7f0`
+- Single-ingestion result: all 60 batches completed; 179/179 canonical pages
+  and immutable document/page identities were preserved; 20 render-only pages
+  were handled; original-PDF reads remained zero
+- Metadata comparison: page kind 179/179, sheet number 177/179, printed page
+  number 126/179, discipline 93/179, issue date 92/179, title 34/179, revision
+  marker 6/179, and exact full metadata 0/179
+- Structural comparison: authoritative 377 views and 276 references versus
+  shadow 506 views and 716 references; specification references increased from
+  90 to 378 and continuation references from 3 to 95
+- Safety result: the pilot is stored as `ready_for_review` with
+  `activationEligible: false` and `semanticReviewRequired: true`; the legacy
+  Plan writer and current Plan run remain authoritative
+- Automated Helios security and boundary tests: 132 passed
+- Targeted Convex lint, independent web TypeScript, shared UI boundary check,
+  Convex development deployment, and stored Titus re-evaluation: Passed
+- Existing Document Intelligence, Plan reader, Civil Geometry, Euclid model,
+  WBS, Estimate Builder, Cockpit 2.0, Ask Helios, takeoff, pricing,
+  procurement, evidence, risk, schedule, LandXML, and current domains:
+  Unchanged
+- Vercel deployment, production promotion, writer activation, legacy PDF-path
+  removal, geometry cutover, estimate mutation, and LandXML: Not performed
+- Next approval gate: deterministic metadata authority, semantic normalization,
+  relationship deduplication, and global reconciliation must be implemented and
+  the full Titus parity run repeated before activation is reconsidered
