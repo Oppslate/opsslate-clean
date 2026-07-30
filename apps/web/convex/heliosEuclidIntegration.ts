@@ -38,7 +38,11 @@ function scopeStatus(checks: Array<{ status?: string }>): Exclude<HeliosEuclidGa
   return "passed";
 }
 
-async function horizontalGate(ctx: MutationCtx, solution: Doc<"heliosEuclidHorizontalSolutions">): Promise<HeliosEuclidControlGate> {
+async function horizontalGate(
+  ctx: MutationCtx,
+  solution: Doc<"heliosEuclidHorizontalSolutions">,
+  canonicalModelId: string,
+): Promise<HeliosEuclidControlGate> {
   const chunks = await ctx.db.query("heliosEuclidHorizontalSolutionChunks").withIndex("by_solution", (query) => query.eq("solutionId", solution._id)).collect();
   if (chunks.length !== solution.chunkCount || chunks.reduce((sum, row) => sum + row.checkCount, 0) !== solution.checkCount) throw new Error("Horizontal solution chunks are incomplete.");
   const grouped = new Map<string, Array<{ status?: string }>>();
@@ -47,10 +51,14 @@ async function horizontalGate(ctx: MutationCtx, solution: Doc<"heliosEuclidHoriz
     if (!Array.isArray(payload) || payload.length !== chunk.checkCount || buildHeliosEngineeringParityFingerprint(payload) !== chunk.payloadFingerprint) throw new Error("Horizontal solution chunk failed fingerprint validation.");
     grouped.set(chunk.alignmentId, [...(grouped.get(chunk.alignmentId) || []), ...payload]);
   }
-  return { euclidModelId: String(solution.euclidModelId), sourceFingerprint: solution.sourceFingerprint, solutionFingerprint: solution.solutionFingerprint, status: supportedStatus(solution.status), scopes: [...grouped].map(([id, checks]) => ({ id, status: scopeStatus(checks) })).sort((left, right) => left.id.localeCompare(right.id)) };
+  return { euclidModelId: canonicalModelId, sourceFingerprint: solution.sourceFingerprint, solutionFingerprint: solution.solutionFingerprint, status: supportedStatus(solution.status), scopes: [...grouped].map(([id, checks]) => ({ id, status: scopeStatus(checks) })).sort((left, right) => left.id.localeCompare(right.id)) };
 }
 
-async function verticalGate(ctx: MutationCtx, solution: Doc<"heliosEuclidVerticalSolutions">): Promise<HeliosEuclidControlGate> {
+async function verticalGate(
+  ctx: MutationCtx,
+  solution: Doc<"heliosEuclidVerticalSolutions">,
+  canonicalModelId: string,
+): Promise<HeliosEuclidControlGate> {
   const chunks = await ctx.db.query("heliosEuclidVerticalSolutionChunks").withIndex("by_solution", (query) => query.eq("solutionId", solution._id)).collect();
   if (chunks.length !== solution.chunkCount || chunks.reduce((sum, row) => sum + row.checkCount, 0) !== solution.checkCount) throw new Error("Vertical solution chunks are incomplete.");
   const grouped = new Map<string, Array<{ status?: string }>>();
@@ -59,7 +67,7 @@ async function verticalGate(ctx: MutationCtx, solution: Doc<"heliosEuclidVertica
     if (!Array.isArray(payload) || payload.length !== chunk.checkCount || buildHeliosEngineeringParityFingerprint(payload) !== chunk.payloadFingerprint) throw new Error("Vertical solution chunk failed fingerprint validation.");
     grouped.set(chunk.profileId, [...(grouped.get(chunk.profileId) || []), ...payload]);
   }
-  return { euclidModelId: String(solution.euclidModelId), sourceFingerprint: solution.sourceFingerprint, solutionFingerprint: solution.solutionFingerprint, status: supportedStatus(solution.status), scopes: [...grouped].map(([id, checks]) => ({ id, status: scopeStatus(checks) })).sort((left, right) => left.id.localeCompare(right.id)) };
+  return { euclidModelId: canonicalModelId, sourceFingerprint: solution.sourceFingerprint, solutionFingerprint: solution.solutionFingerprint, status: supportedStatus(solution.status), scopes: [...grouped].map(([id, checks]) => ({ id, status: scopeStatus(checks) })).sort((left, right) => left.id.localeCompare(right.id)) };
 }
 
 async function supersedeCurrentSolution(ctx: MutationCtx, packageId: Id<"heliosBidPackages">) {
@@ -138,8 +146,8 @@ export const solveEuclidIntegrationShadow = internalMutation({
     try {
       [model, horizontalControl, verticalControl] = await Promise.all([
         reconstructEuclidModel(ctx, modelRecord),
-        horizontalGate(ctx, horizontal),
-        verticalGate(ctx, vertical),
+        horizontalGate(ctx, horizontal, modelRecord.modelKey),
+        verticalGate(ctx, vertical, modelRecord.modelKey),
       ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Euclid integration inputs failed validation.";

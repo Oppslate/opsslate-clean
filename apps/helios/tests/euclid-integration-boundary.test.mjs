@@ -31,6 +31,14 @@ test("Euclid Stage 4E waits for fingerprint-verified 4C and 4D results", async (
   assert.match(integration, /vertical\.euclidModelId !== modelRecord\._id/);
 });
 
+test("Euclid Stage 4E translates stored database identity back to the canonical contract model key", async () => {
+  const integration = await source("web/convex/heliosEuclidIntegration.ts");
+  assert.match(integration, /horizontalGate\(ctx, horizontal, modelRecord\.modelKey\)/);
+  assert.match(integration, /verticalGate\(ctx, vertical, modelRecord\.modelKey\)/);
+  assert.match(integration, /async function horizontalGate[\s\S]*?return \{ euclidModelId: canonicalModelId/);
+  assert.match(integration, /async function verticalGate[\s\S]*?return \{ euclidModelId: canonicalModelId/);
+});
+
 test("Euclid Stage 4E is scheduled only after each independent solver persists its chunks", async () => {
   const [horizontal, vertical] = await Promise.all([
     source("web/convex/heliosEuclidHorizontal.ts"),
