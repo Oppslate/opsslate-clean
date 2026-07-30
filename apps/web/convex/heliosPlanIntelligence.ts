@@ -118,7 +118,7 @@ async function canonicalPlanBasis(
     .query("heliosEngineeringRecords")
     .withIndex("by_package_current", (query) => query.eq("packageId", packageId).eq("isCurrent", true))
     .first();
-  if (!record || record.status !== "ready") return null;
+  if (!record || !["ready", "partially_ready"].includes(record.status)) return null;
   const [sources, pages, assets] = await Promise.all([
     ctx.db.query("heliosEngineeringSources").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
     ctx.db.query("heliosEngineeringPages").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),

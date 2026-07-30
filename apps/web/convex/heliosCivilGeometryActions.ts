@@ -73,7 +73,7 @@ export const startGeometryDocument = internalAction({ args: { jobId: v.id("helio
     const model = modelName(); const response = await openai.responses.create({ model, background: true, store: true, safety_identifier: `helios_${String(context.job.companyId)}`.slice(0, 64), metadata: { helios_geometry_job: String(context.job._id), helios_document: String(context.document._id), helios_input_mode: context.planRun.inputMode || "legacy_pdf" }, instructions: HELIOS_CIVIL_GEOMETRY_PROMPT, input: [{ role: "user", content }], reasoning: { effort: "high" }, text: { format: heliosCivilGeometryFormat, verbosity: "medium" }, max_output_tokens: 100_000 }); responseId = response.id;
     if (!await ctx.runMutation(analyzingReference, { jobId: args.jobId, openaiFileId: fileId, openaiResponseId: responseId, model })) { await cleanup(openai, fileId, responseId); return null; }
     await ctx.scheduler.runAfter(POLL_DELAY_MS, pollReference, args);
-  } catch { if (openai) await cleanup(openai, fileId, responseId); await ctx.runMutation(failReference, { jobId: args.jobId, error: "Civil geometry reconstruction could not start. Confirm the source PDF and OpenAI configuration, then retry." }); }
+  } catch (error) { if (openai) await cleanup(openai, fileId, responseId); await ctx.runMutation(failReference, { jobId: args.jobId, error: `Civil geometry reconstruction could not start: ${error instanceof Error ? error.message : "unknown provider error"}`.slice(0, 600) }); }
   return null;
 } });
 

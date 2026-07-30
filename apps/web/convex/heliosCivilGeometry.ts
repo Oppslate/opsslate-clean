@@ -46,7 +46,18 @@ export const reviewGeometry = internalMutation({
       const planRun = await ctx.db.query("heliosPlanRuns").withIndex("by_package_current", (query) => query.eq("packageId", bidPackage._id).eq("isCurrent", true)).first();
       if (!planRun || !["ready_for_review", "partially_ready"].includes(planRun.status)) throw new Error("Complete plan reconstruction before building civil geometry.");
       const current = await ctx.db.query("heliosCivilGeometryRuns").withIndex("by_plan_current", (query) => query.eq("planRunId", planRun._id).eq("isCurrent", true)).first();
-      if (current && ["queued", "processing", "ready_for_review", "partially_ready"].includes(current.status)) return { runId: String(current._id), status: current.status, reused: true };
+      if (current && ["queued", "processing"].includes(current.status)) {
+        const queuedJobs = (await ctx.db
+          .query("heliosCivilGeometryJobs")
+          .withIndex("by_run", (query) => query.eq("geometryRunId", current._id))
+          .collect())
+          .filter((job) => job.status === "queued");
+        for (const [index, job] of queuedJobs.entries()) {
+          await ctx.scheduler.runAfter(Math.floor(index / 4) * 5_000, startGeometryDocumentReference, { jobId: job._id });
+        }
+        return { runId: String(current._id), status: current.status, reused: true, resumedJobCount: queuedJobs.length };
+      }
+      if (current && ["ready_for_review", "partially_ready"].includes(current.status)) return { runId: String(current._id), status: current.status, reused: true };
       if (current) await ctx.db.patch(current._id, { isCurrent: false, updatedAt: Date.now() });
       const planJobs = await ctx.db.query("heliosPlanJobs").withIndex("by_run", (query) => query.eq("runId", planRun._id)).collect();
       const documentIds = [...new Set(planJobs.filter((job) => job.status === "completed").map((job) => job.documentId))];
@@ -61,12 +72,12 @@ export const reviewGeometry = internalMutation({
         companyId, projectId: project._id, packageId: bidPackage._id, geometryRunId: runId, action: "request_reconstruction",
         reviewerUserId: user._id, reviewerName: user.name, decisionValue: "queued", createdAt: now,
       });
-      for (const documentId of documentIds) {
+      for (const [index, documentId] of documentIds.entries()) {
         const jobId = await ctx.db.insert("heliosCivilGeometryJobs", {
           companyId, projectId: project._id, packageId: bidPackage._id, geometryRunId: runId, planRunId: planRun._id,
           documentId, status: "queued", createdAt: now, updatedAt: now,
         });
-        await ctx.scheduler.runAfter(0, startGeometryDocumentReference, { jobId });
+        await ctx.scheduler.runAfter(Math.floor(index / 4) * 5_000, startGeometryDocumentReference, { jobId });
       }
       return { runId: String(runId), status: "queued", reused: false };
     }
@@ -103,7 +114,7 @@ export const loadGeometryJob = internalQuery({
     if (planRun.inputMode === "canonical_pages") {
       if (!planRun.engineeringRecordId) throw new Error("Canonical geometry input is missing its engineering record.");
       const record = await ctx.db.get(planRun.engineeringRecordId);
-      if (!record || !record.isCurrent || record.packageId !== planRun.packageId || record.status !== "ready") {
+      if (!record || !record.isCurrent || record.packageId !== planRun.packageId || !["ready", "partially_ready"].includes(record.status)) {
         throw new Error("Canonical geometry input is stale or is not ready.");
       }
       const source = await ctx.db
