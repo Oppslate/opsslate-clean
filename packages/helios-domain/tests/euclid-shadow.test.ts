@@ -117,6 +117,26 @@ test("T.G.L. is the proposed roadway centerline profile and shares its horizonta
   assert.equal(model.profiles[0]?.alignmentId, model.alignments[0]?.id);
 });
 
+test("mixed roadway profile ordinates become separate existing-ground and FINAL T.G.L. surfaces", () => {
+  const input = shadowInput();
+  input.records[2]!.alignmentName = "Front Avenue Centerline";
+  input.records[0]!.alignmentName = "Front Avenue centerline";
+  input.records[0]!.verticalPoints = [
+    { station: 14200, elevation: 1375.74, label: "EXISTING GROUND ordinate" },
+    { station: 14220, elevation: 1375.18, label: "EXISTING GROUND ordinate" },
+    { station: 14200, elevation: 1374.45, label: "FINAL T.G.L. ordinate", gradePercent: -2.71 },
+    { station: 14220, elevation: 1373.91, label: "PVT and FINAL T.G.L. ordinate; outgoing grade -1.03%" },
+  ];
+  const model = buildHeliosEuclidShadowModel(input);
+
+  assert.equal(model.alignments.length, 1);
+  assert.deepEqual(model.profiles.map((profile) => profile.role).sort(), ["existing_ground", "proposed_finished_grade"]);
+  assert.ok(model.profiles.every((profile) => profile.alignmentId === model.alignments[0]?.id));
+  assert.equal(model.profilePoints.filter((point) => point.profileId.includes("existing-ground")).length, 2);
+  assert.equal(model.profilePoints.filter((point) => point.profileId.includes("proposed-finished-grade")).length, 2);
+  assert.ok(model.profiles.every((profile) => profile.verticalDatum === "NAVD88"));
+});
+
 test("Stage 4B keeps coordinate ambiguity explicit and blocks premature exchange", () => {
   const model = buildHeliosEuclidShadowModel(shadowInput());
   assert.equal(model.spatialReferences[0]?.referenceState, "partially_known");

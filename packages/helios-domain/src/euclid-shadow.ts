@@ -251,6 +251,36 @@ function profileRole(record: HeliosEuclidLegacyGeometryRecord): HeliosEuclidProf
   return "other";
 }
 
+type HeliosEuclidVerticalSeries = {
+  key: string;
+  role: HeliosEuclidProfile["role"];
+  points: HeliosEuclidLegacyGeometryRecord["verticalPoints"];
+};
+
+function verticalProfileSeries(record: HeliosEuclidLegacyGeometryRecord): HeliosEuclidVerticalSeries[] {
+  const isExistingGround = (label: string) => /\bexisting (?:ground|grade|roadway|surface)\b/i.test(label);
+  const isProposedGrade = (label: string) =>
+    /\b(?:final|proposed|finished|design) (?:t\s*\.?\s*g\s*\.?\s*l\s*\.?|grade|roadway|surface)\b|\btheoretical grade line\b|\bt\s*\.?\s*g\s*\.?\s*l\s*\.?(?=\W|$)|\b(?:pvc|pvi|pvt|high point|low point|grade break)\b/i.test(label);
+
+  const hasExistingGround = record.verticalPoints.some((point) => isExistingGround(point.label));
+  const hasProposedGrade = record.verticalPoints.some((point) => isProposedGrade(point.label));
+  if (!hasExistingGround || !hasProposedGrade) {
+    return [{ key: "profile", role: profileRole(record), points: record.verticalPoints }];
+  }
+
+  // Roadway profile sheets commonly print existing-ground and FINAL T.G.L.
+  // ordinates in the same view. Existing labels remain their own surface; all
+  // other design controls (PVC/PVI/PVT, grades, and T.G.L. ordinates) form the
+  // proposed centerline profile.
+  const existingGround = record.verticalPoints.filter((point) => isExistingGround(point.label));
+  const proposedGrade = record.verticalPoints.filter((point) => !isExistingGround(point.label));
+  const series: HeliosEuclidVerticalSeries[] = [
+    { key: "existing-ground", role: "existing_ground", points: existingGround },
+    { key: "proposed-finished-grade", role: "proposed_finished_grade", points: proposedGrade },
+  ];
+  return series.filter((row) => row.points.length > 0);
+}
+
 function stationCandidates(record: HeliosEuclidLegacyGeometryRecord) {
   return [
     ...record.horizontalPoints.map((point) => point.station),
@@ -469,54 +499,61 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
       }
     });
 
-    if (record.geometryType === "vertical_alignment" && record.verticalPoints.length >= 2) {
-      const sorted = [...record.verticalPoints].sort((left, right) => left.station - right.station);
-      const profileId = `profile:${record.id}`;
-      profiles.push({
-        id: profileId,
-        alignmentId,
-        printedName: boundedText(record.alignmentName, "Unnamed profile"),
-        normalizedName: `${boundedText(record.alignmentName, "Unnamed alignment")} ${profileRole(record).replaceAll("_", " ")}`,
-        role: profileRole(record),
-        startStation: station(sorted[0]!.station, record, "profile:start"),
-        endStation: station(sorted.at(-1)!.station, record, "profile:end"),
-        verticalDatum: record.verticalDatum || projectVerticalDatum,
-        sourceSheetNumbers: record.sheetNumber ? [record.sheetNumber] : [],
-        reviewState: recordReviewState,
-        completeness: "complete_with_limitations",
-      });
-      const createdPoints = sorted.map((point, index): HeliosEuclidProfilePoint => ({
-        id: `profile-point:${record.id}:${index + 1}`,
-        profileId,
-        pointType: profilePointType(point.label),
-        station: station(point.station, record, `profile-point:${index + 1}`),
-        elevation: engineeringValue(point.elevation, record, `profile-elevation:${index + 1}`),
-        reviewState: recordReviewState,
-      }));
-      profilePoints.push(...createdPoints);
-      sorted.slice(0, -1).forEach((point, index) => {
-        if (point.gradePercent === undefined) return;
-        const tangent: HeliosEuclidVerticalTangent = {
-          id: `vertical-tangent:${record.id}:${index + 1}`,
-          profileId,
-          sequence: index + 1,
-          startPointId: createdPoints[index]!.id,
-          endPointId: createdPoints[index + 1]!.id,
-          gradePercent: engineeringValue(point.gradePercent, record, `profile-grade:${index + 1}`, `${point.gradePercent}%`),
+    if (record.geometryType === "vertical_alignment" && record.verticalPoints.length) {
+      let createdProfileCount = 0;
+      for (const series of verticalProfileSeries(record)) {
+        if (series.points.length < 2) continue;
+        const sorted = [...series.points].sort((left, right) => left.station - right.station);
+        const seriesSuffix = series.key === "profile" ? "" : `:${series.key}`;
+        const profileId = `profile:${record.id}${seriesSuffix}`;
+        profiles.push({
+          id: profileId,
+          alignmentId,
+          printedName: boundedText(record.alignmentName, "Unnamed profile"),
+          normalizedName: `${boundedText(record.alignmentName, "Unnamed alignment")} ${series.role.replaceAll("_", " ")}`,
+          role: series.role,
+          startStation: station(sorted[0]!.station, record, `${series.key}:start`),
+          endStation: station(sorted.at(-1)!.station, record, `${series.key}:end`),
+          verticalDatum: record.verticalDatum || projectVerticalDatum,
+          sourceSheetNumbers: record.sheetNumber ? [record.sheetNumber] : [],
           reviewState: recordReviewState,
-        };
-        verticalTangents.push(tangent);
-      });
-      relationships.push({
-        id: `relationship:${profileId}:alignment`,
-        relationshipType: "profile_for_alignment",
-        sourceEntityId: profileId,
-        targetEntityId: alignmentId,
-        provenanceIds: [`provenance:${record.id}`],
-        reviewState: recordReviewState,
-      });
-    } else if (record.geometryType === "vertical_alignment" && record.verticalPoints.length) {
-      addIssue(issues, record, "profile_range_incomplete", "The stored vertical record does not contain at least two profile points.", [alignmentId], "blocking");
+          completeness: "complete_with_limitations",
+        });
+        const createdPoints = sorted.map((point, index): HeliosEuclidProfilePoint => ({
+          id: `profile-point:${record.id}:${series.key}:${index + 1}`,
+          profileId,
+          pointType: profilePointType(point.label),
+          station: station(point.station, record, `${series.key}:point:${index + 1}`),
+          elevation: engineeringValue(point.elevation, record, `${series.key}:elevation:${index + 1}`),
+          reviewState: recordReviewState,
+        }));
+        profilePoints.push(...createdPoints);
+        sorted.slice(0, -1).forEach((point, index) => {
+          if (point.gradePercent === undefined) return;
+          const tangent: HeliosEuclidVerticalTangent = {
+            id: `vertical-tangent:${record.id}:${series.key}:${index + 1}`,
+            profileId,
+            sequence: index + 1,
+            startPointId: createdPoints[index]!.id,
+            endPointId: createdPoints[index + 1]!.id,
+            gradePercent: engineeringValue(point.gradePercent, record, `${series.key}:grade:${index + 1}`, `${point.gradePercent}%`),
+            reviewState: recordReviewState,
+          };
+          verticalTangents.push(tangent);
+        });
+        relationships.push({
+          id: `relationship:${profileId}:alignment`,
+          relationshipType: "profile_for_alignment",
+          sourceEntityId: profileId,
+          targetEntityId: alignmentId,
+          provenanceIds: [`provenance:${record.id}`],
+          reviewState: recordReviewState,
+        });
+        createdProfileCount += 1;
+      }
+      if (!createdProfileCount) {
+        addIssue(issues, record, "profile_range_incomplete", "The stored vertical record does not contain at least two points on one profile surface.", [alignmentId], "blocking");
+      }
     }
 
     record.crossSectionPoints.forEach((point, index) => {
