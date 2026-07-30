@@ -531,6 +531,7 @@ export const getProject = internalQuery({
     const planRows = planRun
       ? await readPlanRows(ctx, project, planRun)
       : undefined;
+    const effectivePlanRun = planRows?.planRun || planRun;
     const planPages = planRows?.pages || [];
     const planReferences = planRows?.references || [];
     const planCalibrations = planRows?.calibrations || [];
@@ -574,26 +575,26 @@ export const getProject = internalQuery({
     }));
     const planSheetConflicts = derivePlanSheetConflicts(serializedPlanPages, serializedSheetDecisions);
     const planAuthorityByPage = planSheetAuthorityByPage(planSheetConflicts);
-    const planSet = planRun
+    const planSet = effectivePlanRun
       ? {
-          id: String(planRun._id),
-          projectId: String(planRun.projectId),
-          packageId: String(planRun.packageId),
-          packageRevision: planRun.packageRevision,
-          status: planRun.status,
-          processingVersion: planRun.processingVersion,
-          model: planRun.model,
-          sourceDocumentCount: planRun.sourceDocumentCount,
-          sourcePageCount: planRun.sourcePageCount,
-          registeredPageCount: planRun.registeredPageCount,
-          sheetCount: planRun.sheetCount,
-          nonSheetPageCount: planRun.nonSheetPageCount,
-          exceptionPageCount: planRun.exceptionPageCount,
-          measurableViewCount: planRun.measurableViewCount,
-          approvedCalibrationCount: planRun.approvedCalibrationCount,
-          blockedMeasurementCount: planRun.blockedMeasurementCount,
-          unresolvedReferenceCount: planRun.unresolvedReferenceCount,
-          issues: planRun.issues,
+          id: String(effectivePlanRun._id),
+          projectId: String(effectivePlanRun.projectId),
+          packageId: String(effectivePlanRun.packageId),
+          packageRevision: effectivePlanRun.packageRevision,
+          status: effectivePlanRun.status,
+          processingVersion: effectivePlanRun.processingVersion,
+          model: effectivePlanRun.model,
+          sourceDocumentCount: effectivePlanRun.sourceDocumentCount,
+          sourcePageCount: effectivePlanRun.sourcePageCount,
+          registeredPageCount: effectivePlanRun.registeredPageCount,
+          sheetCount: effectivePlanRun.sheetCount,
+          nonSheetPageCount: effectivePlanRun.nonSheetPageCount,
+          exceptionPageCount: effectivePlanRun.exceptionPageCount,
+          measurableViewCount: effectivePlanRun.measurableViewCount,
+          approvedCalibrationCount: effectivePlanRun.approvedCalibrationCount,
+          blockedMeasurementCount: effectivePlanRun.blockedMeasurementCount,
+          unresolvedReferenceCount: effectivePlanRun.unresolvedReferenceCount,
+          issues: effectivePlanRun.issues,
           pages: serializedPlanPages.map((page) => ({
             ...page,
             authorityRole: planAuthorityByPage.get(page.id) || "current_bid" as const,
@@ -628,9 +629,9 @@ export const getProject = internalQuery({
             approvedAt: calibration.approvedAt,
             updatedAt: calibration.updatedAt,
           })),
-          createdAt: planRun.createdAt,
-          updatedAt: planRun.updatedAt,
-          completedAt: planRun.completedAt,
+          createdAt: effectivePlanRun.createdAt,
+          updatedAt: effectivePlanRun.updatedAt,
+          completedAt: effectivePlanRun.completedAt,
           reader: planRows?.reader || { mode: "legacy" as const },
         }
       : undefined;

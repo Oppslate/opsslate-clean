@@ -1748,6 +1748,44 @@ export default defineSchema({
     .index("by_project_current", ["projectId", "isCurrent"])
     .index("by_shadow_run", ["shadowPlanRunId"]),
 
+  // A canonical Plan writer is activated as a reversible read overlay. The
+  // legacy run stays current for downstream workflows until their own
+  // canonical cutovers are approved, while the exact canonical shadow output
+  // becomes the Plan Intelligence source presented to the estimator.
+  heliosCanonicalPlanWriterActivations: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    artifactId: v.id("heliosEngineeringArtifacts"),
+    pilotId: v.id("heliosCanonicalPlanWriterPilots"),
+    legacyPlanRunId: v.id("heliosPlanRuns"),
+    canonicalPlanRunId: v.id("heliosPlanRuns"),
+    mode: v.union(
+      v.literal("shadow"),
+      v.literal("active"),
+      v.literal("rolled_back"),
+    ),
+    isCurrent: v.boolean(),
+    sourceFingerprint: v.string(),
+    canonicalInputFingerprint: v.string(),
+    canonicalOutputFingerprint: v.string(),
+    pageCount: v.number(),
+    viewCount: v.number(),
+    referenceCount: v.number(),
+    calibrationCount: v.number(),
+    sheetDecisionCount: v.number(),
+    issues: v.array(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    activatedAt: v.optional(v.number()),
+    rolledBackAt: v.optional(v.number()),
+  })
+    .index("by_project_current", ["projectId", "isCurrent"])
+    .index("by_package_created", ["packageId", "createdAt"])
+    .index("by_canonical_run", ["canonicalPlanRunId", "createdAt"]),
+
   heliosPlanPages: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

@@ -13,6 +13,7 @@ import {
   heliosPrincipalValidator,
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
+import { retirePlanWriterActivation } from "./heliosCanonicalPlanReader";
 
 function manifestFingerprint(input: HeliosPackageInput) {
   const source = JSON.stringify({
@@ -326,6 +327,11 @@ export const createPackage = internalMutation({
     if (revision > 1 && input.revisionKind === "initial") {
       throw new Error("A later package must be an addendum, revision, or supplement.");
     }
+    await retirePlanWriterActivation(
+      ctx,
+      project._id,
+      `Bid package revision ${revision} was created; the prior canonical Plan writer activation returned to legacy automatically.`,
+    );
     const now = Date.now();
     const acceptedEntries = input.entries.filter((entry) => entry.accepted);
     const pdfEntries = acceptedEntries.filter((entry) => entry.kind === "pdf");

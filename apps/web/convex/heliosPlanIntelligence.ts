@@ -23,7 +23,10 @@ import {
   type HeliosPrincipalArgs,
 } from "./heliosAuthorization";
 import { deriveProjectBidBasis } from "./heliosBidBasis";
-import { retirePlanReaderActivation } from "./heliosCanonicalPlanReader";
+import {
+  retirePlanReaderActivation,
+  retirePlanWriterActivation,
+} from "./heliosCanonicalPlanReader";
 import { scheduleGeometryRunShadow, schedulePlanRunShadow } from "./heliosEngineeringShadowSchedule";
 
 const PROCESSING_VERSION = 1;
@@ -102,6 +105,11 @@ async function createPlanRun(
   projectIdValue: string,
 ) {
   const { user, companyId, project } = await ownedProject(ctx, principal, projectIdValue);
+  await retirePlanWriterActivation(
+    ctx,
+    project._id,
+    "Plan reconstruction was requested; the canonical writer returned to its retained legacy rollback run.",
+  );
   await retirePlanReaderActivation(
     ctx,
     project._id,
@@ -284,6 +292,17 @@ export const reviewPlanIntelligence = internalMutation({
     const { user, companyId, project } = await ownedProject(ctx, args.principal, args.projectId);
     if (input.action === "resolve_sheet_conflict") {
       if (!project.activePackageId) throw new Error("Current bid package not found.");
+      const requestedCanonicalPageId = input.primaryPageId
+        ? ctx.db.normalizeId("heliosPlanPages", input.primaryPageId)
+        : null;
+      const requestedCanonicalPage = requestedCanonicalPageId
+        ? await ctx.db.get(requestedCanonicalPageId)
+        : null;
+      const writerRollback = await retirePlanWriterActivation(
+        ctx,
+        project._id,
+        "Drawing authority review changed; the canonical writer returned to legacy until a new exact pilot is approved.",
+      );
       const run = await ctx.db.query("heliosPlanRuns")
         .withIndex("by_package_current", (query) => query.eq("packageId", project.activePackageId!).eq("isCurrent", true))
         .first();
@@ -301,9 +320,21 @@ export const reviewPlanIntelligence = internalMutation({
       const candidatePageIds = conflict.pageIds
         .map((value) => ctx.db.normalizeId("heliosPlanPages", value))
         .filter((value): value is Id<"heliosPlanPages"> => Boolean(value));
+      const mappedRequestedPrimary =
+        writerRollback &&
+        requestedCanonicalPage &&
+        requestedCanonicalPage.runId === writerRollback.canonicalPlanRunId
+          ? pages.find(
+              (page) =>
+                page.documentId === requestedCanonicalPage.documentId &&
+                page.physicalPageNumber === requestedCanonicalPage.physicalPageNumber,
+            )?._id
+          : requestedCanonicalPageId || undefined;
       const requestedPrimary = input.decision === "apply_recommended"
         ? conflict.suggestedPrimaryPageId
-        : input.primaryPageId;
+        : mappedRequestedPrimary
+          ? String(mappedRequestedPrimary)
+          : input.primaryPageId;
       const primaryPageId = requestedPrimary
         ? ctx.db.normalizeId("heliosPlanPages", requestedPrimary) || undefined
         : undefined;
@@ -376,9 +407,52 @@ export const reviewPlanIntelligence = internalMutation({
     }
     const calibrationId = ctx.db.normalizeId("heliosPlanCalibrations", input.calibrationId!);
     if (!calibrationId) throw new Error("Calibration not found.");
-    const calibration = await ctx.db.get(calibrationId);
+    let calibration = await ctx.db.get(calibrationId);
     if (!calibration || calibration.companyId !== companyId || calibration.projectId !== project._id) {
       throw new Error("Calibration not found.");
+    }
+    const calibrationPage = await ctx.db.get(calibration.pageId);
+    const writerRollback = await retirePlanWriterActivation(
+      ctx,
+      project._id,
+      "Plan calibration review changed; the canonical writer returned to legacy until a new exact pilot is approved.",
+    );
+    if (
+      writerRollback &&
+      calibration.runId === writerRollback.canonicalPlanRunId &&
+      calibrationPage
+    ) {
+      const legacyPages = await ctx.db
+        .query("heliosPlanPages")
+        .withIndex("by_run_page", (query) =>
+          query.eq("runId", writerRollback.legacyPlanRunId),
+        )
+        .collect();
+      const legacyPage = legacyPages.find(
+        (page) =>
+          page.documentId === calibrationPage.documentId &&
+          page.physicalPageNumber === calibrationPage.physicalPageNumber,
+      );
+      const legacyCalibrations = legacyPage
+        ? await ctx.db
+            .query("heliosPlanCalibrations")
+            .withIndex("by_page_view", (query) =>
+              query.eq("pageId", legacyPage._id).eq("viewKey", calibration!.viewKey),
+            )
+            .collect()
+        : [];
+      const mappedCalibration = legacyCalibrations.find(
+        (candidate) =>
+          candidate.runId === writerRollback.legacyPlanRunId &&
+          candidate.source === calibration!.source &&
+          candidate.scale === calibration!.scale &&
+          candidate.units === calibration!.units &&
+          candidate.sourceRegion === calibration!.sourceRegion,
+      );
+      if (!mappedCalibration) {
+        throw new Error("The canonical calibration could not be mapped to its legacy rollback record. Refresh Plan Intelligence and try again.");
+      }
+      calibration = mappedCalibration;
     }
     const run = await ctx.db.get(calibration.runId);
     if (!run || !run.isCurrent || run.packageId !== project.activePackageId) throw new Error("Calibration is not current.");

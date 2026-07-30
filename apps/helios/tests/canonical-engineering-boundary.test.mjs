@@ -368,3 +368,46 @@ test("Cutover Stage 6 reconciles Plan semantics from the governed canonical arti
   assert.match(actions, /startPlanDocument = internalAction/);
   assert.match(intelligence, /createPlanRun/);
 });
+
+test("Cutover Stage 7 activates the canonical Plan writer with exact automatic rollback", async () => {
+  const [schema, reader, projects, intelligence, packages, planActions, geometryActions] =
+    await Promise.all([
+      source("web/convex/schema.ts"),
+      source("web/convex/heliosCanonicalPlanReader.ts"),
+      source("web/convex/heliosProjects.ts"),
+      source("web/convex/heliosPlanIntelligence.ts"),
+      source("web/convex/heliosPackages.ts"),
+      source("web/convex/heliosPlanActions.ts"),
+      source("web/convex/heliosCivilGeometryActions.ts"),
+    ]);
+  assert.match(schema, /heliosCanonicalPlanWriterActivations: defineTable/);
+  assert.match(schema, /legacyPlanRunId: v\.id\("heliosPlanRuns"\)/);
+  assert.match(schema, /canonicalPlanRunId: v\.id\("heliosPlanRuns"\)/);
+  assert.match(schema, /canonicalOutputFingerprint: v\.string\(\)/);
+
+  assert.match(reader, /stageCanonicalPlanWriterActivation = internalMutation/);
+  assert.match(reader, /getCanonicalPlanWriterActivation = internalQuery/);
+  assert.match(reader, /retirePlanWriterActivation/);
+  assert.match(reader, /mode: "canonical_writer"/);
+  assert.match(reader, /fallbackReason/);
+  assert.match(reader, /copyLegacySheetDecisions/);
+  assert.match(reader, /planOutputFingerprint/);
+  assert.match(reader, /semanticReconciliationStatus !== "completed"/);
+  assert.match(reader, /activationEligible !== true/);
+  assert.doesNotMatch(
+    reader,
+    /originalStorageId|storage\.get|from "openai"|files\.create|responses\.create|input_file|input_image/,
+  );
+
+  assert.match(projects, /const effectivePlanRun = planRows\?\.planRun \|\| planRun/);
+  assert.match(intelligence, /retirePlanWriterActivation/);
+  assert.match(packages, /retirePlanWriterActivation/);
+
+  // Plan writer activation is deliberately an overlay. The legacy Plan run
+  // remains current for Civil Geometry until that workflow has its own exact
+  // canonical writer cutover.
+  assert.match(planActions, /startPlanDocument = internalAction/);
+  assert.match(planActions, /openai\.files\.create/);
+  assert.match(geometryActions, /startGeometryDocument = internalAction/);
+  assert.match(geometryActions, /openai\.files\.create/);
+});
