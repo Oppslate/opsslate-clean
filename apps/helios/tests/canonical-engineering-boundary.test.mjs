@@ -309,6 +309,11 @@ test("Cutover Stage 5 reconstructs Plan shadow batches from pinned canonical pag
   assert.match(writer, /inputFingerprint/);
   assert.match(writer, /isCurrent: false/);
   assert.match(writer, /originalPdfReadCount: 0/);
+  assert.match(writer, /activationEligible/);
+  assert.match(writer, /semanticReviewRequired/);
+  assert.match(writer, /pageMetadataMatchCount === pilot\.canonicalPageCount/);
+  assert.match(writer, /authoritativeViewCount === shadowViewCount/);
+  assert.match(writer, /authoritativeReferenceCount === shadowReferenceCount/);
   assert.doesNotMatch(writer, /originalStorageId|files\.create|responses\.create/);
 
   const canonicalAction = actions.slice(

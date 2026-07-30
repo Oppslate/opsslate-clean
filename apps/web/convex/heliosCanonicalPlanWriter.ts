@@ -42,7 +42,11 @@ function inputFingerprint(
 }
 
 function metadataSignature(page: Doc<"heliosPlanPages">) {
-  return JSON.stringify({
+  return JSON.stringify(metadataFields(page));
+}
+
+function metadataFields(page: Doc<"heliosPlanPages">) {
+  return {
     pageKind: page.pageKind,
     printedPageNumber: page.printedPageNumber.trim(),
     sheetNumber: page.sheetNumber.trim().toUpperCase(),
@@ -50,7 +54,7 @@ function metadataSignature(page: Doc<"heliosPlanPages">) {
     discipline: page.discipline.trim().toUpperCase(),
     issueDate: page.issueDate.trim(),
     revisionMarker: page.revisionMarker.trim().toUpperCase(),
-  });
+  };
 }
 
 export const stageCanonicalPlanWriterPilot = internalMutation({
@@ -195,6 +199,8 @@ export const stageCanonicalPlanWriterPilot = internalMutation({
       shadowPlanRunId: shadowRunId,
       isCurrent: true,
       status: "queued",
+      activationEligible: false,
+      semanticReviewRequired: true,
       inputFingerprint: canonicalFingerprint,
       canonicalPageCount: canonicalInputs.length,
       renderOnlyPageCount,
@@ -204,6 +210,13 @@ export const stageCanonicalPlanWriterPilot = internalMutation({
       outputPageCount: 0,
       exactPageIdentityCount: 0,
       pageMetadataMatchCount: 0,
+      pageKindMatchCount: 0,
+      printedPageNumberMatchCount: 0,
+      sheetNumberMatchCount: 0,
+      titleMatchCount: 0,
+      disciplineMatchCount: 0,
+      issueDateMatchCount: 0,
+      revisionMarkerMatchCount: 0,
       authoritativeViewCount: canonicalInputs.reduce((sum, { authoritativePage }) => sum + authoritativePage.views.length, 0),
       shadowViewCount: 0,
       authoritativeReferenceCount: 0,
@@ -354,11 +367,25 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
     ]));
     let exactPageIdentityCount = 0;
     let pageMetadataMatchCount = 0;
+    const metadataMatchCounts = {
+      pageKind: 0,
+      printedPageNumber: 0,
+      sheetNumber: 0,
+      title: 0,
+      discipline: 0,
+      issueDate: 0,
+      revisionMarker: 0,
+    };
     for (const [identity, authoritativePage] of authoritativeByIdentity) {
       const shadowPage = shadowByIdentity.get(identity);
       if (!shadowPage) continue;
       exactPageIdentityCount += 1;
       if (metadataSignature(authoritativePage) === metadataSignature(shadowPage)) pageMetadataMatchCount += 1;
+      const authoritativeMetadata = metadataFields(authoritativePage);
+      const shadowMetadata = metadataFields(shadowPage);
+      for (const key of Object.keys(metadataMatchCounts) as Array<keyof typeof metadataMatchCounts>) {
+        if (authoritativeMetadata[key] === shadowMetadata[key]) metadataMatchCounts[key] += 1;
+      }
     }
     const issues = [
       ...(failed ? [`${failed} canonical page batch${failed === 1 ? "" : "es"} failed.`] : []),
@@ -371,18 +398,35 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
       ...(shadowByIdentity.size !== shadowPages.length ? ["The shadow output contains duplicate document/page identities."] : []),
     ];
     const status = issues.length ? "failed" as const : "ready_for_review" as const;
+    const authoritativeViewCount = targetAuthoritativePages.reduce((sum, page) => sum + page.views.length, 0);
+    const shadowViewCount = shadowPages.reduce((sum, page) => sum + page.views.length, 0);
+    const authoritativeReferenceCount = targetAuthoritativeReferences.length;
+    const shadowReferenceCount = shadowReferences.length;
+    const activationEligible = issues.length === 0
+      && pageMetadataMatchCount === pilot.canonicalPageCount
+      && authoritativeViewCount === shadowViewCount
+      && authoritativeReferenceCount === shadowReferenceCount;
     const now = Date.now();
     await ctx.db.patch(pilot._id, {
       status,
+      activationEligible,
+      semanticReviewRequired: !activationEligible,
       completedBatchCount: completed,
       failedBatchCount: failed,
       outputPageCount: shadowPages.length,
       exactPageIdentityCount,
       pageMetadataMatchCount,
-      authoritativeViewCount: targetAuthoritativePages.reduce((sum, page) => sum + page.views.length, 0),
-      shadowViewCount: shadowPages.reduce((sum, page) => sum + page.views.length, 0),
-      authoritativeReferenceCount: targetAuthoritativeReferences.length,
-      shadowReferenceCount: shadowReferences.length,
+      pageKindMatchCount: metadataMatchCounts.pageKind,
+      printedPageNumberMatchCount: metadataMatchCounts.printedPageNumber,
+      sheetNumberMatchCount: metadataMatchCounts.sheetNumber,
+      titleMatchCount: metadataMatchCounts.title,
+      disciplineMatchCount: metadataMatchCounts.discipline,
+      issueDateMatchCount: metadataMatchCounts.issueDate,
+      revisionMarkerMatchCount: metadataMatchCounts.revisionMarker,
+      authoritativeViewCount,
+      shadowViewCount,
+      authoritativeReferenceCount,
+      shadowReferenceCount,
       originalPdfReadCount: 0,
       openAiCallCount: jobs.filter((job) => Boolean(job.openaiResponseId)).length,
       issues,
@@ -391,16 +435,19 @@ export const evaluateCanonicalPlanWriterPilot = internalMutation({
     });
     return {
       status,
+      activationEligible,
+      semanticReviewRequired: !activationEligible,
       completedBatchCount: completed,
       failedBatchCount: failed,
       canonicalPageCount: pilot.canonicalPageCount,
       outputPageCount: shadowPages.length,
       exactPageIdentityCount,
       pageMetadataMatchCount,
-      authoritativeViewCount: targetAuthoritativePages.reduce((sum, page) => sum + page.views.length, 0),
-      shadowViewCount: shadowPages.reduce((sum, page) => sum + page.views.length, 0),
-      authoritativeReferenceCount: targetAuthoritativeReferences.length,
-      shadowReferenceCount: shadowReferences.length,
+      metadataMatchCounts,
+      authoritativeViewCount,
+      shadowViewCount,
+      authoritativeReferenceCount,
+      shadowReferenceCount,
       originalPdfReadCount: 0,
       openAiCallCount: jobs.filter((job) => Boolean(job.openaiResponseId)).length,
       issues,
@@ -417,5 +464,62 @@ export const getCanonicalPlanWriterPilot = internalQuery({
       .query("heliosCanonicalPlanWriterPilots")
       .withIndex("by_project_current", (query) => query.eq("projectId", projectId).eq("isCurrent", true))
       .first();
+  },
+});
+
+export const getCanonicalPlanWriterComparison = internalQuery({
+  args: { projectId: v.string(), sampleLimit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const projectId = ctx.db.normalizeId("heliosProjects", args.projectId);
+    if (!projectId) return null;
+    const pilot = await ctx.db
+      .query("heliosCanonicalPlanWriterPilots")
+      .withIndex("by_project_current", (query) => query.eq("projectId", projectId).eq("isCurrent", true))
+      .first();
+    if (!pilot) return null;
+    const [authoritativePages, shadowPages, authoritativeReferences, shadowReferences] = await Promise.all([
+      ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", pilot.authoritativePlanRunId)).collect(),
+      ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", pilot.shadowPlanRunId)).collect(),
+      ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", pilot.authoritativePlanRunId)).collect(),
+      ctx.db.query("heliosPlanReferences").withIndex("by_run", (query) => query.eq("runId", pilot.shadowPlanRunId)).collect(),
+    ]);
+    const shadowByIdentity = new Map(shadowPages.map((page) => [
+      `${page.documentId}:${page.physicalPageNumber}`,
+      page,
+    ]));
+    const samples = [];
+    const limit = Math.max(1, Math.min(25, Math.floor(args.sampleLimit || 10)));
+    for (const authoritativePage of authoritativePages) {
+      const shadowPage = shadowByIdentity.get(`${authoritativePage.documentId}:${authoritativePage.physicalPageNumber}`);
+      if (!shadowPage) continue;
+      const authoritative = metadataFields(authoritativePage);
+      const shadow = metadataFields(shadowPage);
+      const changedFields = (Object.keys(authoritative) as Array<keyof typeof authoritative>)
+        .filter((key) => authoritative[key] !== shadow[key]);
+      if (changedFields.length && samples.length < limit) {
+        samples.push({
+          documentName: authoritativePage.documentName,
+          physicalPageNumber: authoritativePage.physicalPageNumber,
+          changedFields,
+          authoritative,
+          shadow,
+          authoritativeViewCount: authoritativePage.views.length,
+          shadowViewCount: shadowPage.views.length,
+        });
+      }
+    }
+    const countBy = <T extends string>(values: T[]) => Object.fromEntries(
+      [...new Set(values)].sort().map((value) => [value, values.filter((candidate) => candidate === value).length]),
+    );
+    return {
+      pilot,
+      authoritativePageKinds: countBy(authoritativePages.map((page) => page.pageKind)),
+      shadowPageKinds: countBy(shadowPages.map((page) => page.pageKind)),
+      authoritativeViewTypes: countBy(authoritativePages.flatMap((page) => page.views.map((view) => view.viewType))),
+      shadowViewTypes: countBy(shadowPages.flatMap((page) => page.views.map((view) => view.viewType))),
+      authoritativeReferenceTypes: countBy(authoritativeReferences.map((reference) => reference.referenceType)),
+      shadowReferenceTypes: countBy(shadowReferences.map((reference) => reference.referenceType)),
+      metadataDifferenceSamples: samples,
+    };
   },
 });
