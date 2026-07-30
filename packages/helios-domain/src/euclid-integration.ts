@@ -252,24 +252,29 @@ function buildReadiness(
     const horizontalInputs = [alignment.id, ...alignmentControls.map((row) => row.id), ...alignmentElements.map((row) => row.id)];
     result.push(readiness({ alignmentId: alignment.id, capability: "horizontal_length", status: horizontalState.status, method: "accepted horizontal element chain", inputEntityIds: horizontalInputs, provenanceIds: unique(horizontalInputs.flatMap((id) => nodeProvenance(model, id))), reasons: horizontalState.reasons }));
 
-    const profiles = model.profiles.filter((row) => row.alignmentId === alignment.id && accepted(row.reviewState) && row.completeness !== "incomplete");
-    const profileStates = profiles.map((row) => verticalScopes.get(row.id));
+    const availableProfiles = model.profiles.filter((row) => row.alignmentId === alignment.id && row.reviewState !== "rejected" && row.reviewState !== "superseded" && row.completeness !== "incomplete");
+    const profiles = availableProfiles.filter((row) => accepted(row.reviewState));
+    const profileStates = availableProfiles.map((row) => verticalScopes.get(row.id));
+    const acceptedProfileStates = profiles.map((row) => verticalScopes.get(row.id));
     const profileStatus = profileStates.some((row) => row === "blocked")
       ? "blocked"
-      : profileStates.some((row) => row === "review")
+      : availableProfiles.length > profiles.length && profileStates.some((row) => row === "passed" || row === "review")
         ? "review"
-        : profileStates.some((row) => row === "passed")
+      : acceptedProfileStates.some((row) => row === "review")
+        ? "review"
+        : acceptedProfileStates.some((row) => row === "passed")
           ? profiles.some((row) => row.completeness === "complete_with_limitations") ? "review" : "ready"
           : "not_available";
-    const profileInputs = profiles.flatMap((row) => [row.id, ...model.profilePoints.filter((point) => point.profileId === row.id).map((point) => point.id), ...model.verticalTangents.filter((tangent) => tangent.profileId === row.id).map((tangent) => tangent.id), ...model.verticalCurves.filter((curve) => curve.profileId === row.id).map((curve) => curve.id)]);
-    result.push(readiness({ alignmentId: alignment.id, capability: "profile_elevation", status: profileStatus, method: "accepted tangent and parabolic profile", inputEntityIds: profileInputs, provenanceIds: unique(profileInputs.flatMap((id) => nodeProvenance(model, id))), reasons: profileStatus === "ready" ? [] : [profiles.length ? "No accepted profile has passed vertical validation." : "No accepted profile is available."] }));
+    const profileInputs = availableProfiles.flatMap((row) => [row.id, ...model.profilePoints.filter((point) => point.profileId === row.id).map((point) => point.id), ...model.verticalTangents.filter((tangent) => tangent.profileId === row.id).map((tangent) => tangent.id), ...model.verticalCurves.filter((curve) => curve.profileId === row.id).map((curve) => curve.id)]);
+    result.push(readiness({ alignmentId: alignment.id, capability: "profile_elevation", status: profileStatus, method: "governed tangent and parabolic profile", inputEntityIds: profileInputs, provenanceIds: unique(profileInputs.flatMap((id) => nodeProvenance(model, id))), reasons: profileStatus === "ready" ? [] : [availableProfiles.length > profiles.length ? "Stored profile geometry requires estimator acceptance before governed quantity use." : profiles.length ? "No accepted profile has passed vertical validation." : "No profile is available."] }));
 
     const sections = model.typicalSections.filter((row) => row.alignmentId === alignment.id && accepted(row.reviewState) && ((row.laneWidthLeft && row.crossSlopeLeftPercent) || (row.laneWidthRight && row.crossSlopeRightPercent)));
     const crossSections = validCrossSectionStations(model, alignment.id);
     const corridorSectionAvailable = sections.length > 0 || crossSections.length > 0;
-    const corridorProfiles = profiles.filter((row) => row.role === "proposed_finished_grade" || row.role === "proposed_subgrade");
+    const corridorProfiles = availableProfiles.filter((row) => row.role === "proposed_finished_grade" || row.role === "proposed_subgrade");
     const corridorProfileStates = corridorProfiles.map((row) => verticalScopes.get(row.id));
-    const corridorProfileStatus: HeliosEuclidReadinessStatus = corridorProfileStates.some((row) => row === "blocked") ? "blocked" : corridorProfileStates.some((row) => row === "review") ? "review" : corridorProfileStates.some((row) => row === "passed") ? "ready" : "not_available";
+    const corridorProfilesAccepted = corridorProfiles.length > 0 && corridorProfiles.every((row) => accepted(row.reviewState));
+    const corridorProfileStatus: HeliosEuclidReadinessStatus = corridorProfileStates.some((row) => row === "blocked") ? "blocked" : !corridorProfilesAccepted && corridorProfileStates.some((row) => row === "passed" || row === "review") ? "review" : corridorProfileStates.some((row) => row === "review") ? "review" : corridorProfileStates.some((row) => row === "passed") ? "ready" : "not_available";
     const corridorStatus: HeliosEuclidReadinessStatus = horizontalState.status === "blocked" || corridorProfileStatus === "blocked"
       ? "blocked"
       : horizontalState.status === "ready" && corridorProfileStatus === "ready" && corridorSectionAvailable

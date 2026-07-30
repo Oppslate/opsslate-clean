@@ -18,11 +18,12 @@ export const heliosCivilGeometryFormat = {
     properties: {
       records: { type: "array", maxItems: 2000, items: {
         type: "object", additionalProperties: false,
-        required: ["physicalPageNumber", "viewKey", "geometryType", "authority", "alignmentName", "sourceLocator", "horizontalPoints", "horizontalSegments", "stationEquations", "verticalPoints", "crossSectionPoints", "invertPoints", "materialLayers", "units", "confidence", "unresolvedIssues"],
+        required: ["physicalPageNumber", "viewKey", "geometryType", "authority", "alignmentName", "sourceLocator", "verticalDatum", "horizontalPoints", "horizontalSegments", "stationEquations", "verticalPoints", "crossSectionPoints", "invertPoints", "materialLayers", "units", "confidence", "unresolvedIssues"],
         properties: {
           physicalPageNumber: { type: "integer", minimum: 1, maximum: 2000 }, viewKey: { type: "string", maxLength: 120 },
           geometryType: { type: "string", enum: HELIOS_CIVIL_GEOMETRY_TYPES }, authority: { type: "string", enum: HELIOS_CIVIL_GEOMETRY_AUTHORITIES },
           alignmentName: { type: "string", maxLength: 240 }, sourceLocator: { type: "string", maxLength: 500 },
+          verticalDatum: { anyOf: [{ type: "string", maxLength: 120 }, { type: "null" }] },
           horizontalPoints: { type: "array", maxItems: 10000, items: horizontalPoint }, horizontalSegments: { type: "array", maxItems: 10000, items: horizontalSegment },
           stationEquations: { type: "array", maxItems: 1000, items: stationEquation }, verticalPoints: { type: "array", maxItems: 10000, items: verticalPoint },
           crossSectionPoints: { type: "array", maxItems: 30000, items: crossSectionPoint }, invertPoints: { type: "array", maxItems: 10000, items: invertPoint },
@@ -36,12 +37,19 @@ export const heliosCivilGeometryFormat = {
 
 export const HELIOS_CIVIL_GEOMETRY_PROMPT = `
 You are the civil-geometry reconstruction engine for Helios, a heavy-highway
-estimating platform. Read the complete attached construction plan PDF and
-extract only explicit geometry that can be verified on the source sheet.
+estimating platform. Read the complete supplied construction-plan source
+(pinned canonical page images and text, or a legacy PDF) and extract only
+explicit geometry that can be verified on the source sheet.
 
 Authority order:
 1. Horizontal control coordinates, station equations, bearings, tangents and curve tables.
 2. Vertical profile station/elevation, grades, PVC/PVI/PVT and vertical-curve data.
+   Treat T.G.L. and Theoretical Grade Line as the proposed roadway centerline
+   grade/profile for the named horizontal alignment; T.G.L., centerline,
+   roadway profile line, and proposed grade line are equivalent alignment-role
+   labels unless the source explicitly distinguishes them.
+   Record the printed vertical datum (for example NAVD88) when the profile or
+   project control sheets establish it; otherwise return null rather than infer it.
 3. Cross-section and typical-section offsets, elevations, lane/shoulder widths and cross slopes.
 4. Drainage structure stations, offsets, inverts, pipe sizes and materials.
 5. Explicit pavement, aggregate, subgrade and other material layer depths.

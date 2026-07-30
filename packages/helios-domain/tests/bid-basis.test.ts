@@ -56,6 +56,38 @@ test("classifies all supported scope-basis profiles", () => {
   assert.equal(derive([document("forms", "Bid Bond.pdf")]).profile, "mixed_or_other");
 });
 
+test("primary plan and permit identities outrank incidental findings", () => {
+  const roadwayProfile = document(
+    "pro-1",
+    "023^PRO-1 ROADWAY PROFILE .pdf",
+    "Issued-for-bid plan drawing – roadway profile",
+  );
+  roadwayProfile.findingCategories = ["bid_items", "contract_requirements"];
+  const streamProfile = document(
+    "pro-2",
+    "024^PRO-2 STREAM PROFILE.pdf",
+    "Bid-phase plan drawing — stream profile",
+  );
+  streamProfile.findingCategories = ["bid_items", "missing_information"];
+  const permitPackage = document(
+    "permit",
+    "920000 Permits.pdf",
+    "Project-specific permit package and supporting bid reference containing agency approvals",
+  );
+  permitPackage.findingCategories = ["drawing_index", "contract_requirements"];
+
+  const basis = derive([roadwayProfile, streamProfile, permitPackage]);
+  assert.deepEqual(
+    basis.categories.find((row) => row.category === "plans")?.documentIds,
+    ["pro-1", "pro-2"],
+  );
+  assert.deepEqual(
+    basis.categories.find((row) => row.category === "environmental_permits")?.documentIds,
+    ["permit"],
+  );
+  assert.equal(basis.categories.find((row) => row.category === "owner_bid_schedule")?.fileCount, 0);
+});
+
 test("one usable scope basis opens the estimate and limits only dependent capabilities", () => {
   const basis = derive([document("specs", "Project Manual and Specifications.pdf")]);
   assert.equal(basis.workspaceState, "estimate_ready_with_limitations");

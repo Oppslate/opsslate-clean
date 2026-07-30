@@ -25,8 +25,8 @@ import {
   type HeliosEuclidVerticalTangent,
 } from "./euclid-contract.ts";
 
-export const HELIOS_EUCLID_SHADOW_VERSION = 1;
-export const HELIOS_EUCLID_SHADOW_ADAPTER = "canonical-civil-geometry-v1";
+export const HELIOS_EUCLID_SHADOW_VERSION = 2;
+export const HELIOS_EUCLID_SHADOW_ADAPTER = "canonical-civil-geometry-v2";
 
 export const HELIOS_EUCLID_ENTITY_TYPES = [
   "spatial_reference",
@@ -61,6 +61,7 @@ export type HeliosEuclidLegacyGeometryRecord = {
   authority: HeliosEuclidAuthority;
   alignmentName: string;
   sourceLocator: string;
+  verticalDatum?: string;
   units: string;
   confidence: number;
   status: "proposed" | "accepted" | "rejected" | "superseded";
@@ -138,7 +139,19 @@ function boundedText(value: string, fallback: string, maximum = 300) {
 }
 
 function normalizedAlignmentKey(name: string, recordId: string) {
-  const normalized = boundedText(name, "").toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const normalized = boundedText(name, "")
+    .toLocaleLowerCase()
+    .replace(/\bt\s*\.?\s*g\s*\.?\s*l\s*\.?(?=\W|$)/g, " theoretical grade line ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\bave\b/g, "avenue")
+    .replace(/\brd\b/g, "road")
+    .replace(/\brte\b/g, "route")
+    .replace(/\b(?:final|proposed|finished|design)\b/g, " ")
+    .replace(/\btheoretical grade line\b/g, " ")
+    .replace(/\b(?:roadway|road) profile(?: line)?\b/g, " ")
+    .replace(/\b(?:center ?line|station line)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   return normalized && !["unknown", "not stated", "n a", "na"].includes(normalized)
     ? normalized
     : `unnamed ${recordId}`;
@@ -229,12 +242,12 @@ function profilePointType(label: string): HeliosEuclidProfilePoint["pointType"] 
 }
 
 function profileRole(record: HeliosEuclidLegacyGeometryRecord): HeliosEuclidProfile["role"] {
-  const text = `${record.sourceLocator} ${record.verticalPoints.map((point) => point.label).join(" ")}`.toLocaleLowerCase();
+  const text = `${record.alignmentName} ${record.sourceLocator} ${record.verticalPoints.map((point) => point.label).join(" ")}`.toLocaleLowerCase();
   if (/existing ground|existing grade/.test(text)) return "existing_ground";
   if (/subgrade/.test(text)) return "proposed_subgrade";
   if (/streambed/.test(text)) return /existing/.test(text) ? "existing_streambed" : "proposed_streambed";
   if (/invert/.test(text)) return "culvert_invert";
-  if (/proposed|finished|final grade|design grade/.test(text)) return "proposed_finished_grade";
+  if (/proposed|finished|final grade|design grade|theoretical grade line|\bt\s*\.?\s*g\s*\.?\s*l\s*\.?(?=\W|$)/.test(text)) return "proposed_finished_grade";
   return "other";
 }
 
@@ -303,6 +316,8 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
     groups.set(key, [...(groups.get(key) || []), record]);
   }
 
+  const verticalDatums = [...new Set(activeRecords.map((record) => record.verticalDatum?.trim()).filter((value): value is string => Boolean(value)))];
+  const projectVerticalDatum = verticalDatums.length === 1 ? verticalDatums[0] : undefined;
   const spatialReferences = [...new Set(activeRecords.map((record) => linearUnit(record.units)))].map((unit) => ({
     id: `spatial-reference:${unit}`,
     name: `Source coordinate reference (${unit}); datum and projection not established`,
@@ -311,6 +326,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
     axisOrder: "northing_easting" as const,
     horizontalUnit: unit,
     verticalUnit: unit,
+    verticalDatum: projectVerticalDatum,
     provenanceIds: activeRecords.filter((record) => linearUnit(record.units) === unit).map((record) => `provenance:${record.id}`),
     reviewState: "proposed" as const,
   }));
@@ -322,7 +338,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
     const candidates = records.flatMap(stationCandidates);
     const start = Math.min(...candidates);
     const end = Math.max(...candidates);
-    const first = records[0]!;
+    const first = records.find((record) => record.geometryType === "horizontal_alignment") || records[0]!;
     if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
       addIssue(issues, first, "insufficient_alignment_station_range", "The stored geometry does not establish two distinct stations for this alignment.", [], "blocking");
       continue;
@@ -464,6 +480,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
         role: profileRole(record),
         startStation: station(sorted[0]!.station, record, "profile:start"),
         endStation: station(sorted.at(-1)!.station, record, "profile:end"),
+        verticalDatum: record.verticalDatum || projectVerticalDatum,
         sourceSheetNumbers: record.sheetNumber ? [record.sheetNumber] : [],
         reviewState: recordReviewState,
         completeness: "complete_with_limitations",

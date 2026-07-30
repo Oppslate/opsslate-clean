@@ -73,7 +73,7 @@ export const publishCandidate = internalMutation({
     }
 
     const model = await reconstructEuclidModel(ctx, modelRecord);
-    const solution = await reconstructIntegrationSolution(ctx, solutionRecord);
+    const solution = await reconstructIntegrationSolution(ctx, solutionRecord, modelRecord.modelKey);
     const candidates = buildHeliosEuclidQuantityCandidates({ model, solution });
     const selected = candidates.find((row) => row.id === input.candidateId);
     if (!selected || selected.fingerprint !== input.candidateFingerprint) {

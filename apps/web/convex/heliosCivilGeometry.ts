@@ -7,7 +7,7 @@ import { internalMutation, internalQuery, type MutationCtx } from "./_generated/
 import { heliosPrincipalValidator, requireHeliosPrincipal } from "./heliosAuthorization";
 import { scheduleGeometryRunShadow } from "./heliosEngineeringShadowSchedule";
 
-const PROCESSING_VERSION = 1;
+const PROCESSING_VERSION = 2;
 const startGeometryDocumentReference = makeFunctionReference<"action", { jobId: Id<"heliosCivilGeometryJobs"> }, null>("heliosCivilGeometryActions:startGeometryDocument");
 
 async function finalizeGeometryRun(ctx: MutationCtx, runId: Id<"heliosCivilGeometryRuns">) {
@@ -93,13 +93,62 @@ export const loadGeometryJob = internalQuery({
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId);
     if (!job) return null;
-    const [run, project, document, pages] = await Promise.all([
-      ctx.db.get(job.geometryRunId), ctx.db.get(job.projectId), ctx.db.get(job.documentId),
+    const [run, planRun, project, document, pages] = await Promise.all([
+      ctx.db.get(job.geometryRunId), ctx.db.get(job.planRunId), ctx.db.get(job.projectId),
+      ctx.db.get(job.documentId),
       ctx.db.query("heliosPlanPages").withIndex("by_run_page", (query) => query.eq("runId", job.planRunId)).collect(),
     ]);
-    if (!run || !run.isCurrent || !project || !document) return null;
+    if (!run || !run.isCurrent || !planRun || !project || !document) return null;
+    let canonicalPages;
+    if (planRun.inputMode === "canonical_pages") {
+      if (!planRun.engineeringRecordId) throw new Error("Canonical geometry input is missing its engineering record.");
+      const record = await ctx.db.get(planRun.engineeringRecordId);
+      if (!record || !record.isCurrent || record.packageId !== planRun.packageId || record.status !== "ready") {
+        throw new Error("Canonical geometry input is stale or is not ready.");
+      }
+      const source = await ctx.db
+        .query("heliosEngineeringSources")
+        .withIndex("by_record_document", (query) => query.eq("engineeringRecordId", record._id).eq("documentId", job.documentId))
+        .first();
+      if (!source || source.status !== "ready") throw new Error("Canonical geometry source is unavailable.");
+      const engineeringPages = await ctx.db
+        .query("heliosEngineeringPages")
+        .withIndex("by_source_page", (query) => query.eq("engineeringSourceId", source._id))
+        .collect();
+      canonicalPages = [];
+      for (const page of engineeringPages.sort((a, b) => a.physicalPageNumber - b.physicalPageNumber)) {
+        const render = await ctx.db
+          .query("heliosEngineeringAssets")
+          .withIndex("by_page_kind", (query) => query.eq("pageId", page._id).eq("kind", "page_render"))
+          .filter((query) => query.neq(query.field("isCurrent"), false))
+          .first();
+        if (!render) throw new Error(`Canonical page ${page.physicalPageNumber} is missing its pinned render.`);
+        const spans = (await ctx.db
+          .query("heliosEngineeringTextSpans")
+          .withIndex("by_page_channel", (query) => query.eq("pageId", page._id))
+          .collect())
+          .filter((span) => span.isCurrent !== false)
+          .sort((a, b) => a.channel.localeCompare(b.channel) || a.readingOrder - b.readingOrder);
+        const pageText = ["native", "ocr"].flatMap((channel) => {
+          const rows = spans.filter((span) => span.channel === channel);
+          if (!rows.length) return [];
+          const value = rows.map((span) => span.text.trim()).filter(Boolean).join("\n").slice(0, 60_000);
+          return value ? [`${channel.toUpperCase()} TEXT\n${value}`] : [];
+        }).join("\n\n") || "No machine-readable text was available for this canonical page.";
+        canonicalPages.push({
+          physicalPageNumber: page.physicalPageNumber,
+          originalFileName: source.originalFileName,
+          modality: page.modality,
+          renderStorageId: render.storageId,
+          renderContentType: render.contentType,
+          renderSha256: render.sha256,
+          pageText,
+        });
+      }
+      if (!canonicalPages.length) throw new Error("Canonical geometry source has no materialized pages.");
+    }
     return {
-      job, run, project, document,
+      job, run, planRun, project, document, canonicalPages,
       pages: pages.filter((page) => page.documentId === job.documentId).map((page) => ({
         physicalPageNumber: page.physicalPageNumber, sheetNumber: page.sheetNumber, title: page.title,
         views: page.views.map((view) => ({ viewKey: view.viewKey, viewType: view.viewType, label: view.label })),
@@ -117,7 +166,7 @@ export const markGeometryUploading = internalMutation({
 });
 
 export const markGeometryAnalyzing = internalMutation({
-  args: { jobId: v.id("heliosCivilGeometryJobs"), openaiFileId: v.string(), openaiResponseId: v.string(), model: v.string() },
+  args: { jobId: v.id("heliosCivilGeometryJobs"), openaiFileId: v.optional(v.string()), openaiResponseId: v.string(), model: v.string() },
   handler: async (ctx, args) => {
     const job = await ctx.db.get(args.jobId); if (!job || job.status !== "uploading") return false;
     await ctx.db.patch(job._id, { status: "analyzing", openaiFileId: args.openaiFileId, openaiResponseId: args.openaiResponseId, model: args.model, updatedAt: Date.now() }); return true;
@@ -140,7 +189,7 @@ export const completeGeometryJob = internalMutation({
       await ctx.db.insert("heliosCivilGeometryRecords", {
         companyId: job.companyId, projectId: job.projectId, packageId: job.packageId, geometryRunId: job.geometryRunId, planRunId: job.planRunId,
         documentId: job.documentId, pageId: page._id, viewKey: view.viewKey, geometryType: record.geometryType, authority: record.authority,
-        alignmentName: record.alignmentName, sourceLocator: record.sourceLocator, horizontalPoints: record.horizontalPoints,
+        alignmentName: record.alignmentName, sourceLocator: record.sourceLocator, verticalDatum: record.verticalDatum, horizontalPoints: record.horizontalPoints,
         horizontalSegments: record.horizontalSegments, stationEquations: record.stationEquations,
         verticalPoints: record.verticalPoints, crossSectionPoints: record.crossSectionPoints, invertPoints: record.invertPoints,
         materialLayers: record.materialLayers, units: record.units, confidence: record.confidence, unresolvedIssues: record.unresolvedIssues,

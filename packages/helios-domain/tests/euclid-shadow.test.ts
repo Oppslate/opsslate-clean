@@ -55,6 +55,7 @@ function shadowInput(): BuildHeliosEuclidShadowInput {
   }];
 
   const vertical = baseRecord("vertical", "vertical_alignment");
+  vertical.verticalDatum = "NAVD88";
   vertical.verticalPoints = [
     { station: 14200, elevation: 1374.2, label: "Profile start", gradePercent: -2.71 },
     { station: 14448, elevation: 1372.2, label: "PVI at culvert", gradePercent: 1.03 },
@@ -98,6 +99,22 @@ test("Stage 4B deterministically builds one traceable Euclid shadow from stored 
 
   const reversed = buildHeliosEuclidShadowModel({ ...input, records: [...input.records].reverse() });
   assert.equal(euclidModelFingerprint(reversed), euclidModelFingerprint(model));
+});
+
+test("T.G.L. is the proposed roadway centerline profile and shares its horizontal alignment", () => {
+  const input = shadowInput();
+  input.records[2]!.alignmentName = "Front Avenue Station Line";
+  input.records[0]!.alignmentName = "Front Avenue final T.G.L.";
+  input.records[0]!.sourceLocator = "Sheet PRO-1, Front Avenue roadway profile";
+  const model = buildHeliosEuclidShadowModel(input);
+
+  assert.equal(model.alignments.length, 1);
+  assert.equal(model.alignments[0]?.printedName, "Front Avenue Station Line");
+  assert.equal(model.alignments[0]?.normalizedName, "front avenue");
+  assert.equal(model.profiles[0]?.role, "proposed_finished_grade");
+  assert.equal(model.profiles[0]?.verticalDatum, "NAVD88");
+  assert.equal(model.spatialReferences[0]?.verticalDatum, "NAVD88");
+  assert.equal(model.profiles[0]?.alignmentId, model.alignments[0]?.id);
 });
 
 test("Stage 4B keeps coordinate ambiguity explicit and blocks premature exchange", () => {

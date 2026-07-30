@@ -25,7 +25,7 @@ function blocked(message: string): never {
   throw new Error(`Canonical Plan writer blocked: ${message}`);
 }
 
-function inputFingerprint(
+export function canonicalPlanInputFingerprint(
   pages: Array<{
     page: Doc<"heliosEngineeringPages">;
     render: Doc<"heliosEngineeringAssets">;
@@ -223,7 +223,7 @@ export const stageCanonicalPlanWriterPilot = internalMutation({
       }
     }
     const canonicalFingerprint = buildHeliosEngineeringParityFingerprint(
-      batches.map((batch) => inputFingerprint(batch)),
+      batches.map((batch) => canonicalPlanInputFingerprint(batch)),
     );
     const renderOnlyPageCount = canonicalInputs.filter(({ page }) =>
       (page.nativeTextSpanCount || 0) + (page.ocrTextSpanCount || 0) === 0,
@@ -311,7 +311,7 @@ export const stageCanonicalPlanWriterPilot = internalMutation({
 
     for (const [index, batch] of batches.entries()) {
       const documentId = batch[0]!.authoritativePage.documentId;
-      const jobFingerprint = inputFingerprint(batch);
+      const jobFingerprint = canonicalPlanInputFingerprint(batch);
       const jobId = await ctx.db.insert("heliosPlanJobs", {
         companyId: project.companyId,
         projectId: project._id,
@@ -356,7 +356,6 @@ export const loadCanonicalPlanJob = internalQuery({
     if (
       !run ||
       run.inputMode !== "canonical_pages" ||
-      !run.shadowOfRunId ||
       !run.engineeringRecordId ||
       !project ||
       !document
@@ -385,7 +384,7 @@ export const loadCanonicalPlanJob = internalQuery({
         .sort((a, b) => a.channel.localeCompare(b.channel) || a.readingOrder - b.readingOrder);
       pages.push({ page, source, render, spans });
     }
-    const fingerprint = inputFingerprint(pages);
+    const fingerprint = canonicalPlanInputFingerprint(pages);
     if (fingerprint !== job.canonicalInputFingerprint) blocked("canonical page content changed after the job was pinned.");
     return { job, run, project, document, pages, inputFingerprint: fingerprint };
   },

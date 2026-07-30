@@ -137,6 +137,7 @@ function asLegacyRecord(input: {
     authority: record.authority as HeliosEuclidAuthority,
     alignmentName: record.alignmentName,
     sourceLocator: provenance.sourceLocator || record.sourceLocator,
+    verticalDatum: record.verticalDatum,
     units: record.units,
     confidence: Math.min(record.confidence, provenance.confidence),
     status: record.status,

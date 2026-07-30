@@ -1,4 +1,5 @@
 import {
+  buildHeliosEngineeringParityFingerprint,
   derivePlanSheetConflicts,
   normalizePlanReviewInput,
   parsePlanDocumentIntelligence,
@@ -27,15 +28,24 @@ import {
   retirePlanReaderActivation,
   retirePlanWriterActivation,
 } from "./heliosCanonicalPlanReader";
+import { canonicalPlanInputFingerprint } from "./heliosCanonicalPlanWriter";
 import { scheduleGeometryRunShadow, schedulePlanRunShadow } from "./heliosEngineeringShadowSchedule";
 
 const PROCESSING_VERSION = 1;
+const CANONICAL_PROCESSING_VERSION = 2;
+const CANONICAL_BATCH_SIZE = 4;
 
 const startPlanDocumentReference = makeFunctionReference<
   "action",
   { jobId: Id<"heliosPlanJobs"> },
   null
 >("heliosPlanActions:startPlanDocument");
+
+const startCanonicalPlanBatchReference = makeFunctionReference<
+  "action",
+  { jobId: Id<"heliosPlanJobs"> },
+  null
+>("heliosPlanActions:startCanonicalPlanBatch");
 
 const evaluateCanonicalWriterReference = makeFunctionReference<
   "mutation",
@@ -99,6 +109,60 @@ async function ownedProject(
   return { user, companyId, project };
 }
 
+async function canonicalPlanBasis(
+  ctx: MutationCtx,
+  packageId: Id<"heliosBidPackages">,
+  documentIds: Id<"heliosDocuments">[],
+) {
+  const record = await ctx.db
+    .query("heliosEngineeringRecords")
+    .withIndex("by_package_current", (query) => query.eq("packageId", packageId).eq("isCurrent", true))
+    .first();
+  if (!record || record.status !== "ready") return null;
+  const [sources, pages, assets] = await Promise.all([
+    ctx.db.query("heliosEngineeringSources").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
+    ctx.db.query("heliosEngineeringPages").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
+    ctx.db.query("heliosEngineeringAssets").withIndex("by_record", (query) => query.eq("engineeringRecordId", record._id)).collect(),
+  ]);
+  const sourceByDocument = new Map(
+    sources.filter((source) => source.documentId).map((source) => [String(source.documentId), source]),
+  );
+  const renderByPage = new Map(
+    assets
+      .filter((asset) => asset.kind === "page_render" && !asset.viewKey && asset.isCurrent !== false)
+      .map((asset) => [String(asset.pageId), asset]),
+  );
+  const batches: Array<Array<{
+    documentId: Id<"heliosDocuments">;
+    page: Doc<"heliosEngineeringPages">;
+    render: Doc<"heliosEngineeringAssets">;
+  }>> = [];
+  for (const documentId of documentIds) {
+    const source = sourceByDocument.get(String(documentId));
+    if (!source || source.status !== "ready") {
+      throw new Error(`Canonical Plan reconstruction is missing the immutable source for document ${documentId}.`);
+    }
+    const documentPages = pages
+      .filter((page) => page.engineeringSourceId === source._id)
+      .sort((left, right) => left.physicalPageNumber - right.physicalPageNumber);
+    if (!documentPages.length) {
+      throw new Error(`Canonical Plan reconstruction found no materialized pages for document ${documentId}.`);
+    }
+    const inputs = documentPages.map((page) => {
+      const render = renderByPage.get(String(page._id));
+      if (!render) throw new Error(`Canonical Plan reconstruction is missing a pinned render for document ${documentId} page ${page.physicalPageNumber}.`);
+      return { documentId, page, render };
+    });
+    for (let index = 0; index < inputs.length; index += CANONICAL_BATCH_SIZE) {
+      batches.push(inputs.slice(index, index + CANONICAL_BATCH_SIZE));
+    }
+  }
+  const inputFingerprint = buildHeliosEngineeringParityFingerprint(
+    batches.map((batch) => canonicalPlanInputFingerprint(batch)),
+  );
+  return { record, batches, inputFingerprint, pageCount: batches.reduce((sum, batch) => sum + batch.length, 0) };
+}
+
 async function createPlanRun(
   ctx: MutationCtx,
   principal: HeliosPrincipalArgs,
@@ -122,13 +186,23 @@ async function createPlanRun(
   }
   const basis = await deriveProjectBidBasis(ctx, project, bidPackage);
   const planCategory = basis.categories.find((category) => category.category === "plans");
+  const planDocumentIds = (planCategory?.documentIds || [])
+    .map((value) => ctx.db.normalizeId("heliosDocuments", value))
+    .filter((value): value is Id<"heliosDocuments"> => Boolean(value));
+  const applicable = planCategory?.state === "received" && planDocumentIds.length > 0;
   const current = await ctx.db
     .query("heliosPlanRuns")
     .withIndex("by_package_current", (query) => query.eq("packageId", bidPackage._id).eq("isCurrent", true))
     .first();
+  const currentJobs = current
+    ? await ctx.db.query("heliosPlanJobs").withIndex("by_run", (query) => query.eq("runId", current._id)).collect()
+    : [];
+  const currentDocuments = new Set(currentJobs.map((job) => String(job.documentId)));
   if (
     current &&
     current.sourceFingerprint === basis.sourceFingerprint &&
+    current.sourceDocumentCount === planDocumentIds.length &&
+    planDocumentIds.every((documentId) => currentDocuments.has(String(documentId))) &&
     ["queued", "processing", "ready_for_review", "partially_ready", "not_applicable_to_current_basis"].includes(current.status)
   ) {
     await finalizeRun(ctx, current._id);
@@ -142,10 +216,7 @@ async function createPlanRun(
   if (current) await ctx.db.patch(current._id, { isCurrent: false, updatedAt: Date.now() });
 
   const now = Date.now();
-  const planDocumentIds = (planCategory?.documentIds || [])
-    .map((value) => ctx.db.normalizeId("heliosDocuments", value))
-    .filter((value): value is Id<"heliosDocuments"> => Boolean(value));
-  const applicable = planCategory?.state === "received" && planDocumentIds.length > 0;
+  const canonical = applicable ? await canonicalPlanBasis(ctx, bidPackage._id, planDocumentIds) : null;
   const runId = await ctx.db.insert("heliosPlanRuns", {
     companyId,
     projectId: project._id,
@@ -153,10 +224,13 @@ async function createPlanRun(
     packageRevision: bidPackage.revision,
     isCurrent: true,
     status: applicable ? "queued" : "not_applicable_to_current_basis",
-    processingVersion: PROCESSING_VERSION,
+    processingVersion: canonical ? CANONICAL_PROCESSING_VERSION : PROCESSING_VERSION,
+    inputMode: canonical ? "canonical_pages" : "legacy_pdf",
+    engineeringRecordId: canonical?.record._id,
+    canonicalInputFingerprint: canonical?.inputFingerprint,
     sourceFingerprint: basis.sourceFingerprint,
     sourceDocumentCount: applicable ? planDocumentIds.length : 0,
-    sourcePageCount: 0,
+    sourcePageCount: canonical?.pageCount || 0,
     registeredPageCount: 0,
     sheetCount: 0,
     nonSheetPageCount: 0,
@@ -184,21 +258,28 @@ async function createPlanRun(
   });
   if (!applicable) return { runId: String(runId), status: "not_applicable_to_current_basis" as const, reused: false };
 
-  for (const documentId of planDocumentIds) {
-    const document = await ctx.db.get(documentId);
-    if (!document || document.projectId !== project._id || document.companyId !== companyId) continue;
-    const jobId = await ctx.db.insert("heliosPlanJobs", {
-      companyId,
-      projectId: project._id,
-      packageId: bidPackage._id,
-      runId,
-      documentId,
-      status: "queued",
-      attempt: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await ctx.scheduler.runAfter(0, startPlanDocumentReference, { jobId });
+  if (canonical) {
+    for (const [index, batch] of canonical.batches.entries()) {
+      const documentId = batch[0]!.documentId;
+      const jobId = await ctx.db.insert("heliosPlanJobs", {
+        companyId, projectId: project._id, packageId: bidPackage._id, runId, documentId,
+        status: "queued", attempt: 1, inputMode: "canonical_pages",
+        engineeringPageIds: batch.map(({ page }) => page._id),
+        canonicalInputFingerprint: canonicalPlanInputFingerprint(batch),
+        createdAt: now, updatedAt: now,
+      });
+      await ctx.scheduler.runAfter(Math.floor(index / 4) * 5_000, startCanonicalPlanBatchReference, { jobId });
+    }
+  } else {
+    for (const documentId of planDocumentIds) {
+      const document = await ctx.db.get(documentId);
+      if (!document || document.projectId !== project._id || document.companyId !== companyId) continue;
+      const jobId = await ctx.db.insert("heliosPlanJobs", {
+        companyId, projectId: project._id, packageId: bidPackage._id, runId, documentId,
+        status: "queued", attempt: 1, inputMode: "legacy_pdf", createdAt: now, updatedAt: now,
+      });
+      await ctx.scheduler.runAfter(0, startPlanDocumentReference, { jobId });
+    }
   }
   return { runId: String(runId), status: "queued" as const, reused: false };
 }

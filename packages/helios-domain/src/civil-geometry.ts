@@ -22,6 +22,7 @@ export type HeliosCivilGeometryRecord = {
   authority: HeliosCivilGeometryAuthority;
   alignmentName: string;
   sourceLocator: string;
+  verticalDatum?: string;
   horizontalPoints: HeliosHorizontalPoint[];
   horizontalSegments: HeliosHorizontalSegment[];
   stationEquations: HeliosStationEquation[];
@@ -132,6 +133,7 @@ export function parseCivilGeometryDocument(value: unknown, sourcePageCount: numb
       authority: enumValue(candidate.authority, HELIOS_CIVIL_GEOMETRY_AUTHORITIES, "dimensioned_geometry"),
       alignmentName: text(candidate.alignmentName, 240),
       sourceLocator: text(candidate.sourceLocator, 500),
+      verticalDatum: text(candidate.verticalDatum, 120) || undefined,
       horizontalPoints,
       horizontalSegments,
       stationEquations,

@@ -213,6 +213,18 @@ function classifyDocument(
   ]
     .filter(Boolean)
     .join(" \n ");
+  // The document's primary identity outranks incidental content found inside it.
+  // A plan sheet can contain bid-item callouts without becoming a bid schedule,
+  // and a permit package can contain a drawing excerpt without becoming the
+  // current contract plan set.
+  if (/\baddend(?:um|a)|bulletin|amendment\b/i.test(text)) return "addenda";
+  if (/\bpermit package\b|project-specific permit|agency approvals?|section 401|environmental permit/i.test(text)) {
+    return "environmental_permits";
+  }
+  if (
+    /issued[- ]for[- ]bid plan drawing|bid[- ]phase plan drawing|contract plans?|drawing set|roadway profile|stream profile|\bprofile drawing\b/i.test(text) ||
+    /(?:^|[\\/])\d{3}\^[^\\/]*(?:PLAN|PROFILE|SECTION|DETAIL)[^\\/]*\.pdf$/i.test(text)
+  ) return "plans";
   const findingCategories = new Set(document.findingCategories || []);
   if (findingCategories.has("addenda") || findingCategories.has("addendum_impacts")) return "addenda";
   if (findingCategories.has("drawing_index")) return "plans";

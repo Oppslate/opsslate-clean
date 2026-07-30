@@ -1973,6 +1973,7 @@ export default defineSchema({
     authority: v.union(v.literal("coordinate_control"), v.literal("dimensioned_geometry"), v.literal("profile_geometry"), v.literal("cross_section_geometry"), v.literal("invert_geometry"), v.literal("material_note"), v.literal("calibrated_scale_fallback")),
     alignmentName: v.string(),
     sourceLocator: v.string(),
+    verticalDatum: v.optional(v.string()),
     horizontalPoints: v.array(v.object({ station: v.number(), northing: v.number(), easting: v.number(), label: v.string() })),
     horizontalSegments: v.array(v.object({ kind: v.union(v.literal("tangent"), v.literal("curve")), stationStart: v.number(), stationEnd: v.number(), length: v.number(), radius: v.optional(v.number()), deltaDegrees: v.optional(v.number()), bearing: v.string(), label: v.string() })),
     stationEquations: v.array(v.object({ backStation: v.number(), aheadStation: v.number(), label: v.string() })),
