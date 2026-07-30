@@ -263,3 +263,27 @@ test("Cutover Stage 3 OCR consumes only pinned canonical page renders", async ()
   assert.doesNotMatch(planActions, /heliosEngineeringTextSpans/);
   assert.doesNotMatch(geometryActions, /heliosEngineeringTextSpans/);
 });
+
+test("Cutover Stage 4 gates the Plan reader through exact canonical provenance", async () => {
+  const [schema, reader, projects, planActions, geometryActions] = await Promise.all([
+    source("web/convex/schema.ts"),
+    source("web/convex/heliosCanonicalPlanReader.ts"),
+    source("web/convex/heliosProjects.ts"),
+    source("web/convex/heliosPlanActions.ts"),
+    source("web/convex/heliosCivilGeometryActions.ts"),
+  ]);
+  assert.match(schema, /heliosCanonicalReaderActivations: defineTable/);
+  assert.match(reader, /stagePlanReaderPilot = internalMutation/);
+  assert.match(reader, /REQUIRED_PARITY_AREAS/);
+  assert.match(reader, /fingerprintEngineeringRecord/);
+  assert.match(reader, /fingerprintPlanView/);
+  assert.match(reader, /Canonical Plan reader blocked/);
+  assert.match(reader, /mode: "canonical"/);
+  assert.match(reader, /retirePlanReaderActivation/);
+  assert.match(projects, /readPlanRows/);
+  assert.doesNotMatch(reader, /storage\.get|originalStorageId|from "openai"|files\.create|responses\.create/);
+
+  // This reader stage does not yet replace either reconstruction writer.
+  assert.match(planActions, /openai\.files\.create/);
+  assert.match(geometryActions, /openai\.files\.create/);
+});

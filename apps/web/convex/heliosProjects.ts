@@ -32,6 +32,7 @@ import {
   heliosPrincipalValidator,
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
+import { readPlanRows } from "./heliosCanonicalPlanReader";
 
 const queueDocumentReference = makeFunctionReference<
   "mutation",
@@ -527,26 +528,13 @@ export const getProject = internalQuery({
           )
           .first()
       : null;
-    const [planPages, planReferences, planCalibrations, planSheetDecisionRows] = planRun
-      ? await Promise.all([
-          ctx.db
-            .query("heliosPlanPages")
-            .withIndex("by_run_page", (query) => query.eq("runId", planRun._id))
-            .take(250),
-          ctx.db
-            .query("heliosPlanReferences")
-            .withIndex("by_run", (query) => query.eq("runId", planRun._id))
-            .take(250),
-          ctx.db
-            .query("heliosPlanCalibrations")
-            .withIndex("by_run", (query) => query.eq("runId", planRun._id))
-            .take(500),
-          ctx.db
-            .query("heliosPlanSheetDecisions")
-            .withIndex("by_run_current", (query) => query.eq("runId", planRun._id).eq("isCurrent", true))
-            .collect(),
-        ])
-      : [[], [], [], []];
+    const planRows = planRun
+      ? await readPlanRows(ctx, project, planRun)
+      : undefined;
+    const planPages = planRows?.pages || [];
+    const planReferences = planRows?.references || [];
+    const planCalibrations = planRows?.calibrations || [];
+    const planSheetDecisionRows = planRows?.sheetDecisions || [];
     const serializedPlanPages: HeliosPlanPage[] = planPages.map((page) => ({
       id: String(page._id),
       documentId: String(page.documentId),
@@ -643,6 +631,7 @@ export const getProject = internalQuery({
           createdAt: planRun.createdAt,
           updatedAt: planRun.updatedAt,
           completedAt: planRun.completedAt,
+          reader: planRows?.reader || { mode: "legacy" as const },
         }
       : undefined;
     return {

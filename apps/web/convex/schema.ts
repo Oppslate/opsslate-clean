@@ -765,6 +765,42 @@ export default defineSchema({
     .index("by_record_created", ["engineeringRecordId", "createdAt"])
     .index("by_package_created", ["packageId", "createdAt"]),
 
+  // Stage 4 activates canonical readers one workflow and one project at a
+  // time. An activation is valid only while its exact parity, cutover audit,
+  // artifact, and source fingerprint remain current.
+  heliosCanonicalReaderActivations: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    engineeringRecordId: v.id("heliosEngineeringRecords"),
+    artifactId: v.id("heliosEngineeringArtifacts"),
+    parityRunId: v.id("heliosEngineeringParityRuns"),
+    cutoverRunId: v.id("heliosCanonicalCutoverRuns"),
+    planRunId: v.optional(v.id("heliosPlanRuns")),
+    workflow: v.union(
+      v.literal("plan_reconstruction"),
+      v.literal("civil_geometry"),
+    ),
+    mode: v.union(
+      v.literal("shadow"),
+      v.literal("active"),
+      v.literal("rolled_back"),
+    ),
+    isCurrent: v.boolean(),
+    sourceFingerprint: v.string(),
+    requiredAreaCount: v.number(),
+    verifiedAreaCount: v.number(),
+    authorizedRecordCount: v.number(),
+    fingerprintMatchCount: v.number(),
+    issues: v.array(v.string()),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    activatedAt: v.optional(v.number()),
+  })
+    .index("by_project_workflow_current", ["projectId", "workflow", "isCurrent"])
+    .index("by_package_workflow", ["packageId", "workflow", "createdAt"])
+    .index("by_record_workflow", ["engineeringRecordId", "workflow", "createdAt"]),
+
   heliosUploadIntents: defineTable({
     companyId: v.id("companies"),
     projectId: v.id("heliosProjects"),

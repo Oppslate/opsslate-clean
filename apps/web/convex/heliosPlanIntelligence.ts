@@ -23,6 +23,7 @@ import {
   type HeliosPrincipalArgs,
 } from "./heliosAuthorization";
 import { deriveProjectBidBasis } from "./heliosBidBasis";
+import { retirePlanReaderActivation } from "./heliosCanonicalPlanReader";
 import { scheduleGeometryRunShadow, schedulePlanRunShadow } from "./heliosEngineeringShadowSchedule";
 
 const PROCESSING_VERSION = 1;
@@ -95,6 +96,11 @@ async function createPlanRun(
   projectIdValue: string,
 ) {
   const { user, companyId, project } = await ownedProject(ctx, principal, projectIdValue);
+  await retirePlanReaderActivation(
+    ctx,
+    project._id,
+    "Plan reconstruction was requested; the canonical reader returned to legacy until fresh parity is approved.",
+  );
   if (!project.activePackageId) throw new Error("Finalize a bid package before reconstructing plans.");
   const bidPackage = await ctx.db.get(project.activePackageId);
   if (!bidPackage || bidPackage.projectId !== project._id || bidPackage.companyId !== companyId) {
@@ -331,6 +337,11 @@ export const reviewPlanIntelligence = internalMutation({
         createdAt: now,
         updatedAt: now,
       });
+      await retirePlanReaderActivation(
+        ctx,
+        project._id,
+        "Drawing authority changed; the canonical reader returned to legacy until the updated Plan artifact passes parity.",
+      );
       await ctx.db.insert("heliosPlanReviewEvents", {
         companyId,
         projectId: project._id,
@@ -360,6 +371,11 @@ export const reviewPlanIntelligence = internalMutation({
     }
     const run = await ctx.db.get(calibration.runId);
     if (!run || !run.isCurrent || run.packageId !== project.activePackageId) throw new Error("Calibration is not current.");
+    await retirePlanReaderActivation(
+      ctx,
+      project._id,
+      "Plan calibration changed; the canonical reader returned to legacy until the updated Plan artifact passes parity.",
+    );
     const now = Date.now();
     const nextStatus = input.action === "approve_calibration" ? "approved" : "blocked";
     if (nextStatus === "approved") {
