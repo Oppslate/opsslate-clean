@@ -540,7 +540,11 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
           if (point.gradePercent === undefined) return;
           const endIndex = sorted.findIndex((candidate, candidateIndex) =>
             candidateIndex > index && profilePointType(candidate.label) !== "spot_elevation");
-          if (endIndex < 0 || sorted[endIndex]!.station - point.station < 5) return;
+          // Two-decimal printed elevations can create a false grade failure on
+          // very short tangents. Curve controls retain the signed grades; only
+          // independently verify a tangent when its printed span is long
+          // enough that ordinate rounding is not the dominant signal.
+          if (endIndex < 0 || sorted[endIndex]!.station - point.station < 20) return;
           const tangent: HeliosEuclidVerticalTangent = {
             id: `vertical-tangent:${record.id}:${series.key}:${index + 1}`,
             profileId,
