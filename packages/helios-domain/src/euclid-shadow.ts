@@ -22,8 +22,10 @@ import {
   type HeliosEuclidStationEquation,
   type HeliosEuclidStructure,
   type HeliosEuclidValue,
+  type HeliosEuclidVerticalCurve,
   type HeliosEuclidVerticalTangent,
 } from "./euclid-contract.ts";
+import { HELIOS_EUCLID_VERTICAL_SOLVER } from "./euclid-vertical.ts";
 
 export const HELIOS_EUCLID_SHADOW_VERSION = 2;
 export const HELIOS_EUCLID_SHADOW_ADAPTER = "canonical-civil-geometry-v2";
@@ -241,6 +243,11 @@ function profilePointType(label: string): HeliosEuclidProfilePoint["pointType"] 
   return "spot_elevation";
 }
 
+function printedProfileNumber(label: string, token: "L" | "G1" | "G2") {
+  const match = label.match(new RegExp(`\\b${token}\\s*=\\s*([+-]?\\d+(?:\\.\\d+)?)`, "i"));
+  return match?.[1] === undefined ? undefined : Number(match[1]);
+}
+
 function profileRole(record: HeliosEuclidLegacyGeometryRecord): HeliosEuclidProfile["role"] {
   const text = `${record.alignmentName} ${record.sourceLocator} ${record.verticalPoints.map((point) => point.label).join(" ")}`.toLocaleLowerCase();
   if (/existing ground|existing grade/.test(text)) return "existing_ground";
@@ -424,6 +431,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
   const profiles: HeliosEuclidProfile[] = [];
   const profilePoints: HeliosEuclidProfilePoint[] = [];
   const verticalTangents: HeliosEuclidVerticalTangent[] = [];
+  const verticalCurves: HeliosEuclidVerticalCurve[] = [];
   const crossSectionPoints: HeliosEuclidCrossSectionPoint[] = [];
   const structures: HeliosEuclidStructure[] = [];
   const inverts: HeliosEuclidInvert[] = [];
@@ -530,16 +538,52 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
         profilePoints.push(...createdPoints);
         sorted.slice(0, -1).forEach((point, index) => {
           if (point.gradePercent === undefined) return;
+          const endIndex = sorted.findIndex((candidate, candidateIndex) =>
+            candidateIndex > index && profilePointType(candidate.label) !== "spot_elevation");
+          if (endIndex < 0 || sorted[endIndex]!.station - point.station < 5) return;
           const tangent: HeliosEuclidVerticalTangent = {
             id: `vertical-tangent:${record.id}:${series.key}:${index + 1}`,
             profileId,
             sequence: index + 1,
             startPointId: createdPoints[index]!.id,
-            endPointId: createdPoints[index + 1]!.id,
+            endPointId: createdPoints[endIndex]!.id,
             gradePercent: engineeringValue(point.gradePercent, record, `${series.key}:grade:${index + 1}`, `${point.gradePercent}%`),
             reviewState: recordReviewState,
           };
           verticalTangents.push(tangent);
+        });
+        createdPoints.forEach((pvc, index) => {
+          if (pvc.pointType !== "pvc") return;
+          const nextPvcIndex = createdPoints.findIndex((candidate, candidateIndex) => candidateIndex > index && candidate.pointType === "pvc");
+          const boundary = nextPvcIndex < 0 ? createdPoints.length : nextPvcIndex;
+          const pviIndex = createdPoints.findIndex((candidate, candidateIndex) => candidateIndex > index && candidateIndex < boundary && candidate.pointType === "pvi");
+          const pvtIndex = createdPoints.findIndex((candidate, candidateIndex) => candidateIndex > pviIndex && candidateIndex < boundary && candidate.pointType === "pvt");
+          if (pviIndex < 0 || pvtIndex < 0) return;
+          const sourcePoint = sorted[index]!;
+          const length = printedProfileNumber(sourcePoint.label, "L");
+          const incomingGrade = printedProfileNumber(sourcePoint.label, "G1");
+          const outgoingGrade = printedProfileNumber(sourcePoint.label, "G2");
+          if (length === undefined || incomingGrade === undefined || outgoingGrade === undefined) return;
+          const curveId = `vertical-curve:${record.id}:${series.key}:${verticalCurves.filter((row) => row.profileId === profileId).length + 1}`;
+          const highLowPoint = createdPoints.find((candidate, candidateIndex) =>
+            candidateIndex > index && candidateIndex < pvtIndex && ["high_point", "low_point"].includes(candidate.pointType));
+          verticalCurves.push({
+            id: curveId,
+            profileId,
+            sequence: verticalCurves.filter((row) => row.profileId === profileId).length + 1,
+            curveType: outgoingGrade > incomingGrade ? "sag" : outgoingGrade < incomingGrade ? "crest" : "unclassified",
+            symmetry: "symmetric",
+            pvcPointId: pvc.id,
+            pviPointId: createdPoints[pviIndex]!.id,
+            pvtPointId: createdPoints[pvtIndex]!.id,
+            incomingGradePercent: engineeringValue(incomingGrade, record, `${series.key}:curve:${index + 1}:g1`, `${incomingGrade}%`),
+            outgoingGradePercent: engineeringValue(outgoingGrade, record, `${series.key}:curve:${index + 1}:g2`, `${outgoingGrade}%`),
+            length: engineeringValue(length, record, `${series.key}:curve:${index + 1}:length`, `${length} FT`),
+            algebraicGradeDifferencePercent: engineeringValue(outgoingGrade - incomingGrade, record, `${series.key}:curve:${index + 1}:algebraic-difference`),
+            computedHighLowPointId: highLowPoint?.id,
+            solverVersion: HELIOS_EUCLID_VERTICAL_SOLVER,
+            reviewState: recordReviewState,
+          });
         });
         relationships.push({
           id: `relationship:${profileId}:alignment`,
@@ -680,7 +724,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
     profiles,
     profilePoints,
     verticalTangents,
-    verticalCurves: [],
+    verticalCurves,
     typicalSections: [],
     crossSectionPoints,
     structures,

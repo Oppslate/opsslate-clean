@@ -137,6 +137,23 @@ test("mixed roadway profile ordinates become separate existing-ground and FINAL 
   assert.ok(model.profiles.every((profile) => profile.verticalDatum === "NAVD88"));
 });
 
+test("printed PVC PVI PVT controls create a deterministic vertical curve", () => {
+  const input = shadowInput();
+  input.records[0]!.alignmentName = "Front Avenue final T.G.L.";
+  input.records[0]!.verticalPoints = [
+    { station: 14200, elevation: 1374, label: "PVC; vertical curve L=100 FT, G1=-1.00%, G2=+1.00%" },
+    { station: 14250, elevation: 1373.5, label: "PVI, 100-ft vertical curve" },
+    { station: 14300, elevation: 1374, label: "PVT and FINAL T.G.L. ordinate; outgoing grade +1.00%" },
+  ];
+  const model = buildHeliosEuclidShadowModel(input);
+
+  assert.equal(model.verticalCurves.length, 1);
+  assert.equal(model.verticalCurves[0]?.curveType, "sag");
+  assert.equal(model.verticalCurves[0]?.length.value, 100);
+  assert.equal(model.verticalCurves[0]?.incomingGradePercent.value, -1);
+  assert.equal(model.verticalCurves[0]?.outgoingGradePercent.value, 1);
+});
+
 test("Stage 4B keeps coordinate ambiguity explicit and blocks premature exchange", () => {
   const model = buildHeliosEuclidShadowModel(shadowInput());
   assert.equal(model.spatialReferences[0]?.referenceState, "partially_known");
