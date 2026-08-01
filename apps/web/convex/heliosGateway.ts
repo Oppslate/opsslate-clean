@@ -26,6 +26,7 @@ import {
   type HeliosEuclidStationOffsetPosition,
   type HeliosEuclidCrossSectionResult,
   type HeliosEuclidSurfaceAssemblyResult,
+  type HeliosEuclidSurfaceQuantityResult,
   type HeliosEuclidCandidateBuildInput,
   type HeliosEuclidCandidateValidationInput,
   type HeliosEuclidPromotionInput,
@@ -314,6 +315,20 @@ const assembleEuclidSurfacesReference = makeFunctionReference<
   },
   HeliosEuclidSurfaceAssemblyResult
 >("heliosEuclidSurfaces:assembleSurfaces");
+const calculateEuclidSurfaceQuantitiesReference = makeFunctionReference<
+  "query",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    input: {
+      alignmentId: string;
+      chainageStart?: number;
+      chainageEnd?: number;
+      interval?: number;
+    };
+  },
+  HeliosEuclidSurfaceQuantityResult
+>("heliosEuclidSurfaceQuantities:calculateDraftQuantities");
 const recordEuclidReviewReference = makeFunctionReference<
   "mutation",
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidReviewInput },
@@ -1355,6 +1370,38 @@ export const assembleHeliosEuclidSurfaces = httpAction(async (ctx, request) => {
     return json({ data }, 200);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Euclid surfaces could not be assembled." }, 400);
+  }
+});
+
+export const calculateHeliosEuclidSurfaceQuantities = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid surface-quantity request." }, 400);
+  }
+  const input = payload.input;
+  const optionalFinite = (value: unknown) => value === undefined || (typeof value === "number" && Number.isFinite(value));
+  if (
+    !boundedString(input.alignmentId)
+    || !optionalFinite(input.chainageStart)
+    || !optionalFinite(input.chainageEnd)
+    || !optionalFinite(input.interval)
+  ) return json({ error: "Euclid surface quantities require one alignment and finite optional range controls." }, 400);
+  try {
+    const data = await ctx.runQuery(calculateEuclidSurfaceQuantitiesReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: {
+        alignmentId: input.alignmentId,
+        chainageStart: typeof input.chainageStart === "number" ? input.chainageStart : undefined,
+        chainageEnd: typeof input.chainageEnd === "number" ? input.chainageEnd : undefined,
+        interval: typeof input.interval === "number" ? input.interval : undefined,
+      },
+    });
+    return json({ data }, 200);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid surface quantities could not be calculated." }, 400);
   }
 });
 

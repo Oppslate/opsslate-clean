@@ -33,11 +33,11 @@ test("Euclid Stage 4O exposes one-click governed surface review without quantity
     read("../src/components/euclid-cockpit.tsx"),
   ]);
   assert.match(component, /@opsslate\/suite-ui\/button/);
-  assert.match(component, /Assemble surfaces/);
-  assert.match(component, /euclid\/surfaces/);
+  assert.match(component, /Build surfaces and draft quantities/);
+  assert.match(component, /surfaceAssembly/);
   assert.match(component, /canCompareSurfaces/);
   assert.match(component, /surface\.gaps/);
-  assert.match(component, /does not create estimate quantities/i);
+  assert.match(component, /Draft results do not change the estimate/i);
   assert.match(cockpit, /value="surfaces"/);
   assert.match(cockpit, /EuclidSurfaceAssembler/);
 });

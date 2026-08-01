@@ -14,6 +14,7 @@ import {
   evaluateHeliosEuclidOffsetPosition,
   evaluateHeliosEuclidCrossSection,
   assembleHeliosEuclidSurfaces,
+  calculateHeliosEuclidSurfaceQuantities,
   buildHeliosEuclidCandidate,
   validateHeliosEuclidCandidate,
   promoteHeliosEuclidCandidate,
@@ -174,6 +175,11 @@ http.route({
   path: "/helios/v1/euclid/surfaces",
   method: "POST",
   handler: assembleHeliosEuclidSurfaces,
+});
+http.route({
+  path: "/helios/v1/euclid/surface-quantities",
+  method: "POST",
+  handler: calculateHeliosEuclidSurfaceQuantities,
 });
 http.route({
   path: "/helios/v1/euclid/reviews",

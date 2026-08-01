@@ -1,5 +1,6 @@
 import {
   assembleHeliosEuclidSurfaces,
+  calculateHeliosEuclidSurfaceQuantities,
   evaluateHeliosEuclidAlignmentPosition,
   evaluateHeliosEuclidCrossSection,
   evaluateHeliosEuclidStationOffsetPosition,
@@ -498,6 +499,44 @@ export const loadAnswerContext = internalQuery({
             });
           } catch {
             // The assistant remains fail-closed when canonical surface assembly cannot be evaluated.
+          }
+        }
+      }
+    }
+    if (/\b(surface quantit(?:y|ies)|earthwork quantit(?:y|ies)|excavation volume|embankment volume|material volume|cut and fill|cut\/fill|governed quantit(?:y|ies))\b/i.test(question)) {
+      const euclidRecord = await ctx.db
+        .query("heliosEuclidModels")
+        .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
+        .first();
+      if (euclidRecord && euclidRecord.companyId === project.companyId) {
+        const euclid = await reconstructEuclidModel(ctx, euclidRecord);
+        const normalizedQuestion = question.toLowerCase();
+        const named = euclid.alignments.filter((alignment) =>
+          normalizedQuestion.includes(alignment.printedName.toLowerCase())
+          || normalizedQuestion.includes(alignment.normalizedName.toLowerCase()),
+        );
+        const roadway = euclid.alignments.filter((alignment) => alignment.alignmentType === "roadway_centerline");
+        const candidates = named.length ? named : roadway.length === 1 ? roadway : euclid.alignments.length === 1 ? euclid.alignments : [];
+        if (candidates.length === 1) {
+          try {
+            const quantities = calculateHeliosEuclidSurfaceQuantities(euclid, { alignmentId: candidates[0]!.id });
+            addSource({
+              sourceId: `euclid-surface-quantities:${quantities.fingerprint}`,
+              kind: "civil_geometry",
+              label: `${quantities.alignmentName} governed draft quantities`,
+              locator: `${quantities.comparisons.reduce((sum, comparison) => sum + comparison.intervals.length, 0)} common surface intervals`,
+              status: quantities.status,
+              content: safeText([
+                `Deterministic Euclid 4P draft quantity status: ${quantities.status}. Calculation readiness: ${quantities.canCalculate ? "available" : "unavailable"}.`,
+                ...quantities.draftQuantities.map((quantity) => `${quantity.label}: ${quantity.value} ${quantity.unit}; ${quantity.confidence}% confidence; engineering status ${quantity.engineeringStatus}; status draft.`),
+                ...quantities.comparisons.map((comparison) => `${comparison.comparison.replaceAll("_", " ")}: ${comparison.baseSurface.replaceAll("_", " ")} to ${comparison.targetSurface.replaceAll("_", " ")}, ${comparison.intervals.length} governed intervals, ${comparison.gaps.length} gaps.`),
+                quantities.unresolvedControls.length ? `Unresolved controls: ${quantities.unresolvedControls.join(" ")}` : "No unresolved quantity controls are recorded.",
+                `Method: ${quantities.solver}. Source fingerprint: ${quantities.sourceFingerprint}. Result fingerprint: ${quantities.fingerprint}.`,
+                "These quantities are draft review records and have not been written, accepted, priced, or published to the estimate.",
+              ].join("\n")),
+            });
+          } catch {
+            // The assistant remains fail-closed when governed quantities cannot be evaluated.
           }
         }
       }

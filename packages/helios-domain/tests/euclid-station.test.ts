@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   HELIOS_EUCLID_SCHEMA_VERSION,
   assembleHeliosEuclidSurfaces,
+  calculateHeliosEuclidSurfaceQuantities,
   evaluateHeliosEuclidAlignmentPosition,
   evaluateHeliosEuclidCrossSection,
   evaluateHeliosEuclidStationOffsetPosition,
@@ -323,4 +324,85 @@ test("Stage 4O records missing surface intervals instead of bridging across them
   assert.equal(existing?.panelCount, 0);
   assert.ok((existing?.gaps.length || 0) > 0);
   assert.match(existing?.gaps[0]?.message || "", /lacks three governed 3D points/i);
+});
+
+function surfaceQuantityModel() {
+  const fixture = roadwaySectionModel();
+  fixture.profiles.push({
+    id: "road-eg", alignmentId: "road", printedName: "Existing ground", normalizedName: "Existing ground",
+    role: "existing_ground", startStation: station(1000), endStation: station(1200), verticalDatum: "Fixture datum",
+    sourceSheetNumbers: ["PRO-1"], reviewState: "accepted", completeness: "complete",
+  });
+  fixture.profilePoints.push(
+    { id: "eg-start", profileId: "road-eg", pointType: "profile_start", station: station(1000), elevation: value("eg-start-elev", 102), reviewState: "accepted" },
+    { id: "eg-end", profileId: "road-eg", pointType: "profile_end", station: station(1200), elevation: value("eg-end-elev", 106), reviewState: "accepted" },
+  );
+  fixture.verticalTangents.push({ id: "eg-tangent", profileId: "road-eg", sequence: 1, startPointId: "eg-start", endPointId: "eg-end", gradePercent: value("eg-grade", 2), reviewState: "accepted" });
+  fixture.crossSectionPoints = [1000, 1100, 1200].flatMap((chainage) => [-12, 0, 12].map((offset) => ({
+    id: `existing-${chainage}-${offset}`, alignmentId: "road", station: station(chainage),
+    offset: value(`existing-offset-${chainage}-${offset}`, offset),
+    elevation: value(`existing-elevation-${chainage}-${offset}`, 102 + (chainage - 1000) * 0.02 - (offset === 0 ? 0 : 0.24)),
+    surface: "existing" as const, reviewState: "accepted" as const,
+  })));
+  return fixture;
+}
+
+test("Stage 4P calculates deterministic excavation from common governed surface panels", () => {
+  const fixture = surfaceQuantityModel();
+  const result = calculateHeliosEuclidSurfaceQuantities(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 100,
+  });
+  const earthwork = result.comparisons.find((comparison) => comparison.comparison === "earthwork");
+  const excavation = result.draftQuantities.find((quantity) => quantity.calculationType === "earthwork_excavation_volume");
+  assert.equal(result.canCalculate, true);
+  assert.equal(earthwork?.targetSurface, "proposed");
+  assert.equal(earthwork?.intervals.length, 2);
+  assert.equal(earthwork?.sections[0]?.positiveArea, 48);
+  assert.equal(excavation?.value, 355.555556);
+  assert.equal(excavation?.unit, "CY");
+  assert.equal(excavation?.status, "draft");
+  const again = calculateHeliosEuclidSurfaceQuantities(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 100,
+  });
+  assert.equal(result.fingerprint, again.fingerprint);
+});
+
+test("Stage 4P separates cut and fill when the compared section changes sign", () => {
+  const fixture = surfaceQuantityModel();
+  for (const point of fixture.crossSectionPoints) {
+    const proposed = 100 + (point.station.chainage - 1000) * 0.02 - (point.offset.value === 0 ? 0 : 0.24);
+    point.elevation.value = proposed + (point.offset.value < 0 ? 2 : point.offset.value > 0 ? -2 : 0);
+  }
+  const result = calculateHeliosEuclidSurfaceQuantities(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 100,
+  });
+  assert.equal(result.draftQuantities.find((quantity) => quantity.calculationType === "earthwork_excavation_volume")?.value, 88.888889);
+  assert.equal(result.draftQuantities.find((quantity) => quantity.calculationType === "earthwork_embankment_volume")?.value, 88.888889);
+});
+
+test("Stage 4P refuses to bridge a missing comparison station", () => {
+  const fixture = surfaceQuantityModel();
+  fixture.crossSectionPoints = fixture.crossSectionPoints.filter((point) => point.station.chainage !== 1100);
+  const result = calculateHeliosEuclidSurfaceQuantities(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 100,
+  });
+  assert.equal(result.canCalculate, false);
+  assert.equal(result.comparisons[0]?.intervals.length, 0);
+  assert.match(result.gaps.map((gap) => gap.message).join(" "), /no common governed panel span/i);
+});
+
+test("Stage 4P produces separate draft material area and volume without publishing either", () => {
+  const fixture = surfaceQuantityModel();
+  fixture.materialLayers = [{
+    id: "asphalt-layer", alignmentId: "road", name: "Asphalt top",
+    stationStart: station(1000), stationEnd: station(1200),
+    offsetLeft: value("layer-left", -12), offsetRight: value("layer-right", 12),
+    thickness: value("layer-thickness", 3), thicknessUnit: "inch", reviewState: "accepted",
+  }];
+  const result = calculateHeliosEuclidSurfaceQuantities(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 100,
+  });
+  assert.equal(result.draftQuantities.find((quantity) => quantity.calculationType === "material_area")?.value, 4800);
+  assert.equal(result.draftQuantities.find((quantity) => quantity.calculationType === "material_volume")?.value, 44.444444);
+  assert.ok(result.draftQuantities.every((quantity) => quantity.status === "draft"));
 });
