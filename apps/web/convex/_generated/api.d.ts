@@ -114,6 +114,7 @@ import type * as heliosEuclidReviews from "../heliosEuclidReviews.js";
 import type * as heliosEuclidShadow from "../heliosEuclidShadow.js";
 import type * as heliosEuclidShadowSchedule from "../heliosEuclidShadowSchedule.js";
 import type * as heliosEuclidStations from "../heliosEuclidStations.js";
+import type * as heliosEuclidSurfaces from "../heliosEuclidSurfaces.js";
 import type * as heliosEuclidVertical from "../heliosEuclidVertical.js";
 import type * as heliosEuclidVerticalSchedule from "../heliosEuclidVerticalSchedule.js";
 import type * as heliosGateway from "../heliosGateway.js";
@@ -285,6 +286,7 @@ declare const fullApi: ApiFromModules<{
   heliosEuclidShadow: typeof heliosEuclidShadow;
   heliosEuclidShadowSchedule: typeof heliosEuclidShadowSchedule;
   heliosEuclidStations: typeof heliosEuclidStations;
+  heliosEuclidSurfaces: typeof heliosEuclidSurfaces;
   heliosEuclidVertical: typeof heliosEuclidVertical;
   heliosEuclidVerticalSchedule: typeof heliosEuclidVerticalSchedule;
   heliosGateway: typeof heliosGateway;

@@ -13,6 +13,7 @@ import {
   evaluateHeliosEuclidPosition,
   evaluateHeliosEuclidOffsetPosition,
   evaluateHeliosEuclidCrossSection,
+  assembleHeliosEuclidSurfaces,
   buildHeliosEuclidCandidate,
   validateHeliosEuclidCandidate,
   promoteHeliosEuclidCandidate,
@@ -168,6 +169,11 @@ http.route({
   path: "/helios/v1/euclid/cross-sections",
   method: "POST",
   handler: evaluateHeliosEuclidCrossSection,
+});
+http.route({
+  path: "/helios/v1/euclid/surfaces",
+  method: "POST",
+  handler: assembleHeliosEuclidSurfaces,
 });
 http.route({
   path: "/helios/v1/euclid/reviews",

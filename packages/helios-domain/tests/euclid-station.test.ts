@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   HELIOS_EUCLID_SCHEMA_VERSION,
+  assembleHeliosEuclidSurfaces,
   evaluateHeliosEuclidAlignmentPosition,
   evaluateHeliosEuclidCrossSection,
   evaluateHeliosEuclidStationOffsetPosition,
@@ -263,4 +264,63 @@ test("Stage 4N exposes material extents and thickness without inventing vertical
   assert.match(result.unresolvedControls.join(" "), /vertical placement/i);
   const again = evaluateHeliosEuclidCrossSection(fixture, { alignmentId: "road", displayedStation: 1050 });
   assert.equal(result.fingerprint, again.fingerprint);
+});
+
+test("Stage 4O connects governed 4N slices into a deterministic proposed roadway mesh", () => {
+  const fixture = roadwaySectionModel();
+  const result = assembleHeliosEuclidSurfaces(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 50,
+  });
+  const proposed = result.surfaces.find((surface) => surface.surface === "proposed");
+  assert.equal(result.canAssembleSurface, true);
+  assert.equal(result.canCompareSurfaces, false);
+  assert.equal(proposed?.sectionCount, 5);
+  assert.equal(proposed?.panelCount, 8);
+  assert.equal(proposed?.status, "verified");
+  assert.equal(result.sourceFingerprint, "single-ingestion-source-v1");
+  const again = assembleHeliosEuclidSurfaces(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 50,
+  });
+  assert.equal(result.fingerprint, again.fingerprint);
+});
+
+test("Stage 4O enables comparison only where existing and design meshes share governed spans", () => {
+  const fixture = roadwaySectionModel();
+  fixture.profiles.push({
+    id: "road-eg", alignmentId: "road", printedName: "Existing ground", normalizedName: "Existing ground",
+    role: "existing_ground", startStation: station(1000), endStation: station(1200), verticalDatum: "Fixture datum",
+    sourceSheetNumbers: ["PRO-1"], reviewState: "accepted", completeness: "complete",
+  });
+  fixture.profilePoints.push(
+    { id: "eg-start", profileId: "road-eg", pointType: "profile_start", station: station(1000), elevation: value("eg-start-elev", 102), reviewState: "accepted" },
+    { id: "eg-end", profileId: "road-eg", pointType: "profile_end", station: station(1200), elevation: value("eg-end-elev", 106), reviewState: "accepted" },
+  );
+  fixture.verticalTangents.push({ id: "eg-tangent", profileId: "road-eg", sequence: 1, startPointId: "eg-start", endPointId: "eg-end", gradePercent: value("eg-grade", 2), reviewState: "accepted" });
+  fixture.crossSectionPoints = [1000, 1100, 1200].flatMap((chainage) => [-12, 0, 12].map((offset) => ({
+    id: `eg-${chainage}-${offset}`, alignmentId: "road", station: station(chainage),
+    offset: value(`eg-offset-${chainage}-${offset}`, offset), elevation: value(`eg-elevation-${chainage}-${offset}`, 102 + (chainage - 1000) * 0.02 + Math.abs(offset) * 0.01),
+    surface: "existing" as const, reviewState: "accepted" as const,
+  })));
+  const result = assembleHeliosEuclidSurfaces(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 100,
+  });
+  assert.equal(result.canCompareSurfaces, true);
+  assert.ok((result.surfaces.find((surface) => surface.surface === "existing")?.panelCount || 0) > 0);
+  assert.ok((result.surfaces.find((surface) => surface.surface === "proposed")?.panelCount || 0) > 0);
+});
+
+test("Stage 4O records missing surface intervals instead of bridging across them", () => {
+  const fixture = roadwaySectionModel();
+  fixture.crossSectionPoints = [-12, 0, 12].map((offset) => ({
+    id: `existing-start-${offset}`, alignmentId: "road", station: station(1000),
+    offset: value(`existing-start-offset-${offset}`, offset), elevation: value(`existing-start-elevation-${offset}`, 102),
+    surface: "existing" as const, reviewState: "accepted" as const,
+  }));
+  const result = assembleHeliosEuclidSurfaces(fixture, {
+    alignmentId: "road", chainageStart: 1000, chainageEnd: 1200, interval: 100,
+  });
+  const existing = result.surfaces.find((surface) => surface.surface === "existing");
+  assert.equal(existing?.panelCount, 0);
+  assert.ok((existing?.gaps.length || 0) > 0);
+  assert.match(existing?.gaps[0]?.message || "", /lacks three governed 3D points/i);
 });

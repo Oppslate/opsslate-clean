@@ -37,6 +37,7 @@ import {
   GitBranch,
   Layers3,
   MapPinned,
+  Network,
   Pencil,
   Ruler,
   ShieldCheck,
@@ -50,6 +51,7 @@ import { useState, type ReactNode } from "react";
 
 import { formatTimestamp, humanizeStatus } from "@/lib/format";
 import { EuclidStationEvaluator } from "@/components/euclid-station-evaluator";
+import { EuclidSurfaceAssembler } from "@/components/euclid-surface-assembler";
 
 function stateClass(value: string) {
   if (["ready", "passed", "accepted", "corrected", "complete", "ready_for_validation"].includes(value)) {
@@ -184,7 +186,35 @@ function StructuresAndInverts({ detail }: { detail: HeliosEuclidCockpitAlignment
 }
 
 function EngineeringWorkspace({ projectId, detail }: { projectId: string; detail: HeliosEuclidCockpitAlignmentDetail }) {
-  return <main className="flex min-h-0 flex-col"><header className="shrink-0 border-b border-border px-3 py-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="text-[10px] font-semibold uppercase tracking-[.16em] text-info-foreground">Selected engineering basis</div><h2 className="mt-1 text-base font-semibold">{detail.summary.name}</h2><div className="mt-1 text-[10px] text-muted-foreground">{detail.summary.startStation} – {detail.summary.endStation} · Sheets {detail.summary.sourceSheetNumbers.join(", ") || "not established"}</div></div><div className="flex flex-wrap gap-1.5"><StateBadge value={detail.summary.horizontalStatus} /><StateBadge value={detail.summary.profileStatus} /><StateBadge value={detail.summary.corridorStatus} /></div></div></header><EuclidStationEvaluator projectId={projectId} detail={detail} /><Tabs defaultValue="horizontal" className="flex min-h-0 flex-1 flex-col gap-0"><TabsList className="h-auto w-full shrink-0 justify-start overflow-x-auto rounded-none border-b border-border bg-muted/10 px-2 py-1"><TabsTrigger value="horizontal" className="px-2 text-[10px]"><Waypoints aria-hidden="true" />Horizontal</TabsTrigger><TabsTrigger value="vertical" className="px-2 text-[10px]"><GitBranch aria-hidden="true" />Vertical</TabsTrigger><TabsTrigger value="sections" className="px-2 text-[10px]"><Layers3 aria-hidden="true" />Sections</TabsTrigger><TabsTrigger value="structures" className="px-2 text-[10px]"><MapPinned aria-hidden="true" />Structures</TabsTrigger></TabsList><TabsContent value="horizontal" className="min-h-0 flex-1 overflow-y-auto p-3"><HorizontalControl detail={detail} /></TabsContent><TabsContent value="vertical" className="min-h-0 flex-1 overflow-y-auto p-3"><VerticalControl detail={detail} /></TabsContent><TabsContent value="sections" className="min-h-0 flex-1 overflow-y-auto p-3"><SectionsAndMaterials detail={detail} /></TabsContent><TabsContent value="structures" className="min-h-0 flex-1 overflow-y-auto p-3"><StructuresAndInverts detail={detail} /></TabsContent></Tabs></main>;
+  return (
+    <main className="flex min-h-0 flex-col">
+      <header className="shrink-0 border-b border-border px-3 py-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[.16em] text-info-foreground">Selected engineering basis</div>
+            <h2 className="mt-1 text-base font-semibold">{detail.summary.name}</h2>
+            <div className="mt-1 text-[10px] text-muted-foreground">{detail.summary.startStation} – {detail.summary.endStation} · Sheets {detail.summary.sourceSheetNumbers.join(", ") || "not established"}</div>
+          </div>
+          <div className="flex flex-wrap gap-1.5"><StateBadge value={detail.summary.horizontalStatus} /><StateBadge value={detail.summary.profileStatus} /><StateBadge value={detail.summary.corridorStatus} /></div>
+        </div>
+      </header>
+      <EuclidStationEvaluator projectId={projectId} detail={detail} />
+      <Tabs defaultValue="horizontal" className="flex min-h-0 flex-1 flex-col gap-0">
+        <TabsList className="h-auto w-full shrink-0 justify-start overflow-x-auto rounded-none border-b border-border bg-muted/10 px-2 py-1">
+          <TabsTrigger value="horizontal" className="px-2 text-[10px]"><Waypoints aria-hidden="true" />Horizontal</TabsTrigger>
+          <TabsTrigger value="vertical" className="px-2 text-[10px]"><GitBranch aria-hidden="true" />Vertical</TabsTrigger>
+          <TabsTrigger value="sections" className="px-2 text-[10px]"><Layers3 aria-hidden="true" />Sections</TabsTrigger>
+          <TabsTrigger value="surfaces" className="px-2 text-[10px]"><Network aria-hidden="true" />Surfaces</TabsTrigger>
+          <TabsTrigger value="structures" className="px-2 text-[10px]"><MapPinned aria-hidden="true" />Structures</TabsTrigger>
+        </TabsList>
+        <TabsContent value="horizontal" className="min-h-0 flex-1 overflow-y-auto p-3"><HorizontalControl detail={detail} /></TabsContent>
+        <TabsContent value="vertical" className="min-h-0 flex-1 overflow-y-auto p-3"><VerticalControl detail={detail} /></TabsContent>
+        <TabsContent value="sections" className="min-h-0 flex-1 overflow-y-auto p-3"><SectionsAndMaterials detail={detail} /></TabsContent>
+        <TabsContent value="surfaces" className="min-h-0 flex-1 overflow-y-auto p-3"><EuclidSurfaceAssembler projectId={projectId} detail={detail} /></TabsContent>
+        <TabsContent value="structures" className="min-h-0 flex-1 overflow-y-auto p-3"><StructuresAndInverts detail={detail} /></TabsContent>
+      </Tabs>
+    </main>
+  );
 }
 
 function IntelligenceRail({ projectId, detail }: { projectId: string; detail: HeliosEuclidCockpitAlignmentDetail }) {

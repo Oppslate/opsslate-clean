@@ -1,4 +1,5 @@
 import {
+  assembleHeliosEuclidSurfaces,
   evaluateHeliosEuclidAlignmentPosition,
   evaluateHeliosEuclidCrossSection,
   evaluateHeliosEuclidStationOffsetPosition,
@@ -454,6 +455,49 @@ export const loadAnswerContext = internalQuery({
             }
           } catch {
             canonicalPositionAvailable = false;
+          }
+        }
+      }
+    }
+    if (/\b(surface model|surface assembly|corridor surface|existing ground surface|proposed surface|subgrade surface|excavation(?: limit)? surface|surface gaps?|surface readiness)\b/i.test(question)) {
+      const euclidRecord = await ctx.db
+        .query("heliosEuclidModels")
+        .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
+        .first();
+      if (euclidRecord && euclidRecord.companyId === project.companyId) {
+        const euclid = await reconstructEuclidModel(ctx, euclidRecord);
+        const normalizedQuestion = question.toLowerCase();
+        const named = euclid.alignments.filter((alignment) =>
+          normalizedQuestion.includes(alignment.printedName.toLowerCase())
+          || normalizedQuestion.includes(alignment.normalizedName.toLowerCase()),
+        );
+        const roadway = euclid.alignments.filter((alignment) => alignment.alignmentType === "roadway_centerline");
+        const candidates = named.length
+          ? named
+          : roadway.length === 1
+            ? roadway
+            : euclid.alignments.length === 1
+              ? euclid.alignments
+              : [];
+        if (candidates.length === 1) {
+          try {
+            const surfaces = assembleHeliosEuclidSurfaces(euclid, { alignmentId: candidates[0]!.id });
+            addSource({
+              sourceId: `euclid-surface-assembly:${surfaces.fingerprint}`,
+              kind: "civil_geometry",
+              label: `${surfaces.alignmentName} governed surface assembly`,
+              locator: `${surfaces.sampling.sectionCount} canonical station slices`,
+              status: surfaces.status,
+              content: safeText([
+                `Deterministic Euclid 4O surface assembly status: ${surfaces.status}. Surface comparison readiness: ${surfaces.canCompareSurfaces ? "ready" : "not ready"}.`,
+                ...surfaces.surfaces.map((surface) => `${surface.surface.replaceAll("_", " ")}: ${surface.sectionCount} complete sections, ${surface.pointCount} governed points, ${surface.panelCount} panels, ${surface.gaps.length} retained gaps, status ${surface.status}.`),
+                surfaces.unresolvedControls.length ? `Unresolved controls: ${surfaces.unresolvedControls.join(" ")}` : "No unresolved surface controls are recorded.",
+                `Method: ${surfaces.solver}. Source fingerprint: ${surfaces.sourceFingerprint}. Result fingerprint: ${surfaces.fingerprint}.`,
+                ...surfaces.limitations.map((limitation) => `Limitation: ${limitation}`),
+              ].join("\n")),
+            });
+          } catch {
+            // The assistant remains fail-closed when canonical surface assembly cannot be evaluated.
           }
         }
       }

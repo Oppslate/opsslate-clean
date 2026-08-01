@@ -16,7 +16,10 @@ import type { HeliosEuclidAlignmentPositionRequest, HeliosEuclidAlignmentPositio
 export const HELIOS_EUCLID_CROSS_SECTION_VERSION = 1;
 export const HELIOS_EUCLID_CROSS_SECTION_SOLVER = "euclid-cross-section-template-v1";
 
-export type HeliosEuclidCrossSectionRequest = HeliosEuclidAlignmentPositionRequest;
+export type HeliosEuclidCrossSectionRequest = HeliosEuclidAlignmentPositionRequest & {
+  centerlineSurface?: "existing" | "proposed" | "subgrade" | "excavation_limit";
+  includeTypicalSection?: boolean;
+};
 export type HeliosEuclidCrossSectionPointRole = "centerline" | "lane_edge" | "shoulder_edge" | "stored_cross_section";
 export type HeliosEuclidCrossSectionPointOrigin = "canonical_profile" | "typical_section_rule" | "stored_cross_section";
 
@@ -207,7 +210,11 @@ export function evaluateHeliosEuclidCrossSection(
   const governedRequest = controllingProfileRequest(model, request, first);
   const centerline = governedRequest === request ? first : evaluateHeliosEuclidStationOffsetPosition(model, { ...governedRequest, offset: 0 });
   const templates = activeTemplate(model, request.alignmentId, centerline.chainage);
-  const section = templates.length === 1 ? templates[0] : undefined;
+  const centerlineSurface = request.centerlineSurface
+    ?? (request.profileRole === "existing_ground" ? "existing" : "proposed");
+  const useTypicalSection = request.includeTypicalSection !== false && centerlineSurface === "proposed";
+  const applicableTemplates = useTypicalSection ? templates : [];
+  const section = applicableTemplates.length === 1 ? applicableTemplates[0] : undefined;
   const unresolvedControls: string[] = [];
   const limitations = [...centerline.limitations];
   const points: HeliosEuclidResolvedCrossSectionPoint[] = [];
@@ -217,7 +224,7 @@ export function evaluateHeliosEuclidCrossSection(
       position: centerline,
       role: "centerline",
       origin: "canonical_profile",
-      surface: "proposed",
+      surface: centerlineSurface,
       elevation: centerline.elevation?.elevation,
       formula: centerline.elevation ? "canonical proposed centerline profile elevation" : "canonical centerline horizontal position; proposed elevation unresolved",
       inputValueIds: centerline.elevation?.inputValueIds || [],
@@ -226,8 +233,8 @@ export function evaluateHeliosEuclidCrossSection(
     }));
   }
 
-  if (templates.length > 1) unresolvedControls.push("Multiple typical sections overlap this station; select or correct the controlling template.");
-  if (!section) unresolvedControls.push(templates.length ? "No unambiguous typical section controls this station." : "No typical section controls this station.");
+  if (useTypicalSection && applicableTemplates.length > 1) unresolvedControls.push("Multiple typical sections overlap this station; select or correct the controlling template.");
+  if (useTypicalSection && !section) unresolvedControls.push(applicableTemplates.length ? "No unambiguous typical section controls this station." : "No typical section controls this station.");
   if (section) {
     for (const side of ["left", "right"] as const) {
       const laneWidth = side === "left" ? section.laneWidthLeft : section.laneWidthRight;
