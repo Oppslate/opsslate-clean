@@ -22,6 +22,7 @@ export * from "./euclid-station-offset.ts";
 export * from "./euclid-cross-section.ts";
 export * from "./euclid-surface-assembly.ts";
 export * from "./euclid-surface-quantities.ts";
+export * from "./euclid-surface-quantity-review.ts";
 
 import {
   classifyEstimateWbsSection,

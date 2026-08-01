@@ -1537,6 +1537,38 @@ export default defineSchema({
     .index("by_promotion_key", ["promotionKey"])
     .index("by_promoted_model", ["promotedEuclidModelId"]),
 
+  // Euclid Stage 4Q: append-only estimator decisions over exact Stage 4P
+  // result and draft fingerprints. Decisions never mutate canonical geometry.
+  heliosEuclidSurfaceQuantityReviews: defineTable({
+    companyId: v.id("companies"),
+    projectId: v.id("heliosProjects"),
+    packageId: v.id("heliosBidPackages"),
+    packageRevision: v.number(),
+    euclidModelId: v.id("heliosEuclidModels"),
+    modelFingerprint: v.string(),
+    alignmentId: v.string(),
+    requestId: v.string(),
+    decisionFingerprint: v.string(),
+    resultFingerprint: v.string(),
+    draftQuantityId: v.string(),
+    draftQuantityFingerprint: v.string(),
+    calculationType: v.string(),
+    label: v.string(),
+    value: v.number(),
+    unit: v.string(),
+    engineeringStatus: v.string(),
+    confidence: v.number(),
+    action: v.union(v.literal("accept"), v.literal("defer"), v.literal("reject")),
+    reason: v.optional(v.string()),
+    reviewerUserId: v.id("users"),
+    reviewerName: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_model_created", ["euclidModelId", "createdAt"])
+    .index("by_model_request", ["euclidModelId", "requestId"])
+    .index("by_model_draft_created", ["euclidModelId", "draftQuantityId", "createdAt"])
+    .index("by_decision_fingerprint", ["decisionFingerprint"]),
+
   // Euclid Stage 4K: append-only lineage from a deterministic quantity
   // candidate into a new proposed estimate quantity. Owner quantities,
   // accepted estimator decisions, resources, and pricing remain untouched.
@@ -1576,6 +1608,11 @@ export default defineSchema({
     publisher: v.string(),
     publisherVersion: v.number(),
     adapterVersion: v.string(),
+    surfaceQuantityResultFingerprint: v.optional(v.string()),
+    surfaceDraftQuantityId: v.optional(v.string()),
+    surfaceDraftQuantityFingerprint: v.optional(v.string()),
+    surfaceQuantityReviewId: v.optional(v.id("heliosEuclidSurfaceQuantityReviews")),
+    surfaceQuantityReviewFingerprint: v.optional(v.string()),
     createdBy: v.id("users"),
     publishedByName: v.string(),
     createdAt: v.number(),

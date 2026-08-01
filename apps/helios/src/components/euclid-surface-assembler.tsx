@@ -1,9 +1,18 @@
 "use client";
 
-import type { HeliosEuclidCockpitAlignmentDetail, HeliosEuclidSurfaceAssemblyResult, HeliosEuclidSurfaceQuantityResult } from "@opsslate/helios-domain";
+import {
+  HELIOS_EUCLID_SURFACE_QUANTITY_PUBLICATION_VERSION,
+  HELIOS_EUCLID_SURFACE_QUANTITY_REVIEW_VERSION,
+  type HeliosEuclidCockpitAlignmentDetail,
+  type HeliosEuclidReviewedSurfaceDraft,
+  type HeliosEuclidSurfaceAssemblyResult,
+  type HeliosEuclidSurfaceQuantityReviewWorkspace,
+} from "@opsslate/helios-domain";
 import { Badge } from "@opsslate/suite-ui/badge";
 import { Button } from "@opsslate/suite-ui/button";
-import { Calculator, Layers3, LoaderCircle, Network, TriangleAlert } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@opsslate/suite-ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@opsslate/suite-ui/select";
+import { Calculator, Check, Clock3, Layers3, LoaderCircle, Network, Send, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { humanizeStatus } from "@/lib/format";
@@ -29,7 +38,16 @@ export function EuclidSurfaceAssembler({ projectId, detail }: { projectId: strin
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<HeliosEuclidSurfaceAssemblyResult>();
-  const [quantityResult, setQuantityResult] = useState<HeliosEuclidSurfaceQuantityResult>();
+  const [workspace, setWorkspace] = useState<HeliosEuclidSurfaceQuantityReviewWorkspace>();
+  const [reviewPending, setReviewPending] = useState("");
+  const [selectedDraftId, setSelectedDraftId] = useState("");
+  const [costCodeId, setCostCodeId] = useState("");
+  const [quantityUse, setQuantityUse] = useState<"comparative" | "production">("comparative");
+  const [publicationOpen, setPublicationOpen] = useState(false);
+  const [publicationPending, setPublicationPending] = useState(false);
+  const quantityResult = workspace?.result;
+  const selectedDraft = quantityResult?.draftQuantities.find((draft) => draft.id === selectedDraftId);
+  const selectedTarget = workspace?.boundary.targets.find((target) => target.costCodeId === costCodeId);
 
   async function assemble() {
     setPending(true);
@@ -40,16 +58,94 @@ export function EuclidSurfaceAssembler({ projectId, detail }: { projectId: strin
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ alignmentId: detail.summary.id }),
       });
-      const payload = await response.json() as { data?: HeliosEuclidSurfaceQuantityResult; error?: string };
+      const payload = await response.json() as { data?: HeliosEuclidSurfaceQuantityReviewWorkspace; error?: string };
       if (!response.ok || !payload.data) throw new Error(payload.error || "Governed surfaces and draft quantities could not be calculated.");
-      setQuantityResult(payload.data);
-      setResult(payload.data.surfaceAssembly);
+      setWorkspace(payload.data);
+      setResult(payload.data.result.surfaceAssembly);
     } catch (reason) {
       setResult(undefined);
-      setQuantityResult(undefined);
+      setWorkspace(undefined);
       setError(reason instanceof Error ? reason.message : "Governed surfaces and draft quantities could not be calculated.");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function reviewDraft(draft: HeliosEuclidReviewedSurfaceDraft, action: "accept" | "defer") {
+    if (!workspace) return;
+    setReviewPending(draft.id);
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/euclid/surface-quantity-reviews`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: HELIOS_EUCLID_SURFACE_QUANTITY_REVIEW_VERSION,
+          requestId: crypto.randomUUID(),
+          euclidModelId: workspace.boundary.euclidModelId,
+          modelFingerprint: workspace.boundary.modelFingerprint,
+          alignmentId: detail.summary.id,
+          resultFingerprint: workspace.result.fingerprint,
+          draftQuantityId: draft.id,
+          draftQuantityFingerprint: draft.fingerprint,
+          action,
+          reason: action === "defer" ? "Estimator deferred this draft quantity for later review." : undefined,
+        }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Draft quantity review could not be saved.");
+      await assemble();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Draft quantity review could not be saved.");
+    } finally {
+      setReviewPending("");
+    }
+  }
+
+  function beginPublication(draft: HeliosEuclidReviewedSurfaceDraft) {
+    setSelectedDraftId(draft.id);
+    setCostCodeId("");
+    setQuantityUse("comparative");
+    setError("");
+    setPublicationOpen(true);
+  }
+
+  async function publishDraft() {
+    if (
+      !workspace || !selectedDraft || !selectedDraft.review || !costCodeId
+      || !workspace.boundary.integrationSolutionId || !workspace.boundary.integrationSolutionFingerprint
+    ) return;
+    setPublicationPending(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/projects/${projectId}/euclid/surface-quantity-publications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          version: HELIOS_EUCLID_SURFACE_QUANTITY_PUBLICATION_VERSION,
+          requestId: crypto.randomUUID(),
+          euclidModelId: workspace.boundary.euclidModelId,
+          modelFingerprint: workspace.boundary.modelFingerprint,
+          alignmentId: detail.summary.id,
+          integrationSolutionId: workspace.boundary.integrationSolutionId,
+          integrationSolutionFingerprint: workspace.boundary.integrationSolutionFingerprint,
+          resultFingerprint: workspace.result.fingerprint,
+          draftQuantityId: selectedDraft.id,
+          draftQuantityFingerprint: selectedDraft.fingerprint,
+          reviewId: selectedDraft.review.id,
+          reviewFingerprint: selectedDraft.review.decisionFingerprint,
+          costCodeId,
+          use: quantityUse,
+        }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || "Reviewed draft could not be sent to the estimate.");
+      setPublicationOpen(false);
+      await assemble();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Reviewed draft could not be sent to the estimate.");
+    } finally {
+      setPublicationPending(false);
     }
   }
 
@@ -107,25 +203,68 @@ export function EuclidSurfaceAssembler({ projectId, detail }: { projectId: strin
         ))}
       </section>
 
-      {quantityResult && (
+      {workspace && quantityResult && (
         <section className="rounded-xl border border-orange-500/35 bg-orange-500/5 p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2"><Calculator className="size-4 text-orange-300" aria-hidden="true" /><h3 className="text-sm font-semibold">Draft quantity register</h3></div>
               <p className="mt-1 text-[10px] text-muted-foreground">{quantityResult.comparisons.reduce((sum, comparison) => sum + comparison.intervals.length, 0)} governed intervals · {quantityResult.draftQuantities.length} draft results</p>
             </div>
-            <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[9px] text-warning-foreground">Estimator review required</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[9px] text-warning-foreground">Estimator review required</Badge>
+              <Badge variant="outline" className={`text-[9px] ${workspace.boundary.status === "ready" ? "border-success/35 bg-success/10 text-success-foreground" : "border-warning/40 bg-warning/10 text-warning-foreground"}`}>{humanizeStatus(workspace.boundary.status)}</Badge>
+            </div>
           </div>
+          {workspace.boundary.reason && <p className="mt-2 rounded-md border border-warning/30 bg-warning/8 px-2.5 py-2 text-[10px] text-warning-foreground">{workspace.boundary.reason}</p>}
           {quantityResult.draftQuantities.length ? (
             <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-              <table className="w-full min-w-[720px] text-left text-[10px]">
-                <thead className="bg-muted/25 text-muted-foreground"><tr><th className="px-3 py-2">Draft quantity</th><th className="px-3 py-2">Basis</th><th className="px-3 py-2 text-right">Quantity</th><th className="px-3 py-2 text-right">Confidence</th><th className="px-3 py-2">State</th></tr></thead>
-                <tbody className="divide-y divide-border">{quantityResult.draftQuantities.map((row) => <tr key={row.id} className="bg-background/25"><td className="px-3 py-2"><div className="font-semibold">{row.label}</div><div className="mt-0.5 text-[9px] capitalize text-muted-foreground">{humanizeStatus(row.calculationType)}</div></td><td className="px-3 py-2 text-muted-foreground">{row.method}</td><td className="px-3 py-2 text-right font-mono font-semibold">{quantity(row.value, row.unit)}</td><td className="px-3 py-2 text-right font-mono">{row.confidence}%</td><td className="px-3 py-2"><Badge variant="outline" className="border-warning/40 bg-warning/10 text-[9px] text-warning-foreground">Draft</Badge></td></tr>)}</tbody>
+              <table className="w-full min-w-[980px] text-left text-[10px]">
+                <thead className="bg-muted/25 text-muted-foreground"><tr><th className="px-3 py-2">Draft quantity</th><th className="px-3 py-2">Basis</th><th className="px-3 py-2 text-right">Quantity</th><th className="px-3 py-2 text-right">Confidence</th><th className="px-3 py-2">Review</th><th className="px-3 py-2 text-right">Action</th></tr></thead>
+                <tbody className="divide-y divide-border">{quantityResult.draftQuantities.map((row) => {
+                  const publicationTarget = row.publication ? workspace.boundary.targets.find((target) => target.costCodeId === row.publication?.costCodeId) : undefined;
+                  const reviewing = reviewPending === row.id;
+                  return <tr key={row.id} className="bg-background/25">
+                    <td className="px-3 py-2"><div className="font-semibold">{row.label}</div><div className="mt-0.5 text-[9px] capitalize text-muted-foreground">{humanizeStatus(row.calculationType)}</div></td>
+                    <td className="max-w-[280px] px-3 py-2 text-muted-foreground"><div className="line-clamp-2">{row.method}</div><div className="mt-1 font-mono text-[9px]">{row.inputEntityIds.length} controls · {row.provenanceIds.length} citations</div></td>
+                    <td className="px-3 py-2 text-right font-mono font-semibold">{quantity(row.value, row.unit)}</td>
+                    <td className="px-3 py-2 text-right"><div className="font-mono">{row.confidence}%</div><div className={`mt-1 text-[9px] ${row.engineeringStatus === "verified" ? "text-success-foreground" : "text-warning-foreground"}`}>{humanizeStatus(row.engineeringStatus)}</div></td>
+                    <td className="px-3 py-2">{row.publication
+                      ? <div className="text-success-foreground"><Check className="mr-1 inline size-3" aria-hidden="true" />Proposed to {publicationTarget ? publicationTarget.code : "estimate"}</div>
+                      : row.review
+                        ? <div><Badge variant="outline" className={`text-[9px] ${row.review.action === "accept" ? "border-success/35 bg-success/10 text-success-foreground" : "border-warning/40 bg-warning/10 text-warning-foreground"}`}>{humanizeStatus(row.review.action)}</Badge><div className="mt-1 text-[9px] text-muted-foreground">{row.review.reviewerName}</div></div>
+                        : <Badge variant="outline" className="border-warning/40 bg-warning/10 text-[9px] text-warning-foreground">Draft</Badge>}
+                    </td>
+                    <td className="px-3 py-2"><div className="flex justify-end gap-1.5">
+                      {!row.publication && row.review?.action !== "accept" && <Button type="button" size="sm" className="h-7 px-2 text-[10px]" disabled={reviewing || workspace.boundary.status !== "ready" || row.engineeringStatus !== "verified"} onClick={() => reviewDraft(row, "accept")}>{reviewing ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />}Accept</Button>}
+                      {!row.publication && row.review?.action !== "accept" && <Button type="button" size="sm" variant="outline" className="h-7 px-2 text-[10px]" disabled={reviewing} onClick={() => reviewDraft(row, "defer")}><Clock3 aria-hidden="true" />Defer</Button>}
+                      {!row.publication && row.review?.action === "accept" && <Button type="button" size="sm" className="h-7 px-2 text-[10px]" disabled={workspace.boundary.status !== "ready"} onClick={() => beginPublication(row)}><Send aria-hidden="true" />Send to estimate</Button>}
+                    </div></td>
+                  </tr>;
+                })}</tbody>
               </table>
             </div>
           ) : <p className="mt-3 rounded-lg border border-warning/35 bg-warning/8 p-3 text-xs text-warning-foreground">No draft quantity can be calculated until the required surfaces share governed station spans and exact offsets.</p>}
+          <p className="mt-2 text-[9px] text-muted-foreground">{workspace.boundary.reviewedCount} reviewed · {workspace.boundary.acceptedCount} accepted · {workspace.boundary.publishedCount} proposed to the estimate. Acceptance never changes owner quantities or pricing.</p>
+          {error && <p role="alert" className="mt-2 text-xs text-danger-foreground">{error}</p>}
         </section>
       )}
+
+      <Dialog open={publicationOpen} onOpenChange={setPublicationOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Send reviewed quantity to estimate</DialogTitle>
+            <DialogDescription>Map this accepted 4P draft to one current estimate cost code. Stage 4K creates a new proposed quantity with immutable 4P review lineage; owner quantities and pricing remain unchanged.</DialogDescription>
+          </DialogHeader>
+          {selectedDraft && <div className="rounded-lg border border-border bg-muted/15 p-3"><div className="text-sm font-semibold">{selectedDraft.label}</div><div className="mt-1 font-mono text-lg font-semibold">{quantity(selectedDraft.value, selectedDraft.unit)}</div><p className="mt-2 text-xs text-muted-foreground">{selectedDraft.formula}</p></div>}
+          <div className="space-y-3">
+            <div><label className="mb-1 block text-xs font-semibold" htmlFor="surface-quantity-cost-code">Estimate cost code</label><Select value={costCodeId} onValueChange={setCostCodeId}><SelectTrigger id="surface-quantity-cost-code"><SelectValue placeholder="Select the receiving cost code" /></SelectTrigger><SelectContent>{workspace?.boundary.targets.map((target) => <SelectItem key={target.costCodeId} value={target.costCodeId}>{target.code} · {target.description} · {target.productionUnit}</SelectItem>)}</SelectContent></Select></div>
+            <div><label className="mb-1 block text-xs font-semibold" htmlFor="surface-quantity-use">Quantity use</label><Select value={quantityUse} onValueChange={(value) => setQuantityUse(value as "comparative" | "production")}><SelectTrigger id="surface-quantity-use"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="comparative">Comparative — check against the estimate</SelectItem><SelectItem value="production">Production — drive resource calculations after approval</SelectItem></SelectContent></Select></div>
+            {quantityUse === "production" && selectedDraft && selectedTarget && selectedTarget.productionUnit.trim().toUpperCase() !== selectedDraft.unit && <p role="alert" className="text-xs text-danger-foreground">Production unit mismatch: this result is {selectedDraft.unit}, while the cost code uses {selectedTarget.productionUnit}. Choose a matching cost code or send it as comparative.</p>}
+            {error && <p role="alert" className="text-xs text-danger-foreground">{error}</p>}
+          </div>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setPublicationOpen(false)} disabled={publicationPending}>Cancel</Button><Button type="button" onClick={publishDraft} disabled={publicationPending || !selectedDraft || !costCodeId || (quantityUse === "production" && Boolean(selectedTarget) && selectedTarget?.productionUnit.trim().toUpperCase() !== selectedDraft?.unit)}>{publicationPending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Send aria-hidden="true" />}{publicationPending ? "Sending" : "Create proposed quantity"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {quantityResult && quantityResult.comparisons.length > 0 && (
         <section className="grid gap-2 lg:grid-cols-3">

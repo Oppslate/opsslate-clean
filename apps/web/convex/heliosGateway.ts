@@ -10,6 +10,8 @@ import {
   normalizeHeliosEuclidPromotionInput,
   normalizeHeliosEuclidQuantityPublicationInput,
   normalizeHeliosEuclidReviewInput,
+  normalizeHeliosEuclidSurfaceDraftPublicationInput,
+  normalizeHeliosEuclidSurfaceQuantityReviewInput,
   normalizeEstimateBuildInput,
   normalizeEstimateSupportInput,
   normalizeEstimateReviewInput,
@@ -26,7 +28,9 @@ import {
   type HeliosEuclidStationOffsetPosition,
   type HeliosEuclidCrossSectionResult,
   type HeliosEuclidSurfaceAssemblyResult,
-  type HeliosEuclidSurfaceQuantityResult,
+  type HeliosEuclidSurfaceDraftPublicationInput,
+  type HeliosEuclidSurfaceQuantityReviewInput,
+  type HeliosEuclidSurfaceQuantityReviewWorkspace,
   type HeliosEuclidCandidateBuildInput,
   type HeliosEuclidCandidateValidationInput,
   type HeliosEuclidPromotionInput,
@@ -327,8 +331,18 @@ const calculateEuclidSurfaceQuantitiesReference = makeFunctionReference<
       interval?: number;
     };
   },
-  HeliosEuclidSurfaceQuantityResult
+  HeliosEuclidSurfaceQuantityReviewWorkspace
 >("heliosEuclidSurfaceQuantities:calculateDraftQuantities");
+const recordEuclidSurfaceQuantityReviewReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidSurfaceQuantityReviewInput },
+  { reviewId: string; decisionFingerprint: string; action: string; createdAt: number; reused: boolean }
+>("heliosEuclidSurfaceQuantityReviews:recordDecision");
+const publishEuclidSurfaceDraftReference = makeFunctionReference<
+  "mutation",
+  { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidSurfaceDraftPublicationInput },
+  { publicationId: string; estimateQuantityId: string; status: "published"; reviewStatus: "proposed"; reused: boolean }
+>("heliosEuclidQuantityPublications:publishSurfaceDraft");
 const recordEuclidReviewReference = makeFunctionReference<
   "mutation",
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidReviewInput },
@@ -1402,6 +1416,44 @@ export const calculateHeliosEuclidSurfaceQuantities = httpAction(async (ctx, req
     return json({ data }, 200);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Euclid surface quantities could not be calculated." }, 400);
+  }
+});
+
+export const recordHeliosEuclidSurfaceQuantityReview = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid surface quantity review request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(recordEuclidSurfaceQuantityReviewReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeHeliosEuclidSurfaceQuantityReviewInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid surface quantity review could not be saved." }, 400);
+  }
+});
+
+export const publishHeliosEuclidSurfaceDraft = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid surface draft publication request." }, 400);
+  }
+  try {
+    const data = await ctx.runMutation(publishEuclidSurfaceDraftReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: normalizeHeliosEuclidSurfaceDraftPublicationInput(payload.input),
+    });
+    return json({ data }, 201);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid surface draft could not be published." }, 400);
   }
 });
 

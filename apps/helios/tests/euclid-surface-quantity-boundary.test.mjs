@@ -35,7 +35,7 @@ test("Euclid Stage 4P keeps bid-day review to one click and labels every result 
   assert.match(component, /euclid\/surface-quantities/);
   assert.match(component, /Draft quantity register/);
   assert.match(component, /Estimator review required/);
-  assert.doesNotMatch(component, /publishCandidate|Create proposed quantity/);
+  assert.doesNotMatch(component, /useEffect[\s\S]*surface-quantity-publications/);
 });
 
 test("Ask Helios cites deterministic 4P drafts and states the no-publication boundary", async () => {
