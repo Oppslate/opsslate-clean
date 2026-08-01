@@ -1,5 +1,8 @@
 import { buildHeliosEngineeringParityFingerprint } from "./engineering-record.ts";
-import { resolveHeliosEuclidStationEquations } from "./euclid-horizontal.ts";
+import {
+  HELIOS_EUCLID_HORIZONTAL_DEFAULT_TOLERANCES,
+  resolveHeliosEuclidStationEquations,
+} from "./euclid-horizontal.ts";
 import {
   HELIOS_EUCLID_SCHEMA_VERSION,
   validateHeliosEuclidContract,
@@ -27,8 +30,8 @@ import {
 } from "./euclid-contract.ts";
 import { HELIOS_EUCLID_VERTICAL_SOLVER } from "./euclid-vertical.ts";
 
-export const HELIOS_EUCLID_SHADOW_VERSION = 2;
-export const HELIOS_EUCLID_SHADOW_ADAPTER = "canonical-civil-geometry-v2";
+export const HELIOS_EUCLID_SHADOW_VERSION = 3;
+export const HELIOS_EUCLID_SHADOW_ADAPTER = "canonical-civil-geometry-v3";
 
 export const HELIOS_EUCLID_ENTITY_TYPES = [
   "spatial_reference",
@@ -216,6 +219,25 @@ function engineeringValue<T>(
   };
 }
 
+function computedEngineeringValue(
+  value: number,
+  record: HeliosEuclidLegacyGeometryRecord,
+  suffix: string,
+  formula: string,
+  inputValueIds: string[],
+  provenanceIds: string[],
+): HeliosEuclidValue<number> {
+  return {
+    id: `value:${record.id}:${suffix}`,
+    value,
+    origin: "computed",
+    formula,
+    inputValueIds: [...new Set(inputValueIds)].sort(),
+    provenanceIds: [...new Set(provenanceIds)].sort(),
+    reviewState: reviewState(record.status),
+  };
+}
+
 function alignmentType(name: string, records: HeliosEuclidLegacyGeometryRecord[]): HeliosEuclidAlignment["alignmentType"] {
   const normalized = name.toLocaleLowerCase();
   if (/stream|creek|river|channel|run\b/.test(normalized)) return "stream_channel";
@@ -334,6 +356,331 @@ function addIssue(
   });
 }
 
+type HorizontalSegmentCandidate = {
+  key: string;
+  record: HeliosEuclidLegacyGeometryRecord;
+  index: number;
+  segment: HeliosEuclidLegacyGeometryRecord["horizontalSegments"][number];
+  rotation?: "left" | "right";
+};
+
+type HorizontalChainPrimitive = {
+  kind: "line" | "curve";
+  stationStart: number;
+  stationEnd: number;
+  length: number;
+  record: HeliosEuclidLegacyGeometryRecord;
+  candidate?: HorizontalSegmentCandidate;
+  rotation?: "left" | "right";
+  radius?: number;
+  deltaDegrees?: number;
+  bearing?: string;
+};
+
+function curveRotation(label: string) {
+  if (/\bleft\b|\blt\b/i.test(label)) return "left" as const;
+  if (/\bright\b|\brt\b/i.test(label)) return "right" as const;
+  return undefined;
+}
+
+function coordinateDistance(
+  start: Pick<HeliosEuclidControlPoint, "northing" | "easting">,
+  end: Pick<HeliosEuclidControlPoint, "northing" | "easting">,
+) {
+  return Math.hypot(end.northing.value - start.northing.value, end.easting.value - start.easting.value);
+}
+
+function relativeHorizontalChain(primitives: HorizontalChainPrimitive[]) {
+  let northing = 0;
+  let easting = 0;
+  let headingRadians = 0;
+  for (const primitive of primitives) {
+    if (primitive.kind === "line") {
+      northing += primitive.length * Math.cos(headingRadians);
+      easting += primitive.length * Math.sin(headingRadians);
+      continue;
+    }
+    const rotationSign = primitive.rotation === "right" ? 1 : -1;
+    const radius = primitive.radius!;
+    const endHeading = headingRadians + rotationSign * primitive.deltaDegrees! * Math.PI / 180;
+    northing += radius / rotationSign * (Math.sin(endHeading) - Math.sin(headingRadians));
+    easting += radius / rotationSign * (Math.cos(headingRadians) - Math.cos(endHeading));
+    headingRadians = endHeading;
+  }
+  return { northing, easting, headingRadians };
+}
+
+function rotateHorizontalVector(northing: number, easting: number, headingRadians: number) {
+  return {
+    northing: northing * Math.cos(headingRadians) - easting * Math.sin(headingRadians),
+    easting: northing * Math.sin(headingRadians) + easting * Math.cos(headingRadians),
+  };
+}
+
+/**
+ * Curve tables commonly print PC/PT stations, radius, arc length, delta and
+ * direction without repeating PC/PT coordinates. When two authoritative
+ * coordinate anchors bracket those controls, the complete intervening chain
+ * has one deterministic rotation into the project grid. This preserves the
+ * printed curve instead of silently dropping it, while retaining the anchor
+ * closure residual as a review issue.
+ */
+function appendHorizontalGeometry(input: {
+  alignment: HeliosEuclidAlignment;
+  records: HeliosEuclidLegacyGeometryRecord[];
+  controlPoints: HeliosEuclidControlPoint[];
+  horizontalElements: HeliosEuclidHorizontalElement[];
+  issues: HeliosEuclidIssue[];
+}) {
+  const { alignment, records, controlPoints, horizontalElements, issues } = input;
+  const alignmentPoints = controlPoints
+    .filter((point) => point.alignmentId === alignment.id)
+    .sort((left, right) => left.station.chainage - right.station.chainage || left.id.localeCompare(right.id));
+  const pointByStation = new Map<number, HeliosEuclidControlPoint>();
+  for (const point of alignmentPoints) {
+    if (!pointByStation.has(point.station.chainage)) pointByStation.set(point.station.chainage, point);
+  }
+  const anchors = [...pointByStation.values()].sort((left, right) => left.station.chainage - right.station.chainage);
+
+  const candidates: HorizontalSegmentCandidate[] = [];
+  for (const record of records.filter((row) => row.geometryType === "horizontal_alignment")) {
+    record.horizontalSegments.forEach((segment, index) => {
+      const key = `${record.id}:${index + 1}`;
+      if (segment.stationEnd <= segment.stationStart || segment.length <= 0) {
+        addIssue(issues, record, "horizontal_segment_station_order_invalid", `Segment ${segment.label || index + 1} does not have increasing stations and positive length.`, [alignment.id], "blocking");
+        return;
+      }
+      if (segment.kind === "curve") {
+        if (!["coordinate_control", "dimensioned_geometry"].includes(record.authority)) return;
+        if (!(segment.radius && segment.deltaDegrees)) {
+          addIssue(issues, record, "curve_definition_incomplete", `Curve ${segment.label || index + 1} lacks a stored radius or delta.`, [alignment.id], "blocking");
+          return;
+        }
+        const rotation = curveRotation(segment.label);
+        if (!rotation) {
+          addIssue(issues, record, "curve_rotation_missing", `Curve ${segment.label || index + 1} has no stored left/right direction.`, [alignment.id], "blocking");
+          return;
+        }
+        candidates.push({ key, record, index, segment, rotation });
+        return;
+      }
+      // A dimensioned bridge limit, railing run, or structure opening is not
+      // a roadway tangent. Lines enter the alignment chain only when the
+      // source explicitly carries coordinate-control authority.
+      if (record.authority !== "coordinate_control") return;
+      const lineContext = `${segment.label} ${record.sourceLocator}`;
+      if (/bridge begins.*bridge ends|structure opening|guide rail|railing/i.test(lineContext)) return;
+      if (!segment.bearing.trim()) {
+        addIssue(issues, record, "tangent_bearing_missing", `Tangent ${segment.label || index + 1} lacks a stored bearing.`, [alignment.id]);
+        return;
+      }
+      candidates.push({ key, record, index, segment });
+    });
+  }
+  const curves = candidates
+    .filter((candidate) => candidate.segment.kind === "curve")
+    .sort((left, right) => left.segment.stationStart - right.segment.stationStart || left.key.localeCompare(right.key));
+  const usedCandidates = new Set<string>();
+  let sequence = 0;
+
+  const addElement = (
+    primitive: HorizontalChainPrimitive,
+    startPoint: HeliosEuclidControlPoint,
+    endPoint: HeliosEuclidControlPoint,
+    bearingDegrees?: number,
+  ) => {
+    const candidate = primitive.candidate;
+    const record = primitive.record;
+    sequence += 1;
+    const suffix = candidate ? `segment:${candidate.index + 1}` : `computed-segment:${sequence}`;
+    const base = {
+      id: `horizontal-element:${record.id}:${candidate ? candidate.index + 1 : `computed-${sequence}`}`,
+      alignmentId: alignment.id,
+      sequence,
+      startStation: station(primitive.stationStart, record, `${suffix}:start`),
+      endStation: station(primitive.stationEnd, record, `${suffix}:end`),
+      startPointId: startPoint.id,
+      endPointId: endPoint.id,
+      length: candidate
+        ? engineeringValue(primitive.length, record, `${suffix}:length`)
+        : computedEngineeringValue(
+          primitive.length,
+          record,
+          `${suffix}:length`,
+          "displayed-station interval within the deterministic coordinate-anchor chain; no station equation applies",
+          [startPoint.northing.id, startPoint.easting.id, endPoint.northing.id, endPoint.easting.id],
+          [...startPoint.northing.provenanceIds, ...startPoint.easting.provenanceIds, ...endPoint.northing.provenanceIds, ...endPoint.easting.provenanceIds],
+        ),
+      reviewState: reviewState(record.status),
+    };
+    if (primitive.kind === "curve") {
+      horizontalElements.push({
+        ...base,
+        elementType: "circular_curve",
+        rotation: primitive.rotation!,
+        radius: engineeringValue(primitive.radius!, record, `${suffix}:radius`),
+        deltaDegrees: engineeringValue(primitive.deltaDegrees!, record, `${suffix}:delta`),
+      });
+    } else {
+      const bearing = primitive.bearing?.trim() || `AZIMUTH ${bearingDegrees!.toFixed(8)}`;
+      horizontalElements.push({
+        ...base,
+        elementType: "line",
+        bearing: candidate
+          ? engineeringValue(bearing, record, `${suffix}:bearing`, bearing)
+          : {
+            id: `value:${record.id}:${suffix}:bearing`,
+            value: bearing,
+            origin: "computed",
+            formula: "azimuth of the deterministic coordinate-anchor chain",
+            inputValueIds: [startPoint.northing.id, startPoint.easting.id, endPoint.northing.id, endPoint.easting.id],
+            provenanceIds: [...new Set([...startPoint.northing.provenanceIds, ...startPoint.easting.provenanceIds, ...endPoint.northing.provenanceIds, ...endPoint.easting.provenanceIds])].sort(),
+            reviewState: reviewState(record.status),
+          },
+      });
+    }
+    if (candidate) usedCandidates.add(candidate.key);
+  };
+
+  if (curves.length && anchors.length >= 2) {
+    for (let anchorIndex = 0; anchorIndex < anchors.length - 1; anchorIndex += 1) {
+      const startAnchor = anchors[anchorIndex]!;
+      const endAnchor = anchors[anchorIndex + 1]!;
+      const stationStart = startAnchor.station.chainage;
+      const stationEnd = endAnchor.station.chainage;
+      const intervalCurves = curves.filter((candidate) =>
+        candidate.segment.stationStart >= stationStart - 1e-8 && candidate.segment.stationEnd <= stationEnd + 1e-8);
+      const crossing = curves.filter((candidate) =>
+        candidate.segment.stationStart < stationEnd - 1e-8 && candidate.segment.stationEnd > stationStart + 1e-8 && !intervalCurves.includes(candidate));
+      if (crossing.length) {
+        addIssue(issues, crossing[0]!.record, "curve_crosses_coordinate_anchor", "A printed curve crosses a coordinate anchor and requires estimator review before chain reconstruction.", [alignment.id], "blocking");
+        continue;
+      }
+      const overlaps = intervalCurves.some((candidate, index) => index > 0 && candidate.segment.stationStart < intervalCurves[index - 1]!.segment.stationEnd - 1e-8);
+      if (overlaps) {
+        addIssue(issues, intervalCurves[0]!.record, "horizontal_curve_overlap", "Printed horizontal curves overlap within one coordinate-anchor interval.", [alignment.id], "blocking");
+        continue;
+      }
+      const sourceRecord = intervalCurves[0]?.record || records.find((record) => record.horizontalPoints.some((point) => point.station === stationStart)) || records[0]!;
+      const primitives: HorizontalChainPrimitive[] = [];
+      let cursor = stationStart;
+      for (const candidate of intervalCurves) {
+        if (candidate.segment.stationStart > cursor + 1e-8) {
+          primitives.push({ kind: "line", stationStart: cursor, stationEnd: candidate.segment.stationStart, length: candidate.segment.stationStart - cursor, record: candidate.record });
+        }
+        primitives.push({
+          kind: "curve",
+          stationStart: candidate.segment.stationStart,
+          stationEnd: candidate.segment.stationEnd,
+          length: candidate.segment.length,
+          record: candidate.record,
+          candidate,
+          rotation: candidate.rotation,
+          radius: candidate.segment.radius,
+          deltaDegrees: candidate.segment.deltaDegrees,
+        });
+        cursor = candidate.segment.stationEnd;
+      }
+      if (stationEnd > cursor + 1e-8) {
+        primitives.push({ kind: "line", stationStart: cursor, stationEnd, length: stationEnd - cursor, record: intervalCurves.at(-1)?.record || sourceRecord });
+      }
+      if (!primitives.length) continue;
+
+      const relative = relativeHorizontalChain(primitives);
+      const actualNorthing = endAnchor.northing.value - startAnchor.northing.value;
+      const actualEasting = endAnchor.easting.value - startAnchor.easting.value;
+      const relativeLength = Math.hypot(relative.northing, relative.easting);
+      const actualLength = coordinateDistance(startAnchor, endAnchor);
+      const closureResidual = Math.abs(relativeLength - actualLength);
+      if (closureResidual > HELIOS_EUCLID_HORIZONTAL_DEFAULT_TOLERANCES.endpointClosureBlock) {
+        addIssue(issues, sourceRecord, "horizontal_anchor_chain_closure", `Printed horizontal controls do not close between coordinate anchors; residual ${closureResidual.toFixed(4)} ${sourceRecord.units || "linear units"}.`, [alignment.id], "blocking");
+        continue;
+      }
+      const initialHeading = Math.atan2(actualEasting, actualNorthing) - Math.atan2(relative.easting, relative.northing);
+      const chainProvenanceIds = [...new Set([
+        ...startAnchor.northing.provenanceIds,
+        ...startAnchor.easting.provenanceIds,
+        ...endAnchor.northing.provenanceIds,
+        ...endAnchor.easting.provenanceIds,
+        ...intervalCurves.map((candidate) => `provenance:${candidate.record.id}`),
+      ])].sort();
+      const chainInputValueIds = [startAnchor.northing.id, startAnchor.easting.id, endAnchor.northing.id, endAnchor.easting.id];
+      let currentPoint = startAnchor;
+      let currentNorthing = startAnchor.northing.value;
+      let currentEasting = startAnchor.easting.value;
+      let localHeading = 0;
+      for (const primitive of primitives) {
+        let localNorthing: number;
+        let localEasting: number;
+        let nextLocalHeading = localHeading;
+        if (primitive.kind === "line") {
+          localNorthing = primitive.length * Math.cos(localHeading);
+          localEasting = primitive.length * Math.sin(localHeading);
+        } else {
+          const rotationSign = primitive.rotation === "right" ? 1 : -1;
+          nextLocalHeading = localHeading + rotationSign * primitive.deltaDegrees! * Math.PI / 180;
+          localNorthing = primitive.radius! / rotationSign * (Math.sin(nextLocalHeading) - Math.sin(localHeading));
+          localEasting = primitive.radius! / rotationSign * (Math.cos(localHeading) - Math.cos(nextLocalHeading));
+        }
+        const gridVector = rotateHorizontalVector(localNorthing, localEasting, initialHeading);
+        const calculatedNorthing = currentNorthing + gridVector.northing;
+        const calculatedEasting = currentEasting + gridVector.easting;
+        const existingEnd = pointByStation.get(primitive.stationEnd);
+        const endPoint = existingEnd || (() => {
+          const pointRecord = primitive.record;
+          const id = `control-point:${alignment.id}:computed:${stableKey({ station: primitive.stationEnd })}`;
+          const curveEnd = primitive.kind === "curve";
+          const nextPrimitive = primitives[primitives.indexOf(primitive) + 1];
+          const nextIsCurve = nextPrimitive?.kind === "curve";
+          const entity: HeliosEuclidControlPoint = {
+            id,
+            alignmentId: alignment.id,
+            pointType: curveEnd && nextIsCurve ? "pcc" : curveEnd ? "pt" : nextIsCurve ? "pc" : "other",
+            name: curveEnd && nextIsCurve ? `Computed PCC ${printedStation(primitive.stationEnd)}` : curveEnd ? `Computed PT ${printedStation(primitive.stationEnd)}` : nextIsCurve ? `Computed PC ${printedStation(primitive.stationEnd)}` : `Computed control ${printedStation(primitive.stationEnd)}`,
+            station: station(primitive.stationEnd, pointRecord, `computed-control:${primitive.stationEnd}`),
+            northing: computedEngineeringValue(calculatedNorthing, pointRecord, `computed-control:${primitive.stationEnd}:northing`, "coordinate-anchor chain reconstruction from printed stations, radii, deltas, directions, and endpoint coordinates", chainInputValueIds, chainProvenanceIds),
+            easting: computedEngineeringValue(calculatedEasting, pointRecord, `computed-control:${primitive.stationEnd}:easting`, "coordinate-anchor chain reconstruction from printed stations, radii, deltas, directions, and endpoint coordinates", chainInputValueIds, chainProvenanceIds),
+            reviewState: reviewState(pointRecord.status),
+          };
+          controlPoints.push(entity);
+          pointByStation.set(primitive.stationEnd, entity);
+          return entity;
+        })();
+        addElement(primitive, currentPoint, endPoint, (initialHeading + localHeading) * 180 / Math.PI);
+        currentPoint = endPoint;
+        currentNorthing = endPoint.northing.value;
+        currentEasting = endPoint.easting.value;
+        localHeading = nextLocalHeading;
+      }
+      if (intervalCurves.length || closureResidual > HELIOS_EUCLID_HORIZONTAL_DEFAULT_TOLERANCES.endpointClosurePass) {
+        addIssue(issues, sourceRecord, "horizontal_chain_computed_from_anchors", `Horizontal chain reconstructed between ${startAnchor.station.printedStation} and ${endAnchor.station.printedStation}; coordinate-anchor closure residual ${closureResidual.toFixed(4)} ${sourceRecord.units || "linear units"}.`, [alignment.id]);
+      }
+    }
+  } else {
+    for (const candidate of candidates.sort((left, right) => left.segment.stationStart - right.segment.stationStart || left.key.localeCompare(right.key))) {
+      const startPoint = pointByStation.get(candidate.segment.stationStart);
+      const endPoint = pointByStation.get(candidate.segment.stationEnd);
+      if (!startPoint || !endPoint) continue;
+      addElement({
+        kind: candidate.segment.kind === "curve" ? "curve" : "line",
+        stationStart: candidate.segment.stationStart,
+        stationEnd: candidate.segment.stationEnd,
+        length: candidate.segment.length,
+        record: candidate.record,
+        candidate,
+        rotation: candidate.rotation,
+        radius: candidate.segment.radius,
+        deltaDegrees: candidate.segment.deltaDegrees,
+        bearing: candidate.segment.bearing,
+      }, startPoint, endPoint);
+    }
+  }
+
+  for (const candidate of candidates.filter((row) => !usedCandidates.has(row.key))) {
+    addIssue(issues, candidate.record, "segment_endpoint_coordinates_missing", `Segment ${candidate.segment.label || candidate.index + 1} could not be placed in a coordinate-anchored horizontal chain.`, [alignment.id]);
+  }
+}
+
 export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput): HeliosEuclidModel {
   if (!input.records.length) throw new HeliosEuclidShadowError("Euclid shadow population requires stored civil geometry records.");
   if (!input.engineeringRecordId || !input.geometryRunId || !input.sourceFingerprint) {
@@ -442,7 +789,6 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
     const alignmentId = alignmentIdByRecord.get(record.id);
     if (!alignmentId) continue;
     const recordReviewState = reviewState(record.status);
-    const controlPointByStation = new Map<number, HeliosEuclidControlPoint>();
     record.horizontalPoints.forEach((point, index) => {
       const entity: HeliosEuclidControlPoint = {
         id: `control-point:${record.id}:${index + 1}`,
@@ -455,56 +801,6 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
         reviewState: recordReviewState,
       };
       controlPoints.push(entity);
-      controlPointByStation.set(point.station, entity);
-    });
-    record.horizontalSegments.forEach((segment, index) => {
-      const startPoint = controlPointByStation.get(segment.stationStart);
-      const endPoint = controlPointByStation.get(segment.stationEnd);
-      if (!startPoint || !endPoint) {
-        addIssue(issues, record, "segment_endpoint_coordinates_missing", `Segment ${segment.label || index + 1} has no exact stored coordinate at one or both endpoints.`, [alignmentId]);
-        return;
-      }
-      const base = {
-        id: `horizontal-element:${record.id}:${index + 1}`,
-        alignmentId,
-        sequence: index + 1,
-        startStation: station(segment.stationStart, record, `segment:${index + 1}:start`),
-        endStation: station(segment.stationEnd, record, `segment:${index + 1}:end`),
-        startPointId: startPoint.id,
-        endPointId: endPoint.id,
-        length: engineeringValue(segment.length, record, `segment:${index + 1}:length`),
-        reviewState: recordReviewState,
-      };
-      if (segment.kind === "curve") {
-        if (!(segment.radius && segment.deltaDegrees)) {
-          addIssue(issues, record, "curve_definition_incomplete", `Curve ${segment.label || index + 1} lacks a stored radius or delta.`, [alignmentId], "blocking");
-          return;
-        }
-        const rotation = /\bleft\b|\blt\b/i.test(segment.label)
-          ? "left" as const
-          : /\bright\b|\brt\b/i.test(segment.label)
-            ? "right" as const
-            : null;
-        if (!rotation) {
-          addIssue(issues, record, "curve_rotation_missing", `Curve ${segment.label || index + 1} has no stored left/right direction.`, [alignmentId], "blocking");
-          return;
-        }
-        horizontalElements.push({
-          ...base,
-          elementType: "circular_curve",
-          rotation,
-          radius: engineeringValue(segment.radius, record, `segment:${index + 1}:radius`),
-          deltaDegrees: engineeringValue(segment.deltaDegrees, record, `segment:${index + 1}:delta`),
-        });
-      } else if (segment.bearing.trim()) {
-        horizontalElements.push({
-          ...base,
-          elementType: "line",
-          bearing: engineeringValue(segment.bearing, record, `segment:${index + 1}:bearing`, segment.bearing),
-        });
-      } else {
-        addIssue(issues, record, "tangent_bearing_missing", `Tangent ${segment.label || index + 1} lacks a stored bearing.`, [alignmentId]);
-      }
     });
 
     if (record.geometryType === "vertical_alignment" && record.verticalPoints.length) {
@@ -699,6 +995,16 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
 
     record.unresolvedIssues.forEach((message, index) => {
       addIssue(issues, record, `legacy_unresolved_${index + 1}`, message, [alignmentId]);
+    });
+  }
+
+  for (const alignment of alignments) {
+    appendHorizontalGeometry({
+      alignment,
+      records: alignmentRecords.get(alignment.id) || [],
+      controlPoints,
+      horizontalElements,
+      issues,
     });
   }
 

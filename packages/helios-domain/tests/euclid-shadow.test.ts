@@ -117,6 +117,71 @@ test("T.G.L. is the proposed roadway centerline profile and shares its horizonta
   assert.equal(model.profiles[0]?.alignmentId, model.alignments[0]?.id);
 });
 
+test("BLT-2 curve tables reconstruct a complete horizontal chain between coordinate anchors", () => {
+  const input = shadowInput();
+  const horizontal = input.records[2]!;
+  horizontal.alignmentName = "Front Avenue Centerline";
+  horizontal.horizontalPoints = [
+    { station: 14021.28, northing: 787367.8232, easting: 1108350.421, label: "Front Ave Sta. 140+21.28" },
+    { station: 14403.35, northing: 787264.9964, easting: 1108708.3139, label: "Front Ave Sta. 144+03.35" },
+    { station: 14448.33, northing: 787265.1349, easting: 1108753.2961, label: "Front Ave Sta. 144+48.33" },
+    { station: 14709.05, northing: 787216.3053, easting: 1109006.8251, label: "Front Ave Sta. 147+09.05" },
+  ];
+  horizontal.horizontalSegments = [];
+
+  const curve1 = baseRecord("curve-1", "horizontal_alignment");
+  curve1.sheetNumber = "BLT-2";
+  curve1.authority = "dimensioned_geometry";
+  curve1.alignmentName = "Front Avenue Centerline";
+  curve1.horizontalSegments = [{
+    kind: "curve",
+    stationStart: 14165.82,
+    stationEnd: 14294.88,
+    length: 129.06,
+    radius: 250,
+    deltaDegrees: 29.5788611111,
+    bearing: "",
+    label: "Front Ave Curve No. 1; PC 141+65.82; PT 142+94.88; 29°34'43.9\" LT",
+  }];
+  const curve2 = baseRecord("curve-2", "horizontal_alignment");
+  curve2.sheetNumber = "BLT-2";
+  curve2.authority = "dimensioned_geometry";
+  curve2.alignmentName = "Front Avenue Centerline";
+  curve2.horizontalSegments = [{
+    kind: "curve",
+    stationStart: 14489.38,
+    stationEnd: 14649.39,
+    length: 160.01,
+    radius: 450,
+    deltaDegrees: 20.3728055556,
+    bearing: "",
+    label: "Front Ave Curve No. 2; PC 144+89.38; PT 146+49.39; 20°22'22.1\" RT",
+  }];
+  input.records.push(curve1, curve2);
+
+  const model = buildHeliosEuclidShadowModel(input);
+  const curves = model.horizontalElements.filter((row) => row.elementType === "circular_curve");
+  assert.equal(model.horizontalElements.length, 7);
+  assert.equal(curves.length, 2);
+  assert.deepEqual(curves.map((row) => row.rotation), ["left", "right"]);
+  assert.deepEqual(curves.map((row) => row.radius.value), [250, 450]);
+  assert.deepEqual(curves.map((row) => row.deltaDegrees.value), [29.5788611111, 20.3728055556]);
+  assert.deepEqual(curves.map((row) => [row.startStation.displayedStation, row.endStation.displayedStation]), [
+    [14165.82, 14294.88],
+    [14489.38, 14649.39],
+  ]);
+  const computedCurveControls = model.controlPoints.filter((row) =>
+    [14165.82, 14294.88, 14489.38, 14649.39].includes(row.station.displayedStation));
+  assert.equal(computedCurveControls.length, 4);
+  assert.ok(computedCurveControls.every((row) => row.northing.origin === "computed" && row.easting.origin === "computed"));
+  assert.ok(model.issues.some((issue) => issue.code === "horizontal_chain_computed_from_anchors"));
+
+  const solution = solveHeliosEuclidHorizontalControl(model);
+  const frontAvenue = solution.alignmentSolutions.find((row) => row.alignmentId === model.alignments[0]?.id);
+  assert.notEqual(frontAvenue?.status, "not_applicable");
+  assert.equal(frontAvenue?.elementCount, 7);
+});
+
 test("mixed roadway profile ordinates become separate existing-ground and FINAL T.G.L. surfaces", () => {
   const input = shadowInput();
   input.records[2]!.alignmentName = "Front Avenue Centerline";
