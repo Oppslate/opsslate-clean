@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   HELIOS_EUCLID_SCHEMA_VERSION,
   evaluateHeliosEuclidAlignmentPosition,
+  evaluateHeliosEuclidStationOffsetPosition,
   type HeliosEuclidModel,
   type HeliosEuclidStation,
   type HeliosEuclidValue,
@@ -128,4 +129,53 @@ test("Stage 4L output is deterministic and retains the single-ingestion source f
   assert.equal(first.fingerprint, second.fingerprint);
   assert.equal(first.sourceFingerprint, "single-ingestion-source-v1");
   assert.match(first.id, /^alignment-position:/);
+});
+
+test("Stage 4M applies the signed right-offset convention on north and east tangents", () => {
+  const north = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", displayedStation: 1050, offset: 10 });
+  assert.equal(north.side, "right");
+  assert.equal(north.horizontal?.northing, 1050);
+  assert.equal(north.horizontal?.easting, 1010);
+  const east = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "culvert", displayedStation: 50, offset: 10 });
+  assert.equal(east.horizontal?.northing, 1990);
+  assert.equal(east.horizontal?.easting, 2050);
+});
+
+test("Stage 4M applies negative offsets to the left and follows circular tangent azimuth", () => {
+  const left = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", displayedStation: 1050, offset: -10 });
+  assert.equal(left.side, "left");
+  assert.equal(left.horizontal?.easting, 990);
+  const curve = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", chainage: 1100 + Math.PI * 100 / 4, offset: 10 });
+  assert.ok(Math.abs((curve.horizontal?.northing || 0) - 1163.6396103068) < 1e-8);
+  assert.ok(Math.abs((curve.horizontal?.easting || 0) - 1036.3603896932) < 1e-8);
+});
+
+test("Stage 4M governs centerline elevation but never invents a lateral elevation", () => {
+  const centerline = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", displayedStation: 1050, offset: 0 });
+  assert.equal(centerline.elevation?.basis, "profile_at_centerline");
+  assert.equal(centerline.elevation?.elevation, 101);
+  assert.equal(centerline.status, "verified");
+  const lateral = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", displayedStation: 1050, offset: 12 });
+  assert.equal(lateral.elevation, undefined);
+  assert.match(lateral.limitations.join(" "), /no cross slope/i);
+  assert.equal(lateral.status, "preliminary");
+});
+
+test("Stage 4M accepts explicit elevation bases without promoting them to governed geometry", () => {
+  const delta = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", displayedStation: 1050, offset: 12, verticalOffset: -0.25 });
+  assert.equal(delta.elevation?.elevation, 100.75);
+  assert.equal(delta.elevation?.basis, "profile_plus_vertical_offset");
+  assert.equal(delta.status, "preliminary");
+  const explicit = evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", displayedStation: 1050, offset: 12, pointElevation: 99.5 });
+  assert.equal(explicit.elevation?.elevation, 99.5);
+  assert.throws(() => evaluateHeliosEuclidStationOffsetPosition(model(), { alignmentId: "road", displayedStation: 1050, offset: 12, pointElevation: 99.5, verticalOffset: 1 }), /either/);
+});
+
+test("Stage 4M is deterministic and retains the immutable source fingerprint", () => {
+  const request = { alignmentId: "road", displayedStation: 1050, offset: 12 };
+  const first = evaluateHeliosEuclidStationOffsetPosition(model(), request);
+  const second = evaluateHeliosEuclidStationOffsetPosition(model(), request);
+  assert.equal(first.fingerprint, second.fingerprint);
+  assert.equal(first.sourceFingerprint, "single-ingestion-source-v1");
+  assert.match(first.id, /^station-offset:/);
 });

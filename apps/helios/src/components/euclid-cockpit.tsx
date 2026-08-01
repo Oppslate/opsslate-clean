@@ -579,7 +579,7 @@ export function EuclidCockpit({ workspace }: { workspace: HeliosEuclidCockpitWor
         <EngineeringWorkspace projectId={workspace.project.id} detail={selectedAlignment} />
         <GovernedIntelligenceRail projectId={workspace.project.id} detail={selectedAlignment} workspace={workspace} />
       </section>
-      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Euclid publication adds a proposed, traceable estimate quantity only. Owner bid quantities, accepted decisions, pricing, schedule, and LandXML remain unchanged. 4L station positions are read-only calculations from canonical alignment controls.</span><span className="shrink-0 font-mono">Canonical v{workspace.model?.canonicalVersion || 1} · Stage 4L</span></footer>
+      <footer className="flex flex-col justify-between gap-2 rounded-xl border border-border bg-card/45 px-4 py-3 text-[10px] text-muted-foreground sm:flex-row sm:items-center"><span>Euclid publication adds a proposed, traceable estimate quantity only. 4M station-offset points are read-only calculations from canonical alignment controls. No cross slope, lateral elevation, or surface is assumed. Owner bid quantities, accepted decisions, pricing, schedule, and LandXML remain unchanged. Every result remains proposed until estimate review.</span><span className="shrink-0 font-mono">Canonical v{workspace.model?.canonicalVersion || 1} · Stage 4M</span></footer>
     </div>
   );
 }

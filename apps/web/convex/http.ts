@@ -11,6 +11,7 @@ import {
   getHeliosEstimate,
   getHeliosEuclidCockpit,
   evaluateHeliosEuclidPosition,
+  evaluateHeliosEuclidOffsetPosition,
   buildHeliosEuclidCandidate,
   validateHeliosEuclidCandidate,
   promoteHeliosEuclidCandidate,
@@ -156,6 +157,11 @@ http.route({
   path: "/helios/v1/euclid/stations",
   method: "POST",
   handler: evaluateHeliosEuclidPosition,
+});
+http.route({
+  path: "/helios/v1/euclid/station-offsets",
+  method: "POST",
+  handler: evaluateHeliosEuclidOffsetPosition,
 });
 http.route({
   path: "/helios/v1/euclid/reviews",

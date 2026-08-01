@@ -23,6 +23,7 @@ import {
   type HeliosCivilGeometryReviewInput,
   type HeliosEuclidCockpitWorkspace,
   type HeliosEuclidAlignmentPosition,
+  type HeliosEuclidStationOffsetPosition,
   type HeliosEuclidCandidateBuildInput,
   type HeliosEuclidCandidateValidationInput,
   type HeliosEuclidPromotionInput,
@@ -262,6 +263,25 @@ const evaluateEuclidPositionReference = makeFunctionReference<
   },
   HeliosEuclidAlignmentPosition
 >("heliosEuclidStations:evaluatePosition");
+const evaluateEuclidOffsetPositionReference = makeFunctionReference<
+  "query",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    input: {
+      alignmentId: string;
+      displayedStation?: number;
+      chainage?: number;
+      stationEquationId?: string;
+      profileId?: string;
+      profileRole?: string;
+      offset: number;
+      pointElevation?: number;
+      verticalOffset?: number;
+    };
+  },
+  HeliosEuclidStationOffsetPosition
+>("heliosEuclidStations:evaluateOffsetPosition");
 const recordEuclidReviewReference = makeFunctionReference<
   "mutation",
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidReviewInput },
@@ -1186,6 +1206,55 @@ export const evaluateHeliosEuclidPosition = httpAction(async (ctx, request) => {
     return json({ data }, 200);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Euclid position could not be evaluated." }, 400);
+  }
+});
+
+export const evaluateHeliosEuclidOffsetPosition = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid station-offset request." }, 400);
+  }
+  const input = payload.input;
+  const hasDisplayed = typeof input.displayedStation === "number" && Number.isFinite(input.displayedStation);
+  const hasChainage = typeof input.chainage === "number" && Number.isFinite(input.chainage);
+  const hasPointElevation = typeof input.pointElevation === "number" && Number.isFinite(input.pointElevation);
+  const hasVerticalOffset = typeof input.verticalOffset === "number" && Number.isFinite(input.verticalOffset);
+  if (
+    !boundedString(input.alignmentId)
+    || hasDisplayed === hasChainage
+    || typeof input.offset !== "number"
+    || !Number.isFinite(input.offset)
+    || Math.abs(input.offset) > 100_000
+    || hasPointElevation && hasVerticalOffset
+    || (input.pointElevation !== undefined && !hasPointElevation)
+    || (input.verticalOffset !== undefined && !hasVerticalOffset)
+    || (hasPointElevation && Math.abs(input.pointElevation as number) > 1_000_000)
+    || (hasVerticalOffset && Math.abs(input.verticalOffset as number) > 100_000)
+    || (input.stationEquationId !== undefined && !boundedString(input.stationEquationId))
+    || (input.profileId !== undefined && !boundedString(input.profileId))
+    || (input.profileRole !== undefined && !boundedString(input.profileRole))
+  ) return json({ error: "Euclid station-offset request requires one alignment, one station basis, a finite offset, and no conflicting elevation basis." }, 400);
+  try {
+    const data = await ctx.runQuery(evaluateEuclidOffsetPositionReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: {
+        alignmentId: input.alignmentId,
+        displayedStation: hasDisplayed ? input.displayedStation as number : undefined,
+        chainage: hasChainage ? input.chainage as number : undefined,
+        stationEquationId: typeof input.stationEquationId === "string" ? input.stationEquationId : undefined,
+        profileId: typeof input.profileId === "string" ? input.profileId : undefined,
+        profileRole: typeof input.profileRole === "string" ? input.profileRole : undefined,
+        offset: input.offset,
+        pointElevation: hasPointElevation ? input.pointElevation as number : undefined,
+        verticalOffset: hasVerticalOffset ? input.verticalOffset as number : undefined,
+      },
+    });
+    return json({ data }, 200);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid station-offset position could not be evaluated." }, 400);
   }
 });
 

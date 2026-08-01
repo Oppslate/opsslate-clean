@@ -28,14 +28,14 @@ test("Euclid Stage 4L reads one current canonical model and performs no PDF, sto
   assert.doesNotMatch(query, /ctx\.db\.insert|ctx\.db\.patch|ctx\.db\.replace|ctx\.db\.delete/);
 });
 
-test("Euclid Stage 4L cockpit exposes a one-action station check with governed results", async () => {
+test("Euclid Stage 4M cockpit preserves the one-action station check with governed results", async () => {
   const [cockpit, evaluator] = await Promise.all([
     read("../src/components/euclid-cockpit.tsx"),
     read("../src/components/euclid-station-evaluator.tsx"),
   ]);
   assert.match(cockpit, /EuclidStationEvaluator/);
-  assert.match(cockpit, /Stage 4L/);
-  assert.match(evaluator, /Compute position/);
+  assert.match(cockpit, /Stage 4M/);
+  assert.match(evaluator, /Compute 3D point/);
   assert.match(evaluator, /Northing/);
   assert.match(evaluator, /Easting/);
   assert.match(evaluator, /profile\.profileRole/);

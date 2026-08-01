@@ -1,11 +1,11 @@
 "use client";
 
-import type { HeliosEuclidAlignmentPosition, HeliosEuclidCockpitAlignmentDetail } from "@opsslate/helios-domain";
+import type { HeliosEuclidCockpitAlignmentDetail, HeliosEuclidStationOffsetPosition } from "@opsslate/helios-domain";
 import { Badge } from "@opsslate/suite-ui/badge";
 import { Button } from "@opsslate/suite-ui/button";
 import { Input } from "@opsslate/suite-ui/input";
 import { Calculator, LoaderCircle, MapPin } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 
 import { humanizeStatus } from "@/lib/format";
 
@@ -20,15 +20,24 @@ function parseDisplayedStation(input: string) {
   return Number.isFinite(numeric) ? numeric : undefined;
 }
 
+function optionalNumber(input: string) {
+  if (!input.trim()) return undefined;
+  const value = Number(input.replace(/,/g, ""));
+  return Number.isFinite(value) ? value : Number.NaN;
+}
+
 function coordinate(value: number | undefined) {
   return value === undefined ? "Not established" : value.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 
 export function EuclidStationEvaluator({ projectId, detail }: { projectId: string; detail: HeliosEuclidCockpitAlignmentDetail }) {
   const [station, setStation] = useState("");
+  const [offset, setOffset] = useState("0");
+  const [pointElevation, setPointElevation] = useState("");
+  const [verticalOffset, setVerticalOffset] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<HeliosEuclidAlignmentPosition>();
+  const [result, setResult] = useState<HeliosEuclidStationOffsetPosition>();
 
   async function evaluate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -37,51 +46,76 @@ export function EuclidStationEvaluator({ projectId, detail }: { projectId: strin
       setError("Enter a station such as 145+25.00.");
       return;
     }
+    const parsedOffset = optionalNumber(offset);
+    const parsedPointElevation = optionalNumber(pointElevation);
+    const parsedVerticalOffset = optionalNumber(verticalOffset);
+    if (parsedOffset === undefined || Number.isNaN(parsedOffset)) {
+      setError("Enter a finite offset. Use positive for right and negative for left.");
+      return;
+    }
+    if (Number.isNaN(parsedPointElevation) || Number.isNaN(parsedVerticalOffset)) {
+      setError("Optional elevation values must be finite numbers.");
+      return;
+    }
+    if (parsedPointElevation !== undefined && parsedVerticalOffset !== undefined) {
+      setError("Use either point elevation or vertical delta, not both.");
+      return;
+    }
     setPending(true);
     setError("");
     try {
-      const response = await fetch(`/api/projects/${projectId}/euclid/stations`, {
+      const response = await fetch(`/api/projects/${projectId}/euclid/station-offsets`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ alignmentId: detail.summary.id, displayedStation }),
+        body: JSON.stringify({
+          alignmentId: detail.summary.id,
+          displayedStation,
+          offset: parsedOffset,
+          pointElevation: parsedPointElevation,
+          verticalOffset: parsedVerticalOffset,
+        }),
       });
-      const payload = await response.json() as { data?: HeliosEuclidAlignmentPosition; error?: string };
-      if (!response.ok || !payload.data) throw new Error(payload.error || "Station could not be evaluated.");
+      const payload = await response.json() as { data?: HeliosEuclidStationOffsetPosition; error?: string };
+      if (!response.ok || !payload.data) throw new Error(payload.error || "Station-offset point could not be evaluated.");
       setResult(payload.data);
     } catch (reason) {
       setResult(undefined);
-      setError(reason instanceof Error ? reason.message : "Station could not be evaluated.");
+      setError(reason instanceof Error ? reason.message : "Station-offset point could not be evaluated.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <section aria-label="Alignment position evaluator" className="border-b border-border bg-orange-500/[.035] px-3 py-3">
+    <section aria-label="Alignment station-offset evaluator" className="border-b border-border bg-orange-500/[.035] px-3 py-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-        <div className="min-w-[180px] lg:w-[29%]">
-          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.14em] text-orange-300"><Calculator className="size-3.5" aria-hidden="true" />3D station check</div>
-          <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Compute this alignment&apos;s coordinates and all controlled profile elevations.</p>
+        <div className="min-w-[180px] lg:w-[24%]">
+          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.14em] text-orange-300"><Calculator className="size-3.5" aria-hidden="true" />3D station-offset check</div>
+          <p className="mt-1 text-[10px] leading-4 text-muted-foreground">Compute a point normal to the alignment. Positive offsets are right; negative offsets are left.</p>
         </div>
-        <form onSubmit={evaluate} className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row">
-          <div className="min-w-0 flex-1">
-            <label htmlFor="euclid-station" className="sr-only">Displayed station</label>
-            <Input id="euclid-station" value={station} onChange={(event) => setStation(event.target.value)} placeholder="Station 145+25.00" inputMode="decimal" autoComplete="off" />
-          </div>
-          <Button type="submit" size="sm" disabled={pending || !station.trim()}>{pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <MapPin aria-hidden="true" />}{pending ? "Computing" : "Compute position"}</Button>
+        <form onSubmit={evaluate} className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_.7fr_.8fr_.8fr_auto]">
+          <Field id="euclid-station" label="Station"><Input id="euclid-station" value={station} onChange={(event) => setStation(event.target.value)} placeholder="145+25.00" inputMode="decimal" autoComplete="off" /></Field>
+          <Field id="euclid-offset" label="Offset (+R / −L)"><Input id="euclid-offset" value={offset} onChange={(event) => setOffset(event.target.value)} placeholder="0.00" inputMode="decimal" autoComplete="off" /></Field>
+          <Field id="euclid-point-elevation" label="Point elev. (optional)"><Input id="euclid-point-elevation" value={pointElevation} onChange={(event) => setPointElevation(event.target.value)} placeholder="Explicit" inputMode="decimal" autoComplete="off" /></Field>
+          <Field id="euclid-vertical-offset" label="Vertical Δ (optional)"><Input id="euclid-vertical-offset" value={verticalOffset} onChange={(event) => setVerticalOffset(event.target.value)} placeholder="From profile" inputMode="decimal" autoComplete="off" /></Field>
+          <Button type="submit" size="sm" className="self-end" disabled={pending || !station.trim()}>{pending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <MapPin aria-hidden="true" />}{pending ? "Computing" : "Compute 3D point"}</Button>
         </form>
       </div>
       {error && <p role="alert" className="mt-2 text-[10px] text-danger-foreground">{error}</p>}
       {result && (
         <div className="mt-3 rounded-lg border border-border bg-background/45 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-mono text-xs font-semibold">Station {result.printedStation}</div><Badge variant="outline" className={result.status === "verified" ? "border-success/35 bg-success/10 text-success-foreground" : result.status === "unavailable" ? "border-danger/40 bg-danger/10 text-danger-foreground" : "border-warning/40 bg-warning/10 text-warning-foreground"}>{humanizeStatus(result.status)}</Badge></div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3"><Metric label="Northing" value={coordinate(result.horizontal?.northing)} /><Metric label="Easting" value={coordinate(result.horizontal?.easting)} /><Metric label="Tangent azimuth" value={result.horizontal ? `${coordinate(result.horizontal.azimuthDegrees)}°` : "Not established"} /></div>
-          {result.profiles.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{result.profiles.map((profile) => <div key={profile.profileId} className="rounded-md border border-border bg-card/35 px-2.5 py-2"><div className="text-[9px] uppercase tracking-wider text-muted-foreground">{humanizeStatus(profile.profileRole)}</div><div className="mt-0.5 font-mono text-xs font-semibold">Elev. {coordinate(profile.elevation)}{profile.gradePercent !== undefined ? ` · ${profile.gradePercent.toFixed(3)}%` : ""}</div><div className="mt-0.5 truncate text-[9px] text-muted-foreground">{profile.profileName} · {humanizeStatus(profile.controlType)}</div></div>)}</div>}
+          <div className="flex flex-wrap items-center justify-between gap-2"><div className="font-mono text-xs font-semibold">Station {result.printedStation} · {Math.abs(result.offset).toLocaleString()} {result.side}</div><Badge variant="outline" className={result.status === "verified" ? "border-success/35 bg-success/10 text-success-foreground" : result.status === "unavailable" ? "border-danger/40 bg-danger/10 text-danger-foreground" : "border-warning/40 bg-warning/10 text-warning-foreground"}>{humanizeStatus(result.status)}</Badge></div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Northing" value={coordinate(result.horizontal?.northing)} /><Metric label="Easting" value={coordinate(result.horizontal?.easting)} /><Metric label="Point elevation" value={coordinate(result.elevation?.elevation)} /><Metric label="Tangent azimuth" value={result.horizontal ? `${coordinate(result.horizontal.azimuthDegrees)}°` : "Not established"} /></div>
+          {result.referenceProfiles.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{result.referenceProfiles.map((profile) => <div key={profile.profileId} className="rounded-md border border-border bg-card/35 px-2.5 py-2"><div className="text-[9px] uppercase tracking-wider text-muted-foreground">Reference · {humanizeStatus(profile.profileRole)}</div><div className="mt-0.5 font-mono text-xs font-semibold">Centerline elev. {coordinate(profile.elevation)}{profile.gradePercent !== undefined ? ` · ${profile.gradePercent.toFixed(3)}%` : ""}</div><div className="mt-0.5 truncate text-[9px] text-muted-foreground">{profile.profileName} · {humanizeStatus(profile.controlType)}</div></div>)}</div>}
           {result.limitations.length > 0 && <p className="mt-2 text-[9px] leading-4 text-warning-foreground">{result.limitations.join(" ")}</p>}
         </div>
       )}
     </section>
   );
+}
+
+function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return <div className="min-w-0"><label htmlFor={id} className="mb-1 block text-[9px] uppercase tracking-wider text-muted-foreground">{label}</label>{children}</div>;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

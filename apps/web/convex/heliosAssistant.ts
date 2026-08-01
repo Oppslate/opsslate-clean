@@ -1,5 +1,6 @@
 import {
   evaluateHeliosEuclidAlignmentPosition,
+  evaluateHeliosEuclidStationOffsetPosition,
   interpolateVerticalElevation,
   normalizeAssistantQuestion,
   parseStationNotation,
@@ -33,6 +34,18 @@ const STOP_WORDS = new Set([
   "helios", "many", "project", "that", "this", "what", "when", "where",
   "which", "with", "would", "your",
 ]);
+
+function parseStationOffset(question: string) {
+  const explicit = question.match(/\boffset\s*([+-]?\d+(?:\.\d+)?)\s*(?:feet|foot|ft|')?\s*(left|right|lt|rt)?\b/i)
+    || question.match(/\b([+-]?\d+(?:\.\d+)?)\s*(?:feet|foot|ft|')?\s*(left|right|lt|rt)\b/i);
+  if (!explicit) return undefined;
+  const magnitude = Number(explicit[1]);
+  if (!Number.isFinite(magnitude)) return undefined;
+  const side = explicit[2]?.toLowerCase();
+  if (side === "left" || side === "lt") return -Math.abs(magnitude);
+  if (side === "right" || side === "rt") return Math.abs(magnitude);
+  return magnitude;
+}
 
 function questionTerms(question: string) {
   return [...new Set(
@@ -285,6 +298,7 @@ export const loadAnswerContext = internalQuery({
     const question = questionMessage.content;
     const terms = questionTerms(question);
     const station = parseStationNotation(question);
+    const stationOffset = parseStationOffset(question);
     const sources: HeliosAssistantSource[] = [];
     const addSource = (source: HeliosAssistantSource) => {
       if (!sources.some((candidate) => candidate.sourceId === source.sourceId)) sources.push(source);
@@ -373,13 +387,13 @@ export const loadAnswerContext = internalQuery({
               : [];
         if (candidates.length === 1) {
           try {
-            const position = evaluateHeliosEuclidAlignmentPosition(euclid, {
-              alignmentId: candidates[0]!.id,
-              displayedStation: station,
-            });
-            canonicalPositionAvailable = position.status !== "unavailable";
-            if (position.horizontal) {
-              addSource({
+            if (stationOffset === undefined) {
+              const position = evaluateHeliosEuclidAlignmentPosition(euclid, {
+                alignmentId: candidates[0]!.id,
+                displayedStation: station,
+              });
+              canonicalPositionAvailable = position.status !== "unavailable";
+              if (position.horizontal) addSource({
                 sourceId: `euclid-position:${position.fingerprint}`,
                 kind: "civil_geometry",
                 label: `${position.alignmentName} 3D position at Station ${position.printedStation}`,
@@ -388,6 +402,29 @@ export const loadAnswerContext = internalQuery({
                 content: safeText([
                   `Deterministic Euclid 4L position: Northing ${position.horizontal.northing}, Easting ${position.horizontal.easting}, tangent azimuth ${position.horizontal.azimuthDegrees} degrees at displayed station ${position.printedStation} (continuous chainage ${position.chainage}).`,
                   ...position.profiles.map((profile) => `${profile.profileRole.replaceAll("_", " ")} elevation ${profile.elevation}${profile.gradePercent === undefined ? "" : ` at grade ${profile.gradePercent}%`} from ${profile.controlType.replaceAll("_", " ")}.`),
+                  `Method: ${position.solver}. Source fingerprint: ${position.sourceFingerprint}.`,
+                  position.limitations.length ? `Limitations: ${position.limitations.join(" ")}` : "No calculation limitations are recorded.",
+                ].join("\n")),
+              });
+            } else {
+              const position = evaluateHeliosEuclidStationOffsetPosition(euclid, {
+                alignmentId: candidates[0]!.id,
+                displayedStation: station,
+                offset: stationOffset,
+              });
+              canonicalPositionAvailable = position.status !== "unavailable";
+              if (position.horizontal) addSource({
+                sourceId: `euclid-station-offset:${position.fingerprint}`,
+                kind: "civil_geometry",
+                label: `${position.alignmentName} ${Math.abs(position.offset)} ${position.side} position at Station ${position.printedStation}`,
+                locator: `normal to canonical alignment at tangent azimuth ${position.horizontal.azimuthDegrees} degrees`,
+                status: position.status,
+                content: safeText([
+                  `Deterministic Euclid 4M station-offset position: Northing ${position.horizontal.northing}, Easting ${position.horizontal.easting}, offset ${Math.abs(position.offset)} ${position.side}, tangent azimuth ${position.horizontal.azimuthDegrees} degrees at displayed station ${position.printedStation} (continuous chainage ${position.chainage}).`,
+                  position.elevation
+                    ? `Point elevation ${position.elevation.elevation} using ${position.elevation.basis.replaceAll("_", " ")}.`
+                    : "Point elevation is not established because no lateral elevation rule was supplied.",
+                  ...position.referenceProfiles.map((profile) => `Reference centerline ${profile.profileRole.replaceAll("_", " ")} elevation ${profile.elevation}${profile.gradePercent === undefined ? "" : ` at grade ${profile.gradePercent}%`} from ${profile.controlType.replaceAll("_", " ")}.`),
                   `Method: ${position.solver}. Source fingerprint: ${position.sourceFingerprint}.`,
                   position.limitations.length ? `Limitations: ${position.limitations.join(" ")}` : "No calculation limitations are recorded.",
                 ].join("\n")),
