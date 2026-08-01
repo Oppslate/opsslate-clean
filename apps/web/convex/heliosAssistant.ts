@@ -1,5 +1,6 @@
 import {
   evaluateHeliosEuclidAlignmentPosition,
+  evaluateHeliosEuclidCrossSection,
   evaluateHeliosEuclidStationOffsetPosition,
   interpolateVerticalElevation,
   normalizeAssistantQuestion,
@@ -406,6 +407,27 @@ export const loadAnswerContext = internalQuery({
                   position.limitations.length ? `Limitations: ${position.limitations.join(" ")}` : "No calculation limitations are recorded.",
                 ].join("\n")),
               });
+              if (/\b(cross[ -]?section|typical section|lane width|shoulder|cross slope|roadway width|template|subgrade)\b/i.test(question)) {
+                const section = evaluateHeliosEuclidCrossSection(euclid, {
+                  alignmentId: candidates[0]!.id,
+                  displayedStation: station,
+                  profileRole: "proposed_finished_grade",
+                });
+                addSource({
+                  sourceId: `euclid-cross-section:${section.fingerprint}`,
+                  kind: "civil_geometry",
+                  label: `${section.alignmentName} roadway section at Station ${section.printedStation}`,
+                  locator: section.controllingTemplate?.name || "No controlling typical section",
+                  status: section.status,
+                  content: safeText([
+                    `Deterministic Euclid 4N cross section contains ${section.points.length} governed points and ${section.materialBands.length} active material layers.`,
+                    ...section.points.map((point) => `${point.role.replaceAll("_", " ")} at offset ${point.offset}: Northing ${point.northing ?? "not established"}, Easting ${point.easting ?? "not established"}, elevation ${point.elevation ?? "not established"}, surface ${point.surface}.`),
+                    `Surface readiness: ${section.canBuildSurface ? "one section surface can be built" : "insufficient governed 3D points"}.`,
+                    section.unresolvedControls.length ? `Unresolved controls: ${section.unresolvedControls.join(" ")}` : "No unresolved section controls are recorded.",
+                    `Method: ${section.solver}. Source fingerprint: ${section.sourceFingerprint}.`,
+                  ].join("\n")),
+                });
+              }
             } else {
               const position = evaluateHeliosEuclidStationOffsetPosition(euclid, {
                 alignmentId: candidates[0]!.id,

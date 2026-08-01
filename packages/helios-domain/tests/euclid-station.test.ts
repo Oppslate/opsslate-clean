@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   HELIOS_EUCLID_SCHEMA_VERSION,
   evaluateHeliosEuclidAlignmentPosition,
+  evaluateHeliosEuclidCrossSection,
   evaluateHeliosEuclidStationOffsetPosition,
   type HeliosEuclidModel,
   type HeliosEuclidStation,
@@ -178,4 +179,88 @@ test("Stage 4M is deterministic and retains the immutable source fingerprint", (
   assert.equal(first.fingerprint, second.fingerprint);
   assert.equal(first.sourceFingerprint, "single-ingestion-source-v1");
   assert.match(first.id, /^station-offset:/);
+});
+
+function roadwaySectionModel() {
+  const fixture = model();
+  fixture.typicalSections = [{
+    id: "typical-road",
+    alignmentId: "road",
+    name: "Two-lane roadway",
+    stationStart: station(1000),
+    stationEnd: station(1200),
+    laneWidthLeft: value("lane-left", 12),
+    laneWidthRight: value("lane-right", 12),
+    shoulderWidthLeft: value("shoulder-left", 4),
+    shoulderWidthRight: value("shoulder-right", 4),
+    crossSlopeLeftPercent: value("slope-left", -2),
+    crossSlopeRightPercent: value("slope-right", -2),
+    reviewState: "accepted",
+  }];
+  return fixture;
+}
+
+test("Stage 4N builds signed roadway lane edges from the governed T.G.L. and typical section", () => {
+  const result = evaluateHeliosEuclidCrossSection(roadwaySectionModel(), { alignmentId: "road", displayedStation: 1050 });
+  assert.equal(result.status, "verified");
+  assert.equal(result.canBuildSurface, true);
+  assert.equal(result.controllingTemplate?.id, "typical-road");
+  const left = result.points.find((point) => point.role === "lane_edge" && point.side === "left");
+  const right = result.points.find((point) => point.role === "lane_edge" && point.side === "right");
+  assert.equal(left?.offset, -12);
+  assert.equal(left?.easting, 988);
+  assert.equal(left?.elevation, 100.76);
+  assert.equal(right?.offset, 12);
+  assert.equal(right?.easting, 1012);
+  assert.equal(right?.elevation, 100.76);
+  assert.match(result.unresolvedControls.join(" "), /shoulder edge elevation/i);
+});
+
+test("Stage 4N gives exact canonical cross-section points authority over template calculations", () => {
+  const fixture = roadwaySectionModel();
+  fixture.crossSectionPoints = [{
+    id: "stored-right",
+    alignmentId: "road",
+    station: station(1050),
+    offset: value("stored-right-offset", 12),
+    elevation: value("stored-right-elevation", 99.75),
+    surface: "proposed",
+    reviewState: "accepted",
+  }];
+  const result = evaluateHeliosEuclidCrossSection(fixture, { alignmentId: "road", displayedStation: 1050 });
+  const right = result.points.find((point) => point.offset === 12 && point.surface === "proposed");
+  assert.equal(right?.origin, "stored_cross_section");
+  assert.equal(right?.elevation, 99.75);
+});
+
+test("Stage 4N never invents a roadway template or lateral surface", () => {
+  const result = evaluateHeliosEuclidCrossSection(model(), { alignmentId: "road", displayedStation: 1050 });
+  assert.equal(result.status, "unavailable");
+  assert.equal(result.canBuildSurface, false);
+  assert.equal(result.points.length, 1);
+  assert.match(result.unresolvedControls.join(" "), /no typical section/i);
+});
+
+test("Stage 4N withholds a shoulder edge when its controlling lane width is missing", () => {
+  const fixture = roadwaySectionModel();
+  fixture.typicalSections[0]!.laneWidthLeft = undefined;
+  const result = evaluateHeliosEuclidCrossSection(fixture, { alignmentId: "road", displayedStation: 1050 });
+  assert.equal(result.points.some((point) => point.role === "shoulder_edge" && point.side === "left"), false);
+  assert.match(result.unresolvedControls.join(" "), /shoulder width is stored, but lane width is not established/i);
+});
+
+test("Stage 4N exposes material extents and thickness without inventing vertical placement", () => {
+  const fixture = roadwaySectionModel();
+  fixture.materialLayers = [{
+    id: "asphalt-layer", alignmentId: "road", name: "Asphalt top",
+    stationStart: station(1000), stationEnd: station(1200),
+    offsetLeft: value("layer-left", -12), offsetRight: value("layer-right", 12),
+    thickness: value("layer-thickness", 3), thicknessUnit: "inch", reviewState: "accepted",
+  }];
+  const result = evaluateHeliosEuclidCrossSection(fixture, { alignmentId: "road", displayedStation: 1050 });
+  assert.equal(result.materialBands[0]?.thicknessInVerticalUnit, 0.25);
+  assert.equal(result.materialBands[0]?.verticalPlacement, "unresolved");
+  assert.match(result.unresolvedControls.join(" "), /vertical placement/i);
+  const again = evaluateHeliosEuclidCrossSection(fixture, { alignmentId: "road", displayedStation: 1050 });
+  assert.equal(result.fingerprint, again.fingerprint);
 });

@@ -8,6 +8,19 @@ export type HeliosHorizontalSegment = { kind: "tangent" | "curve"; stationStart:
 export type HeliosStationEquation = { backStation: number; aheadStation: number; label: string };
 export type HeliosVerticalPoint = { station: number; elevation: number; label: string; gradePercent?: number };
 export type HeliosCrossSectionPoint = { station: number; offset: number; elevation: number; surface: "existing" | "proposed" | "subgrade"; label: string };
+export type HeliosTypicalSectionControl = {
+  name: string;
+  stationStart: number;
+  stationEnd: number;
+  laneWidthLeft?: number;
+  laneWidthRight?: number;
+  shoulderWidthLeft?: number;
+  shoulderWidthRight?: number;
+  /** Signed vertical rise moving outward from centerline; falling away is negative. */
+  crossSlopeLeftPercent?: number;
+  /** Signed vertical rise moving outward from centerline; falling away is negative. */
+  crossSlopeRightPercent?: number;
+};
 export type HeliosInvertPoint = { structureId: string; station?: number; offset?: number; invertElevation: number; pipeSize: string; pipeMaterial: string };
 export type HeliosMaterialLayer = { name: string; stationStart?: number; stationEnd?: number; offsetLeft?: number; offsetRight?: number; thickness: number; thicknessUnit: string };
 
@@ -27,6 +40,7 @@ export type HeliosCivilGeometryRecord = {
   horizontalSegments: HeliosHorizontalSegment[];
   stationEquations: HeliosStationEquation[];
   verticalPoints: HeliosVerticalPoint[];
+  typicalSections?: HeliosTypicalSectionControl[];
   crossSectionPoints: HeliosCrossSectionPoint[];
   invertPoints: HeliosInvertPoint[];
   materialLayers: HeliosMaterialLayer[];
@@ -106,6 +120,18 @@ export function parseCivilGeometryDocument(value: unknown, sourcePageCount: numb
       const station = numeric(point.station); const elevation = numeric(point.elevation); const gradePercent = numeric(point.gradePercent, -100, 100);
       return station === undefined || elevation === undefined ? [] : [{ station, elevation, label: text(point.label, 160), gradePercent }];
     });
+    const typicalSections = array(candidate.typicalSections, 2_000).flatMap((section) => {
+      if (!isRecord(section)) return [];
+      const stationStart = numeric(section.stationStart); const stationEnd = numeric(section.stationEnd);
+      if (stationStart === undefined || stationEnd === undefined || stationEnd <= stationStart) return [];
+      const parsed = {
+        name: text(section.name, 200), stationStart, stationEnd,
+        laneWidthLeft: numeric(section.laneWidthLeft, 0, 10_000), laneWidthRight: numeric(section.laneWidthRight, 0, 10_000),
+        shoulderWidthLeft: numeric(section.shoulderWidthLeft, 0, 10_000), shoulderWidthRight: numeric(section.shoulderWidthRight, 0, 10_000),
+        crossSlopeLeftPercent: numeric(section.crossSlopeLeftPercent, -100, 100), crossSlopeRightPercent: numeric(section.crossSlopeRightPercent, -100, 100),
+      };
+      return Object.values(parsed).some((value, index) => index > 2 && value !== undefined) ? [parsed] : [];
+    });
     const crossSectionPoints = array(candidate.crossSectionPoints, 30_000).flatMap((point) => {
       if (!isRecord(point)) return [];
       const station = numeric(point.station); const offset = numeric(point.offset); const elevation = numeric(point.elevation);
@@ -124,7 +150,7 @@ export function parseCivilGeometryDocument(value: unknown, sourcePageCount: numb
       if (thickness === undefined) return [];
       return [{ name: text(layer.name, 200), stationStart: numeric(layer.stationStart), stationEnd: numeric(layer.stationEnd), offsetLeft: numeric(layer.offsetLeft), offsetRight: numeric(layer.offsetRight), thickness, thicknessUnit: text(layer.thicknessUnit, 40) }];
     });
-    const hasGeometry = horizontalPoints.length || horizontalSegments.length || stationEquations.length || verticalPoints.length || crossSectionPoints.length || invertPoints.length || materialLayers.length;
+    const hasGeometry = horizontalPoints.length || horizontalSegments.length || stationEquations.length || verticalPoints.length || typicalSections.length || crossSectionPoints.length || invertPoints.length || materialLayers.length;
     if (!hasGeometry) continue;
     records.push({
       physicalPageNumber,
@@ -138,6 +164,7 @@ export function parseCivilGeometryDocument(value: unknown, sourcePageCount: numb
       horizontalSegments,
       stationEquations,
       verticalPoints,
+      typicalSections,
       crossSectionPoints,
       invertPoints,
       materialLayers,

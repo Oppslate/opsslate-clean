@@ -71,7 +71,7 @@ test("parses explicit civil geometry without inventing missing coordinate record
       { station: 500, northing: 1300, easting: 1400, label: "PT" },
     ],
     horizontalSegments: [], stationEquations: [],
-    verticalPoints: [], crossSectionPoints: [], invertPoints: [], materialLayers: [],
+    verticalPoints: [], typicalSections: [{ name: "Roadway typical", stationStart: 0, stationEnd: 500, laneWidthLeft: 12, laneWidthRight: 12, shoulderWidthLeft: 4, shoulderWidthRight: 4, crossSlopeLeftPercent: -2, crossSlopeRightPercent: -2 }], crossSectionPoints: [], invertPoints: [], materialLayers: [],
     units: "FT", confidence: 98, unresolvedIssues: [],
   }, {
     physicalPageNumber: 4,
@@ -85,4 +85,5 @@ test("parses explicit civil geometry without inventing missing coordinate record
   }] }, 5);
   assert.equal(parsed.records.length, 1);
   assert.equal(parsed.records[0]?.horizontalPoints.length, 2);
+  assert.equal(parsed.records[0]?.typicalSections?.[0]?.crossSlopeLeftPercent, -2);
 });

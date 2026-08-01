@@ -24,6 +24,7 @@ import {
   type HeliosEuclidCockpitWorkspace,
   type HeliosEuclidAlignmentPosition,
   type HeliosEuclidStationOffsetPosition,
+  type HeliosEuclidCrossSectionResult,
   type HeliosEuclidCandidateBuildInput,
   type HeliosEuclidCandidateValidationInput,
   type HeliosEuclidPromotionInput,
@@ -282,6 +283,22 @@ const evaluateEuclidOffsetPositionReference = makeFunctionReference<
   },
   HeliosEuclidStationOffsetPosition
 >("heliosEuclidStations:evaluateOffsetPosition");
+const evaluateEuclidCrossSectionReference = makeFunctionReference<
+  "query",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    input: {
+      alignmentId: string;
+      displayedStation?: number;
+      chainage?: number;
+      stationEquationId?: string;
+      profileId?: string;
+      profileRole?: string;
+    };
+  },
+  HeliosEuclidCrossSectionResult
+>("heliosEuclidCrossSections:evaluateSection");
 const recordEuclidReviewReference = makeFunctionReference<
   "mutation",
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidReviewInput },
@@ -1255,6 +1272,42 @@ export const evaluateHeliosEuclidOffsetPosition = httpAction(async (ctx, request
     return json({ data }, 200);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Euclid station-offset position could not be evaluated." }, 400);
+  }
+});
+
+export const evaluateHeliosEuclidCrossSection = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid cross-section request." }, 400);
+  }
+  const input = payload.input;
+  const hasDisplayed = typeof input.displayedStation === "number" && Number.isFinite(input.displayedStation);
+  const hasChainage = typeof input.chainage === "number" && Number.isFinite(input.chainage);
+  if (
+    !boundedString(input.alignmentId)
+    || hasDisplayed === hasChainage
+    || (input.stationEquationId !== undefined && !boundedString(input.stationEquationId))
+    || (input.profileId !== undefined && !boundedString(input.profileId))
+    || (input.profileRole !== undefined && !boundedString(input.profileRole))
+  ) return json({ error: "Euclid cross-section request requires one alignment and exactly one station basis." }, 400);
+  try {
+    const data = await ctx.runQuery(evaluateEuclidCrossSectionReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: {
+        alignmentId: input.alignmentId,
+        displayedStation: hasDisplayed ? input.displayedStation as number : undefined,
+        chainage: hasChainage ? input.chainage as number : undefined,
+        stationEquationId: typeof input.stationEquationId === "string" ? input.stationEquationId : undefined,
+        profileId: typeof input.profileId === "string" ? input.profileId : undefined,
+        profileRole: typeof input.profileRole === "string" ? input.profileRole : undefined,
+      },
+    });
+    return json({ data }, 200);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid cross section could not be evaluated." }, 400);
   }
 });
 

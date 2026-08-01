@@ -24,6 +24,7 @@ import {
   type HeliosEuclidStation,
   type HeliosEuclidStationEquation,
   type HeliosEuclidStructure,
+  type HeliosEuclidTypicalSection,
   type HeliosEuclidValue,
   type HeliosEuclidVerticalCurve,
   type HeliosEuclidVerticalTangent,
@@ -84,6 +85,17 @@ export type HeliosEuclidLegacyGeometryRecord = {
   }>;
   stationEquations: Array<{ backStation: number; aheadStation: number; label: string }>;
   verticalPoints: Array<{ station: number; elevation: number; label: string; gradePercent?: number }>;
+  typicalSections?: Array<{
+    name: string;
+    stationStart: number;
+    stationEnd: number;
+    laneWidthLeft?: number;
+    laneWidthRight?: number;
+    shoulderWidthLeft?: number;
+    shoulderWidthRight?: number;
+    crossSlopeLeftPercent?: number;
+    crossSlopeRightPercent?: number;
+  }>;
   crossSectionPoints: Array<{
     station: number;
     offset: number;
@@ -779,6 +791,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
   const profilePoints: HeliosEuclidProfilePoint[] = [];
   const verticalTangents: HeliosEuclidVerticalTangent[] = [];
   const verticalCurves: HeliosEuclidVerticalCurve[] = [];
+  const typicalSections: HeliosEuclidTypicalSection[] = [];
   const crossSectionPoints: HeliosEuclidCrossSectionPoint[] = [];
   const structures: HeliosEuclidStructure[] = [];
   const inverts: HeliosEuclidInvert[] = [];
@@ -899,6 +912,32 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
         addIssue(issues, record, "profile_range_incomplete", "The stored vertical record does not contain at least two points on one profile surface.", [alignmentId], "blocking");
       }
     }
+
+    (record.typicalSections || []).forEach((section, index) => {
+      if (section.stationEnd <= section.stationStart) {
+        addIssue(issues, record, "typical_section_station_range_invalid", `Typical section ${section.name || index + 1} has an invalid station range.`, [alignmentId]);
+        return;
+      }
+      const id = `typical-section:${record.id}:${index + 1}`;
+      typicalSections.push({
+        id,
+        alignmentId,
+        name: boundedText(section.name, `Typical section ${index + 1}`),
+        stationStart: station(section.stationStart, record, `typical-section:${index + 1}:start`),
+        stationEnd: station(section.stationEnd, record, `typical-section:${index + 1}:end`),
+        laneWidthLeft: section.laneWidthLeft === undefined ? undefined : engineeringValue(section.laneWidthLeft, record, `typical-section:${index + 1}:lane-left`),
+        laneWidthRight: section.laneWidthRight === undefined ? undefined : engineeringValue(section.laneWidthRight, record, `typical-section:${index + 1}:lane-right`),
+        shoulderWidthLeft: section.shoulderWidthLeft === undefined ? undefined : engineeringValue(section.shoulderWidthLeft, record, `typical-section:${index + 1}:shoulder-left`),
+        shoulderWidthRight: section.shoulderWidthRight === undefined ? undefined : engineeringValue(section.shoulderWidthRight, record, `typical-section:${index + 1}:shoulder-right`),
+        crossSlopeLeftPercent: section.crossSlopeLeftPercent === undefined ? undefined : engineeringValue(section.crossSlopeLeftPercent, record, `typical-section:${index + 1}:slope-left`, `${section.crossSlopeLeftPercent}% signed outward`),
+        crossSlopeRightPercent: section.crossSlopeRightPercent === undefined ? undefined : engineeringValue(section.crossSlopeRightPercent, record, `typical-section:${index + 1}:slope-right`, `${section.crossSlopeRightPercent}% signed outward`),
+        reviewState: recordReviewState,
+      });
+      relationships.push({
+        id: `relationship:${id}:alignment`, relationshipType: "section_for_alignment", sourceEntityId: id, targetEntityId: alignmentId,
+        provenanceIds: [`provenance:${record.id}`], reviewState: recordReviewState,
+      });
+    });
 
     record.crossSectionPoints.forEach((point, index) => {
       const id = `cross-section-point:${record.id}:${index + 1}`;
@@ -1035,7 +1074,7 @@ export function buildHeliosEuclidShadowModel(input: BuildHeliosEuclidShadowInput
     profilePoints,
     verticalTangents,
     verticalCurves,
-    typicalSections: [],
+    typicalSections,
     crossSectionPoints,
     structures,
     inverts,

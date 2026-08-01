@@ -202,7 +202,7 @@ export const completeGeometryJob = internalMutation({
         documentId: job.documentId, pageId: page._id, viewKey: view.viewKey, geometryType: record.geometryType, authority: record.authority,
         alignmentName: record.alignmentName, sourceLocator: record.sourceLocator, verticalDatum: record.verticalDatum, horizontalPoints: record.horizontalPoints,
         horizontalSegments: record.horizontalSegments, stationEquations: record.stationEquations,
-        verticalPoints: record.verticalPoints, crossSectionPoints: record.crossSectionPoints, invertPoints: record.invertPoints,
+        verticalPoints: record.verticalPoints, typicalSections: record.typicalSections, crossSectionPoints: record.crossSectionPoints, invertPoints: record.invertPoints,
         materialLayers: record.materialLayers, units: record.units, confidence: record.confidence, unresolvedIssues: record.unresolvedIssues,
         status: "proposed", createdAt: now, updatedAt: now,
       });

@@ -146,6 +146,7 @@ function asLegacyRecord(input: {
     horizontalSegments: record.horizontalSegments,
     stationEquations: record.stationEquations,
     verticalPoints: record.verticalPoints,
+    typicalSections: record.typicalSections || [],
     crossSectionPoints: record.crossSectionPoints,
     invertPoints: record.invertPoints,
     materialLayers: record.materialLayers,

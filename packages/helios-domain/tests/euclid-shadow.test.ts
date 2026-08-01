@@ -34,6 +34,7 @@ const baseRecord = (
   horizontalSegments: [],
   stationEquations: [],
   verticalPoints: [],
+  typicalSections: [],
   crossSectionPoints: [],
   invertPoints: [],
   materialLayers: [],
@@ -99,6 +100,20 @@ test("Stage 4B deterministically builds one traceable Euclid shadow from stored 
 
   const reversed = buildHeliosEuclidShadowModel({ ...input, records: [...input.records].reverse() });
   assert.equal(euclidModelFingerprint(reversed), euclidModelFingerprint(model));
+});
+
+test("Stage 4N canonical intake preserves typical-section widths and signed outward slopes", () => {
+  const input = shadowInput();
+  input.records[1]!.typicalSections = [{
+    name: "Roadway typical", stationStart: 14200, stationEnd: 14700,
+    laneWidthLeft: 12, laneWidthRight: 12, shoulderWidthLeft: 4, shoulderWidthRight: 4,
+    crossSlopeLeftPercent: -2, crossSlopeRightPercent: -2,
+  }];
+  const result = buildHeliosEuclidShadowModel(input);
+  assert.equal(result.typicalSections.length, 1);
+  assert.equal(result.typicalSections[0]?.laneWidthLeft?.value, 12);
+  assert.equal(result.typicalSections[0]?.crossSlopeRightPercent?.value, -2);
+  assert.equal(result.typicalSections[0]?.stationStart.displayedStation, 14200);
 });
 
 test("T.G.L. is the proposed roadway centerline profile and shares its horizontal alignment", () => {

@@ -103,6 +103,7 @@ import type * as heliosEuclidCandidateReconstruction from "../heliosEuclidCandid
 import type * as heliosEuclidCandidateValidations from "../heliosEuclidCandidateValidations.js";
 import type * as heliosEuclidCandidates from "../heliosEuclidCandidates.js";
 import type * as heliosEuclidCockpit from "../heliosEuclidCockpit.js";
+import type * as heliosEuclidCrossSections from "../heliosEuclidCrossSections.js";
 import type * as heliosEuclidHorizontal from "../heliosEuclidHorizontal.js";
 import type * as heliosEuclidHorizontalSchedule from "../heliosEuclidHorizontalSchedule.js";
 import type * as heliosEuclidIntegration from "../heliosEuclidIntegration.js";
@@ -273,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   heliosEuclidCandidateValidations: typeof heliosEuclidCandidateValidations;
   heliosEuclidCandidates: typeof heliosEuclidCandidates;
   heliosEuclidCockpit: typeof heliosEuclidCockpit;
+  heliosEuclidCrossSections: typeof heliosEuclidCrossSections;
   heliosEuclidHorizontal: typeof heliosEuclidHorizontal;
   heliosEuclidHorizontalSchedule: typeof heliosEuclidHorizontalSchedule;
   heliosEuclidIntegration: typeof heliosEuclidIntegration;
