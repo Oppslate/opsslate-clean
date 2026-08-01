@@ -1,4 +1,5 @@
 import {
+  evaluateHeliosEuclidAlignmentPosition,
   interpolateVerticalElevation,
   normalizeAssistantQuestion,
   parseStationNotation,
@@ -19,6 +20,7 @@ import {
   heliosPrincipalValidator,
   requireHeliosPrincipal,
 } from "./heliosAuthorization";
+import { reconstructEuclidModel } from "./heliosEuclidHorizontal";
 
 const startAnswerReference = makeFunctionReference<
   "action",
@@ -348,12 +350,61 @@ export const loadAnswerContext = internalQuery({
     const geometryRecords = geometryRun
       ? await ctx.db.query("heliosCivilGeometryRecords").withIndex("by_run_created", (query) => query.eq("geometryRunId", geometryRun._id)).collect()
       : [];
+    let canonicalPositionAvailable = false;
+    if (station !== undefined) {
+      const euclidRecord = await ctx.db
+        .query("heliosEuclidModels")
+        .withIndex("by_project_current", (query) => query.eq("projectId", project._id).eq("isCurrent", true))
+        .first();
+      if (euclidRecord && euclidRecord.companyId === project.companyId) {
+        const euclid = await reconstructEuclidModel(ctx, euclidRecord);
+        const normalizedQuestion = question.toLowerCase();
+        const named = euclid.alignments.filter((alignment) =>
+          normalizedQuestion.includes(alignment.printedName.toLowerCase())
+          || normalizedQuestion.includes(alignment.normalizedName.toLowerCase()),
+        );
+        const roadway = euclid.alignments.filter((alignment) => alignment.alignmentType === "roadway_centerline");
+        const candidates = named.length
+          ? named
+          : euclid.alignments.length === 1
+            ? euclid.alignments
+            : /\b(t\.?g\.?l\.?|centerline|roadway|road)\b/i.test(question) && roadway.length === 1
+              ? roadway
+              : [];
+        if (candidates.length === 1) {
+          try {
+            const position = evaluateHeliosEuclidAlignmentPosition(euclid, {
+              alignmentId: candidates[0]!.id,
+              displayedStation: station,
+            });
+            canonicalPositionAvailable = position.status !== "unavailable";
+            if (position.horizontal) {
+              addSource({
+                sourceId: `euclid-position:${position.fingerprint}`,
+                kind: "civil_geometry",
+                label: `${position.alignmentName} 3D position at Station ${position.printedStation}`,
+                locator: `${position.horizontal.elementType.replaceAll("_", " ")} ${position.horizontal.elementId}`,
+                status: position.status,
+                content: safeText([
+                  `Deterministic Euclid 4L position: Northing ${position.horizontal.northing}, Easting ${position.horizontal.easting}, tangent azimuth ${position.horizontal.azimuthDegrees} degrees at displayed station ${position.printedStation} (continuous chainage ${position.chainage}).`,
+                  ...position.profiles.map((profile) => `${profile.profileRole.replaceAll("_", " ")} elevation ${profile.elevation}${profile.gradePercent === undefined ? "" : ` at grade ${profile.gradePercent}%`} from ${profile.controlType.replaceAll("_", " ")}.`),
+                  `Method: ${position.solver}. Source fingerprint: ${position.sourceFingerprint}.`,
+                  position.limitations.length ? `Limitations: ${position.limitations.join(" ")}` : "No calculation limitations are recorded.",
+                ].join("\n")),
+              });
+            }
+          } catch {
+            canonicalPositionAvailable = false;
+          }
+        }
+      }
+    }
     for (const record of geometryRecords.filter((row) =>
       row.status !== "rejected" && row.status !== "superseded" && !referencePageIds.has(String(row.pageId)),
     )) {
       const page = pageMap.get(record.pageId);
       if (station !== undefined) {
-        const profile = interpolateVerticalElevation(record.verticalPoints, station);
+        const profile = canonicalPositionAvailable ? undefined : interpolateVerticalElevation(record.verticalPoints, station);
         if (profile) {
           addSource({
             sourceId: `geometry:${String(record._id)}:profile:${station}`, kind: "civil_geometry",

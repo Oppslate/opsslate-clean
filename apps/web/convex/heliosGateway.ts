@@ -22,6 +22,7 @@ import {
   type HeliosTakeoffWorkspace,
   type HeliosCivilGeometryReviewInput,
   type HeliosEuclidCockpitWorkspace,
+  type HeliosEuclidAlignmentPosition,
   type HeliosEuclidCandidateBuildInput,
   type HeliosEuclidCandidateValidationInput,
   type HeliosEuclidPromotionInput,
@@ -245,6 +246,22 @@ const getEuclidCockpitReference = makeFunctionReference<
   { principal: GatewayPrincipal; projectId: string; alignmentId?: string },
   HeliosEuclidCockpitWorkspace
 >("heliosEuclidCockpit:getWorkspace");
+const evaluateEuclidPositionReference = makeFunctionReference<
+  "query",
+  {
+    principal: GatewayPrincipal;
+    projectId: string;
+    input: {
+      alignmentId: string;
+      displayedStation?: number;
+      chainage?: number;
+      stationEquationId?: string;
+      profileId?: string;
+      profileRole?: string;
+    };
+  },
+  HeliosEuclidAlignmentPosition
+>("heliosEuclidStations:evaluatePosition");
 const recordEuclidReviewReference = makeFunctionReference<
   "mutation",
   { principal: GatewayPrincipal; projectId: string; input: HeliosEuclidReviewInput },
@@ -1133,6 +1150,42 @@ export const getHeliosEuclidCockpit = httpAction(async (ctx, request) => {
       error: error instanceof Error ? error.message : String(error),
     });
     return json({ error: "Civil Geometry cockpit could not be loaded." }, 404);
+  }
+});
+
+export const evaluateHeliosEuclidPosition = httpAction(async (ctx, request) => {
+  const authorization = await protectedPayload(request);
+  if (!authorization.ok) return authorization.response;
+  const { payload } = authorization;
+  if (!boundedString(payload.projectId) || !isRecord(payload.input)) {
+    return json({ error: "Invalid Euclid station request." }, 400);
+  }
+  const input = payload.input;
+  const hasDisplayed = typeof input.displayedStation === "number" && Number.isFinite(input.displayedStation);
+  const hasChainage = typeof input.chainage === "number" && Number.isFinite(input.chainage);
+  if (
+    !boundedString(input.alignmentId)
+    || hasDisplayed === hasChainage
+    || (input.stationEquationId !== undefined && !boundedString(input.stationEquationId))
+    || (input.profileId !== undefined && !boundedString(input.profileId))
+    || (input.profileRole !== undefined && !boundedString(input.profileRole))
+  ) return json({ error: "Euclid station request requires one alignment and exactly one station basis." }, 400);
+  try {
+    const data = await ctx.runQuery(evaluateEuclidPositionReference, {
+      principal: principalFrom(payload),
+      projectId: payload.projectId,
+      input: {
+        alignmentId: input.alignmentId,
+        displayedStation: hasDisplayed ? input.displayedStation as number : undefined,
+        chainage: hasChainage ? input.chainage as number : undefined,
+        stationEquationId: typeof input.stationEquationId === "string" ? input.stationEquationId : undefined,
+        profileId: typeof input.profileId === "string" ? input.profileId : undefined,
+        profileRole: typeof input.profileRole === "string" ? input.profileRole : undefined,
+      },
+    });
+    return json({ data }, 200);
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "Euclid position could not be evaluated." }, 400);
   }
 });
 

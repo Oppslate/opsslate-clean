@@ -41,16 +41,20 @@ test("Euclid Stage 4B consumes stored canonical facts without another PDF or AI 
 
 test("Euclid Stage 4B does not cut over existing application readers", async () => {
   const consumers = await Promise.all([
-    source("web/convex/heliosGateway.ts"),
     source("web/convex/heliosEstimates.ts"),
     source("web/convex/heliosEstimateBuild.ts"),
     source("web/convex/heliosTakeoffIntelligence.ts"),
-    source("web/convex/heliosAssistant.ts"),
     source("helios/src/components/estimate-cockpit-2.tsx"),
   ]);
   for (const consumer of consumers) {
     assert.doesNotMatch(consumer, /heliosEuclidModels|heliosEuclidEntityChunks|heliosEuclidProvenance/);
   }
+  const [gateway, assistant] = await Promise.all([
+    source("web/convex/heliosGateway.ts"),
+    source("web/convex/heliosAssistant.ts"),
+  ]);
+  assert.match(gateway, /heliosEuclidStations:evaluatePosition/);
+  assert.match(assistant, /evaluateHeliosEuclidAlignmentPosition/);
 });
 
 test("Euclid Stage 4B fails closed on missing canonical provenance", async () => {
