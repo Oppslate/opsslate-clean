@@ -9,6 +9,7 @@ import {
   calculateAllocationBalance,
   calculateCostCodeDirectCost,
   calculateDerivedUnitCost,
+  calculateSubmittedItemAmount,
   calculateEstimateReviewSummary,
   calculateEstimateTotals,
   calculatePricingStatus,
@@ -710,6 +711,32 @@ test("normalizes all seven estimator import decisions and requires reasons for s
   assert.throws(
     () => normalizeEstimateReviewInput({ recordType: "pay_item", recordId: "item-1", action: "merge", targetRecordId: "target-1" }),
     /review note is required/i,
+  );
+});
+
+test("stores estimator unit cost corrections and calculates owner-item extensions", () => {
+  const normalized = normalizeEstimateReviewInput({
+    recordType: "pay_item",
+    recordId: "item-203.02",
+    action: "correct",
+    correction: { bidQuantity: 397, bidUnit: "CY", itemType: "unit_price", submittedUnitPriceCents: 3_400 },
+  });
+  assert.equal(normalized.correction?.submittedUnitPriceCents, 3_400);
+  assert.equal(
+    calculateSubmittedItemAmount({
+      itemType: "unit_price",
+      bidQuantity: 397,
+      submittedUnitPriceCents: 3_400,
+    }),
+    1_349_800,
+  );
+  assert.equal(
+    calculateSubmittedItemAmount({ itemType: "fixed_price", fixedAmountCents: 250_000 }),
+    250_000,
+  );
+  assert.equal(
+    calculateSubmittedItemAmount({ itemType: "unit_price", submittedUnitPriceCents: 3_400 }),
+    undefined,
   );
 });
 

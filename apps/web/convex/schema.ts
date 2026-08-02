@@ -2378,6 +2378,7 @@ export default defineSchema({
       ),
     ),
     fixedAmountCents: v.optional(v.number()),
+    submittedUnitPriceCents: v.optional(v.number()),
     importChangeType: v.optional(
       v.union(
         v.literal("new"),

@@ -463,8 +463,8 @@ function StackedEstimate({ workspace, selection, expandedSections, expandedPayIt
       <div className="hidden shrink-0 border-b border-border bg-muted/20 px-3 py-2 text-[9px] font-semibold uppercase tracking-[.12em] text-muted-foreground md:grid md:grid-cols-[minmax(150px,1fr)_72px_82px] xl:grid-cols-[minmax(150px,1fr)_62px_72px_82px_82px]"><span>Description</span><span className="hidden text-right xl:block">Basis</span><span className="text-right">Production</span><span className="hidden text-right xl:block">Unit cost</span><span className="text-right">Extended</span></div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {workspace.sections.map((section) => {
-          const sectionCost = section.payItems.reduce((total, item) => total + (item.directCostCents || 0), 0);
-          const sectionCostReady = section.payItems.every((item) => item.directCostCents !== undefined);
+          const sectionCost = section.payItems.reduce((total, item) => total + (item.submittedAmountCents ?? item.directCostCents ?? 0), 0);
+          const sectionCostReady = section.payItems.every((item) => (item.submittedAmountCents ?? item.directCostCents) !== undefined);
           const fixedSubtotal = section.payItems.reduce((total, item) => total + (item.fixedAmountCents || 0), 0);
           const expanded = expandedSections.has(section.id);
           const reviewed = section.payItems.filter((row) => ["accepted", "corrected"].includes(row.reviewStatus)).length;
@@ -476,13 +476,14 @@ function StackedEstimate({ workspace, selection, expandedSections, expandedPayIt
             {expanded && section.payItems.map((payItem) => {
               const itemExpanded = expandedPayItems.has(payItem.id);
               const itemSelected = selection.id === payItem.id;
-              const derived = payItem.derivedUnitCostCents;
+              const displayedUnitCost = payItem.fixedAmountCents ?? payItem.submittedUnitPriceCents ?? payItem.derivedUnitCostCents;
+              const displayedItemCost = payItem.fixedAmountCents ?? payItem.submittedAmountCents ?? payItem.directCostCents;
               return <div key={payItem.id}>
                 <div className={`grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-t border-border/70 px-3 py-2 md:grid-cols-[minmax(150px,1fr)_72px_82px] xl:grid-cols-[minmax(150px,1fr)_62px_72px_82px_82px] ${itemSelected ? "bg-orange-500/10" : "bg-card/35"}`}>
                   <button type="button" onClick={() => { onTogglePayItem(payItem.id); onChoose({ kind: "pay_item", id: payItem.id, sectionId: section.id, payItemId: payItem.id }); }} className="flex min-w-0 items-start gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     {itemExpanded ? <ChevronDown className="mt-0.5 size-3.5 shrink-0" /> : <ChevronRight className="mt-0.5 size-3.5 shrink-0" />}<span className="min-w-0"><span className="block truncate font-mono text-[10px] text-orange-300">{payItem.officialItemNumber}</span><span className="block truncate text-xs font-semibold">{payItem.estimatorDescription || payItem.description}</span><span className="mt-1 flex flex-wrap gap-1"><Badge variant="outline" className={`h-4 px-1 text-[8px] capitalize ${statusClass(payItem.reviewStatus)}`}>{label(payItem.reviewStatus)}</Badge>{payItem.quantityStatus === "takeoff_required" && <Badge variant="outline" className="h-4 border-warning/40 px-1 text-[8px] text-warning-foreground">Takeoff</Badge>}</span></span>
                   </button>
-                  <div className="hidden text-right font-mono text-[11px] xl:block xl:self-center">{quantity(payItem.bidQuantity, payItem.bidUnit)}</div><div className="hidden text-right text-[11px] text-muted-foreground md:block md:self-center">{payItem.costCodes.length} codes</div><div className="hidden text-right font-mono text-[11px] xl:block xl:self-center">{money(derived)}</div><div className="self-center text-right font-mono text-[11px] font-semibold">{money(payItem.directCostCents)}</div>
+                  <div className="hidden text-right font-mono text-[11px] xl:block xl:self-center">{quantity(payItem.bidQuantity, payItem.bidUnit)}</div><div className="hidden text-right text-[11px] text-muted-foreground md:block md:self-center">{payItem.costCodes.length} codes</div><div className="hidden text-right font-mono text-[11px] xl:block xl:self-center">{money(displayedUnitCost)}</div><div className="self-center text-right font-mono text-[11px] font-semibold">{money(displayedItemCost)}</div>
                 </div>
                 {itemExpanded && payItem.costCodes.map((code) => {
                   const codeSelected = selection.id === code.id;

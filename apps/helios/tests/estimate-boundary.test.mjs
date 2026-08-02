@@ -259,3 +259,13 @@ test("Estimate Builder uses shared OpsSlate primitives and synchronized estimate
   assert.match(builder, /Unpriced/);
   assert.match(builder, /EvidenceList/);
 });
+
+test("unit-price owner items collect cost per bid unit and calculate the item extension", () => {
+  assert.match(schema, /submittedUnitPriceCents: v\.optional\(v\.number\(\)\)/);
+  assert.match(estimateReviews, /submittedUnitPriceCents: correction\.submittedUnitPriceCents/);
+  assert.match(estimates, /calculateSubmittedItemAmount/);
+  assert.match(importReview, /Cost per \{bidUnit \|\| "unit"\}/);
+  assert.match(importReview, /Calculated item cost/);
+  assert.match(importReview, /submittedUnitPriceDollars/);
+  assert.match(builder, /item\.submittedAmountCents/);
+});

@@ -980,6 +980,8 @@ export type HeliosOwnerPayItem = {
   bidUnit: string;
   itemType: HeliosOwnerPayItemType;
   fixedAmountCents?: number;
+  submittedUnitPriceCents?: number;
+  submittedAmountCents?: number;
   importChangeType: HeliosEstimateImportChangeType;
   quantityStatus: HeliosEstimateQuantityStatus;
   confidence: number;
@@ -1263,6 +1265,7 @@ export type HeliosEstimateReviewInput = {
     bidUnit?: string;
     itemType?: HeliosOwnerPayItemType;
     fixedAmountCents?: number;
+    submittedUnitPriceCents?: number;
   };
   split?: {
     name?: string;
@@ -1273,6 +1276,7 @@ export type HeliosEstimateReviewInput = {
     bidUnit?: string;
     itemType?: HeliosOwnerPayItemType;
     fixedAmountCents?: number;
+    submittedUnitPriceCents?: number;
     moveRecordIds?: string[];
   };
 };
@@ -1308,6 +1312,8 @@ export type HeliosEstimateProposalPayItemInput = Omit<
   | "costCodes"
   | "directCostCents"
   | "derivedUnitCostCents"
+  | "submittedUnitPriceCents"
+  | "submittedAmountCents"
   | "reviewStatus"
   | "importChangeType"
 > & { costCodes: HeliosEstimateProposalCostCodeInput[] };
@@ -2564,6 +2570,7 @@ export function normalizeEstimateReviewInput(
         ? undefined
         : allowedValue(source.itemType, HELIOS_OWNER_PAY_ITEM_TYPES, "Owner item type"),
     fixedAmountCents: optionalNumber(source.fixedAmountCents, "Official fixed amount", true),
+    submittedUnitPriceCents: optionalNumber(source.submittedUnitPriceCents, "Submitted unit price", true),
   });
   const correction = correctionValue
     ? {
@@ -3034,6 +3041,23 @@ export function calculatePricingStatus(
 export function calculateDerivedUnitCost(directCostCents: number | undefined, bidQuantity: number | undefined) {
   if (directCostCents === undefined || bidQuantity === undefined || bidQuantity <= 0) return undefined;
   return Math.round(safeCents(directCostCents, "Direct cost") / bidQuantity);
+}
+
+export function calculateSubmittedItemAmount(input: {
+  itemType: HeliosOwnerPayItemType;
+  bidQuantity?: number;
+  fixedAmountCents?: number;
+  submittedUnitPriceCents?: number;
+}) {
+  if (input.itemType === "fixed_price" || input.itemType === "allowance") {
+    return input.fixedAmountCents;
+  }
+  if (input.submittedUnitPriceCents === undefined) return undefined;
+  const arithmeticQuantity = input.itemType === "lump_sum" ? 1 : input.bidQuantity;
+  if (arithmeticQuantity === undefined || !Number.isFinite(arithmeticQuantity) || arithmeticQuantity <= 0) {
+    return undefined;
+  }
+  return Math.round(safeCents(input.submittedUnitPriceCents, "Submitted unit price") * arithmeticQuantity);
 }
 
 export function calculateAllocationBalance(

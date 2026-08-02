@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  calculateSubmittedItemAmount,
   HELIOS_ESTIMATE_REVIEW_ACTIONS,
   HELIOS_OWNER_PAY_ITEM_TYPES,
   type HeliosEstimateReviewAction,
@@ -60,7 +61,7 @@ function statusVariant(status: string) {
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
-  maximumFractionDigits: 0,
+  maximumFractionDigits: 2,
 });
 
 function money(value: number | undefined) {
@@ -340,8 +341,18 @@ export function EstimateImportReview({
                     <div className="font-medium">{item.bidQuantity ?? "Takeoff required"} {item.bidUnit}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-muted-foreground">Official fixed amount</div>
-                    <div className="font-medium">{item.fixedAmountCents === undefined ? "Not applicable" : money(item.fixedAmountCents)}</div>
+                    {item.itemType === "fixed_price" || item.itemType === "allowance" ? (
+                      <>
+                        <div className="text-xs text-muted-foreground">Official fixed amount</div>
+                        <div className="font-medium">{item.fixedAmountCents === undefined ? "Not entered" : money(item.fixedAmountCents)}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-xs text-muted-foreground">Cost per {item.bidUnit}</div>
+                        <div className="font-medium">{item.submittedUnitPriceCents === undefined ? "Not entered" : `${money(item.submittedUnitPriceCents)} / ${item.bidUnit}`}</div>
+                        <div className="mt-1 text-xs text-muted-foreground">Item cost {money(item.submittedAmountCents)}</div>
+                      </>
+                    )}
                   </div>
                   <RecordActions
                     label={item.officialItemNumber}
@@ -477,6 +488,7 @@ function ReviewDialog({
             bidUnit: text("bidUnit"),
             itemType: text("itemType") as HeliosOwnerPayItem["itemType"],
             fixedAmountCents: numeric("fixedAmountDollars") === undefined ? undefined : Math.round((numeric("fixedAmountDollars") || 0) * 100),
+            submittedUnitPriceCents: numeric("submittedUnitPriceDollars") === undefined ? undefined : Math.round((numeric("submittedUnitPriceDollars") || 0) * 100),
           }
         : { name: text("name"), sequence: numeric("sequence") };
     }
@@ -490,6 +502,7 @@ function ReviewDialog({
             bidUnit: text("bidUnit"),
             itemType: text("itemType") as HeliosOwnerPayItem["itemType"],
             fixedAmountCents: numeric("fixedAmountDollars") === undefined ? undefined : Math.round((numeric("fixedAmountDollars") || 0) * 100),
+            submittedUnitPriceCents: numeric("submittedUnitPriceDollars") === undefined ? undefined : Math.round((numeric("submittedUnitPriceDollars") || 0) * 100),
             moveRecordIds,
           }
         : { name: text("name"), moveRecordIds };
@@ -566,6 +579,21 @@ function SectionFields({ section }: { section?: HeliosEstimateSection }) {
 }
 
 function OwnerItemFields({ item, sections }: { item?: HeliosOwnerPayItem; sections: HeliosEstimateSection[] }) {
+  const [itemType, setItemType] = useState<HeliosOwnerPayItem["itemType"]>(item?.itemType || "lump_sum");
+  const [bidQuantity, setBidQuantity] = useState(item?.bidQuantity?.toString() || "");
+  const [bidUnit, setBidUnit] = useState(item?.bidUnit || "LS");
+  const [submittedUnitPrice, setSubmittedUnitPrice] = useState(
+    item?.submittedUnitPriceCents === undefined ? "" : (item.submittedUnitPriceCents / 100).toString(),
+  );
+  const submittedUnitPriceCents = submittedUnitPrice === "" ? undefined : Math.round(Number(submittedUnitPrice) * 100);
+  const submittedAmountCents = calculateSubmittedItemAmount({
+    itemType,
+    bidQuantity: bidQuantity === "" ? undefined : Number(bidQuantity),
+    fixedAmountCents: item?.fixedAmountCents,
+    submittedUnitPriceCents: Number.isFinite(submittedUnitPriceCents) ? submittedUnitPriceCents : undefined,
+  });
+  const usesFixedAmount = itemType === "fixed_price" || itemType === "allowance";
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-2"><Label htmlFor="official-sequence">Official sequence</Label><Input id="official-sequence" name="officialSequence" type="number" min="0" step="1" defaultValue={item?.officialSequence} required /></div>
@@ -573,10 +601,22 @@ function OwnerItemFields({ item, sections }: { item?: HeliosOwnerPayItem; sectio
       <div className="space-y-2 sm:col-span-2"><Label htmlFor="official-description">Official description</Label><Textarea id="official-description" name="description" defaultValue={item?.description} required /></div>
       {item && <div className="space-y-2 sm:col-span-2"><Label htmlFor="estimator-description">Estimator short description</Label><Input id="estimator-description" name="estimatorDescription" defaultValue={item.estimatorDescription} /></div>}
       {item && <div className="space-y-2"><Label>Operational section</Label><Select name="sectionId" defaultValue={sections.find((section) => section.payItems.some((row) => row.id === item.id))?.id}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{sections.filter((section) => section.reviewStatus !== "rejected").map((section) => <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>)}</SelectContent></Select></div>}
-      <div className="space-y-2"><Label htmlFor="bid-quantity">Official bid quantity</Label><Input id="bid-quantity" name="bidQuantity" type="number" min="0" step="any" defaultValue={item?.bidQuantity} /></div>
-      <div className="space-y-2"><Label htmlFor="bid-unit">Bid unit</Label><Input id="bid-unit" name="bidUnit" defaultValue={item?.bidUnit || "LS"} required /></div>
-      <div className="space-y-2"><Label>Item type</Label><Select name="itemType" defaultValue={item?.itemType || "lump_sum"}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{HELIOS_OWNER_PAY_ITEM_TYPES.map((type) => <SelectItem key={type} value={type}>{type.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div>
-      <div className="space-y-2"><Label htmlFor="fixed-amount">Official fixed amount ($)</Label><Input id="fixed-amount" name="fixedAmountDollars" type="number" min="0" step="0.01" defaultValue={item?.fixedAmountCents === undefined ? undefined : item.fixedAmountCents / 100} /></div>
+      <div className="space-y-2"><Label htmlFor="bid-quantity">Official bid quantity</Label><Input id="bid-quantity" name="bidQuantity" type="number" min="0" step="any" value={bidQuantity} onChange={(event) => setBidQuantity(event.target.value)} /></div>
+      <div className="space-y-2"><Label htmlFor="bid-unit">Bid unit</Label><Input id="bid-unit" name="bidUnit" value={bidUnit} onChange={(event) => setBidUnit(event.target.value.toUpperCase())} required /></div>
+      <div className="space-y-2"><Label>Item type</Label><Select name="itemType" value={itemType} onValueChange={(value) => setItemType(value as HeliosOwnerPayItem["itemType"])}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{HELIOS_OWNER_PAY_ITEM_TYPES.map((type) => <SelectItem key={type} value={type}>{type.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div>
+      {usesFixedAmount ? (
+        <div className="space-y-2"><Label htmlFor="fixed-amount">Official fixed amount ($)</Label><Input id="fixed-amount" name="fixedAmountDollars" type="number" min="0" step="0.01" defaultValue={item?.fixedAmountCents === undefined ? undefined : item.fixedAmountCents / 100} /></div>
+      ) : (
+        <>
+          <div className="space-y-2"><Label htmlFor="submitted-unit-price">Cost per {bidUnit || "unit"} ($/{bidUnit || "unit"})</Label><Input id="submitted-unit-price" name="submittedUnitPriceDollars" type="number" min="0" step="0.01" value={submittedUnitPrice} onChange={(event) => setSubmittedUnitPrice(event.target.value)} placeholder="Enter unit cost" /></div>
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Calculated item cost</Label>
+            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              {submittedAmountCents === undefined ? `Enter a cost per ${bidUnit || "unit"} to calculate this item.` : `${bidQuantity || (itemType === "lump_sum" ? "1" : "—")} ${bidUnit || "unit"} × ${money(submittedUnitPriceCents)} = ${money(submittedAmountCents)}`}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
